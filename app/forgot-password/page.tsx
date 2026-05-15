@@ -1,11 +1,11 @@
 "use client";
-export const dynamic = "force-dynamic";
-import { useEffect, useState } from "react";
+
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
 import { supabase } from "@/lib/supabase";
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -155,5 +155,19 @@ export default function ForgotPasswordPage() {
         </p>
       </div>
     </AuthLayout>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <AuthLayout>
+          <div className="text-sm text-zinc-500">Loading...</div>
+        </AuthLayout>
+      }
+    >
+      <ForgotPasswordContent />
+    </Suspense>
   );
 }
