@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 export default function ComingSoonPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-white">
