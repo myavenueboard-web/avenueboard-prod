@@ -29,10 +29,10 @@ export default function AddTenantModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-[500px] rounded-[28px] bg-white p-6 shadow-[0_24px_90px_rgba(15,23,42,0.25)]">
-        <div className="flex items-start justify-between">
+      <div className="max-h-[90vh] w-full max-w-[500px] overflow-y-auto rounded-[28px] bg-white p-5 shadow-[0_24px_90px_rgba(15,23,42,0.25)] sm:p-6">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.04em]">
+            <h2 className="text-[20px] font-semibold tracking-[-0.04em] sm:text-[22px]">
               Add Additional Tenant
             </h2>
 
@@ -44,14 +44,14 @@ export default function AddTenantModal({
 
           <button
             onClick={onClose}
-            className="rounded-full bg-zinc-100 px-3 py-1 text-zinc-500"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500"
           >
             ×
           </button>
         </div>
 
         <div className="mt-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="First Name">
               <input
                 value={additionalFirstName}
@@ -91,10 +91,10 @@ export default function AddTenantModal({
           </FormField>
         </div>
 
-        <div className="mt-7 flex items-center justify-end gap-3">
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
           <button
             onClick={onClose}
-            className="rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-[14px] font-medium text-zinc-700"
+            className="h-12 rounded-2xl border border-zinc-200 bg-white px-5 text-[14px] font-medium text-zinc-700"
           >
             Cancel
           </button>
@@ -102,7 +102,7 @@ export default function AddTenantModal({
           <button
             onClick={onAdd}
             disabled={!canAdd}
-            className={`rounded-2xl px-5 py-3 text-[14px] font-semibold ${
+            className={`h-12 rounded-2xl px-5 text-[14px] font-semibold ${
               canAdd
                 ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
                 : "cursor-not-allowed bg-zinc-100 text-zinc-400"

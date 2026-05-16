@@ -195,9 +195,9 @@ export default function DashboardPage() {
           <EmptyDashboard onAdd={() => router.push("/dashboard/add-property")} />
         </div>
       ) : (
-        <div className="mt-4 grid h-[calc(100%-16px)] min-h-0 grid-cols-[1fr_340px] gap-6 overflow-hidden">
-          <div className="min-h-0 overflow-y-auto pr-2">
-            <div className="grid grid-cols-3 gap-4 pb-6">
+        <div className="mt-4 grid min-h-0 gap-5 overflow-visible lg:h-[calc(100%-16px)] lg:grid-cols-[1fr_340px] lg:gap-6 lg:overflow-hidden">
+          <div className="min-h-0 overflow-visible lg:overflow-y-auto lg:pr-2">
+            <div className="grid grid-cols-1 gap-4 pb-6 sm:grid-cols-2 xl:grid-cols-3">
               {properties.map((property) => (
                 <PropertyCard
                   key={property.id}
@@ -222,7 +222,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <aside className="flex min-h-0 flex-col gap-5 overflow-hidden">
+          <aside className="grid gap-5 lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
             <div className="shrink-0 rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5">
               <h3 className="text-[16px] font-semibold tracking-[-0.03em]">
                 Summary
@@ -246,7 +246,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5">
+            <div className="flex min-h-[260px] flex-col rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5 lg:min-h-0 lg:flex-1">
               <h3 className="shrink-0 text-[16px] font-semibold tracking-[-0.03em]">
                 Recent Activity
               </h3>
@@ -294,29 +294,32 @@ export default function DashboardPage() {
 
 function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="mt-8 rounded-[24px] bg-[#FBFBFB] px-8 py-16">
+    <div className="mt-4 rounded-[24px] bg-[#FBFBFB] px-5 py-12 sm:mt-8 sm:px-8 sm:py-16">
       <div className="mx-auto flex max-w-[560px] flex-col items-center text-center">
-        <div className="relative flex h-[150px] w-[150px] items-center justify-center rounded-full bg-zinc-100">
-          <div className="absolute bottom-8 left-9 h-[78px] w-[46px] rounded-t-xl bg-white shadow-sm" />
-          <div className="absolute bottom-8 right-8 h-[105px] w-[58px] rounded-t-xl bg-white shadow-sm" />
+        <div className="relative flex h-[120px] w-[120px] items-center justify-center rounded-full bg-zinc-100 sm:h-[150px] sm:w-[150px]">
+          <div className="absolute bottom-7 left-8 h-[62px] w-[38px] rounded-t-xl bg-white shadow-sm sm:bottom-8 sm:left-9 sm:h-[78px] sm:w-[46px]" />
+          <div className="absolute bottom-7 right-7 h-[84px] w-[48px] rounded-t-xl bg-white shadow-sm sm:bottom-8 sm:right-8 sm:h-[105px] sm:w-[58px]" />
 
-          <div className="relative z-10 grid grid-cols-2 gap-3 opacity-30">
+          <div className="relative z-10 grid grid-cols-2 gap-2.5 opacity-30 sm:gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <span key={i} className="h-4 w-4 rounded bg-zinc-300" />
+              <span
+                key={i}
+                className="h-3.5 w-3.5 rounded bg-zinc-300 sm:h-4 sm:w-4"
+              />
             ))}
           </div>
         </div>
 
-        <h2 className="mt-8 max-w-[460px] text-[18px] font-medium leading-7 text-zinc-900">
+        <h2 className="mt-7 max-w-[460px] text-[16px] font-medium leading-7 text-zinc-900 sm:mt-8 sm:text-[18px]">
           Your dashboard is currently empty. Add your first property to start
           managing rent collection in one place.
         </h2>
 
         <button
           onClick={onAdd}
-          className="mt-7 flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-6 py-3 text-[17px] font-medium text-[#B9476D] transition hover:-translate-y-0.5 hover:shadow-md"
+          className="mt-7 flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-[15px] font-medium text-[#B9476D] transition hover:-translate-y-0.5 hover:shadow-md sm:px-6 sm:text-[17px]"
         >
-          <span className="text-[26px] leading-none">+</span>
+          <span className="text-[24px] leading-none sm:text-[26px]">+</span>
           Add Property
         </button>
       </div>
@@ -395,7 +398,7 @@ function PropertyCard({
   return (
     <div
       onClick={onOpen}
-      className={`group relative cursor-pointer rounded-[22px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)]`}
+      className={`group relative cursor-pointer rounded-[22px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)] sm:p-3.5`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -445,7 +448,7 @@ function PropertyCard({
 
       <div className="mt-3">
         <p
-          className={`text-[22px] font-semibold tracking-[-0.045em] ${rentColor}`}
+          className={`text-[24px] font-semibold tracking-[-0.045em] sm:text-[22px] ${rentColor}`}
         >
           ${rent.toLocaleString()}
           <span className="ml-1 text-[13px] font-medium text-zinc-400">
@@ -485,7 +488,7 @@ function PropertyCard({
             e.stopPropagation();
             onOpen();
           }}
-          className="h-[38px] flex-1 rounded-2xl border border-zinc-200 bg-white text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
+          className="h-[40px] flex-1 rounded-2xl border border-zinc-200 bg-white text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50 sm:h-[38px]"
         >
           View
         </button>
@@ -496,7 +499,7 @@ function PropertyCard({
               e.stopPropagation();
               onConnectBank();
             }}
-            className="h-[38px] flex-1 rounded-2xl bg-[#B9476D] text-[13px] font-semibold text-white transition hover:bg-[#A93F64]"
+            className="h-[40px] flex-1 rounded-2xl bg-[#B9476D] text-[13px] font-semibold text-white transition hover:bg-[#A93F64] sm:h-[38px]"
           >
             Connect
           </button>
@@ -588,7 +591,7 @@ function DeletePropertyModal({
           and its related history. This action cannot be undone.
         </p>
 
-        <div className="mt-7 flex justify-end gap-3">
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             onClick={onClose}
             disabled={deleting}

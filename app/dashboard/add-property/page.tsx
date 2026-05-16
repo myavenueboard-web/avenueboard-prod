@@ -298,8 +298,6 @@ export default function AddPropertyPage() {
             "id",
             tenantInvites.map((tenant) => tenant.id)
           );
-
-        console.log("Tenant invite links:", tenantInvites);
       }
 
       if (additionalAmounts.length > 0) {
@@ -383,11 +381,6 @@ export default function AddPropertyPage() {
         title: "Bank setup pending",
         description: "Connect your bank account to activate rent collection.",
       });
-
-      if (connectBankAfterSave) {
-        router.push("/dashboard");
-        return;
-      }
 
       router.push("/dashboard");
     } catch (error) {
@@ -484,8 +477,8 @@ export default function AddPropertyPage() {
 
   return (
     <>
-      <div className="relative mt-4 flex-1">
-        <div className="h-[calc(100vh-230px)] overflow-y-auto pb-[110px] pr-6">
+      <div className="relative mt-2 flex-1 sm:mt-4">
+        <div className="h-[calc(100vh-210px)] overflow-y-auto pb-[230px] pr-0 sm:h-[calc(100vh-230px)] sm:pb-[130px] lg:pr-6">
           <div className="mx-auto max-w-[760px]">
             <StepIndicator
               step={step}
@@ -534,20 +527,20 @@ export default function AddPropertyPage() {
           </div>
         </div>
 
-        <div className="absolute bottom-[-8px] left-0 right-0 border-t border-zinc-200 bg-white py-3">
-          <div className="mx-auto grid max-w-[760px] grid-cols-[160px_1fr_300px] items-center">
-            <div className="flex justify-start">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-200 bg-white px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.04)] sm:px-0">
+          <div className="mx-auto grid max-w-[760px] grid-cols-1 gap-3 px-0 sm:grid-cols-[150px_1fr_260px] sm:items-center lg:grid-cols-[160px_1fr_300px]">
+            <div className="order-3 flex justify-center sm:order-1 sm:justify-start">
               <button
                 onClick={handleBack}
                 disabled={saving}
-                className="rounded-2xl border border-zinc-200 bg-white px-7 py-3 text-[15px] font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-6 text-[15px] font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 sm:w-auto sm:px-7"
               >
                 {step === 1 ? "Cancel" : "Back"}
               </button>
             </div>
 
-            <div className="flex justify-center">
-              <div className="w-[240px]">
+            <div className="order-1 flex justify-center sm:order-2">
+              <div className="w-full sm:w-[220px] lg:w-[240px]">
                 <div className="flex items-center justify-between text-[13px] text-zinc-500">
                   <span>Step {step} of 4</span>
                   <span>{step === 4 ? "90%" : `${progress}%`}</span>
@@ -562,14 +555,14 @@ export default function AddPropertyPage() {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="order-2 flex justify-center sm:order-3 sm:justify-end">
               {step === 4 ? (
-                <div className="flex items-center gap-3 whitespace-nowrap">
+                <div className="grid w-full gap-3 sm:flex sm:w-auto sm:items-center sm:whitespace-nowrap">
                   <button
                     type="button"
                     onClick={() => savePropertySetup(false)}
                     disabled={saving}
-                    className="h-[48px] rounded-2xl border border-zinc-200 bg-white px-7 text-[14px] font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+                    className="h-12 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 sm:h-[48px] sm:px-7"
                   >
                     {saving ? "Saving..." : "Set up later"}
                   </button>
@@ -577,7 +570,7 @@ export default function AddPropertyPage() {
                   <button
                     onClick={() => savePropertySetup(true)}
                     disabled={!preferencesValid || saving}
-                    className={`h-[48px] rounded-2xl px-7 text-[14px] font-semibold transition ${
+                    className={`h-12 rounded-2xl px-6 text-[14px] font-semibold transition sm:h-[48px] sm:px-7 ${
                       preferencesValid && !saving
                         ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
                         : "cursor-not-allowed bg-zinc-100 text-zinc-400"
@@ -590,7 +583,7 @@ export default function AddPropertyPage() {
                 <button
                   onClick={handleContinue}
                   disabled={!canContinue || saving}
-                  className={`rounded-2xl px-9 py-3 text-[15px] font-semibold transition ${
+                  className={`h-12 w-full rounded-2xl px-7 text-[15px] font-semibold transition sm:w-auto sm:px-9 ${
                     canContinue && !saving
                       ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
                       : "cursor-not-allowed bg-zinc-100 text-zinc-400"

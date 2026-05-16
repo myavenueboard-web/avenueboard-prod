@@ -23,12 +23,12 @@ export default function PropertyStep({
   return (
     <>
       <div>
-        <h3 className="text-[20px] font-semibold tracking-[-0.04em]">
-          Enter the property details. You can add tenants next.
-        </h3>
-      </div>
+  <h3 className="text-[17px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[20px]">
+    Enter property details and continue.
+  </h3>
+</div>
 
-      <form className="mt-6 space-y-4">
+      <form className="mt-5 space-y-3 sm:mt-6 sm:space-y-4">
         <FormField label="Street Address">
           <input
             value={propertyForm.streetAddress}
@@ -43,7 +43,7 @@ export default function PropertyStep({
           />
         </FormField>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           <FormField label="City">
             <input
               value={propertyForm.city}
@@ -81,7 +81,7 @@ export default function PropertyStep({
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Property Type">
             <select
               value={propertyForm.propertyType}

@@ -31,6 +31,7 @@ export default function DashboardLayoutClient({
   const [loading, setLoading] = useState(true);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -109,6 +110,11 @@ export default function DashboardLayoutClient({
     setProfileOpen(false);
   }
 
+  function goTo(path: string) {
+    setMobileNavOpen(false);
+    router.push(path);
+  }
+
   const pageTitle =
     pathname === "/dashboard"
       ? "Properties"
@@ -130,114 +136,167 @@ export default function DashboardLayoutClient({
     );
   }
 
+  const sidebarContent = (
+    <div className="flex h-full flex-col">
+<img
+  src="/logo.png"
+  alt="AvenueBoard"
+  className="h-7 w-fit max-w-[180px] object-contain sm:h-8"
+/>
+      <div className="mt-12 min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
+        <div className="space-y-3">
+          <button
+            onClick={() => goTo("/dashboard")}
+            className={`w-full rounded-2xl px-4 py-3 text-left text-[15px] font-semibold transition ${
+              pathname === "/dashboard"
+                ? "bg-white text-[#0F172A] shadow-sm"
+                : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+            }`}
+          >
+            All Properties
+          </button>
+
+          {properties.length > 0 && (
+            <div className="space-y-2 pt-2">
+              {properties.map((property) => {
+                const active =
+                  pathname === `/dashboard/properties/${property.id}`;
+
+                return (
+                  <button
+                    key={property.id}
+                    onClick={() => goTo(`/dashboard/properties/${property.id}`)}
+                    className={`w-full rounded-2xl px-4 py-3 text-left text-[14px] font-medium transition ${
+                      active
+                        ? "bg-white text-[#B9476D] shadow-sm"
+                        : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+                    }`}
+                  >
+                    {property.property_label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 shrink-0 space-y-3">
+        <button
+          onClick={() => goTo("/dashboard/reports")}
+          className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] transition ${
+            pathname === "/dashboard/reports"
+              ? "bg-white font-semibold text-[#B9476D] shadow-sm"
+              : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+          }`}
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+            ↗
+          </span>
+          Reports
+        </button>
+
+        <button
+          onClick={() => goTo("/dashboard/expenses")}
+          className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] transition ${
+            pathname === "/dashboard/expenses"
+              ? "bg-white font-semibold text-[#B9476D] shadow-sm"
+              : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+          }`}
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+            $
+          </span>
+          Expenses
+        </button>
+
+        <button
+          onClick={() => {
+            setMobileNavOpen(false);
+            setHelpOpen(true);
+          }}
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+            ?
+          </span>
+          Help
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <main className="h-screen overflow-hidden bg-[#F7F6F3] p-4 font-sans text-[#0F172A]">
-      <div className="flex h-[calc(100vh-32px)] overflow-hidden rounded-[28px] bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.05)]">
-        <aside className="relative h-full w-[285px] shrink-0 rounded-[24px] bg-[#F8F8F7] px-6 py-8">
-          <img src="/logo.png" alt="AvenueBoard" className="h-10 w-auto" />
-
-          <div className="mt-12 space-y-3">
-            <button
-              onClick={() => router.push("/dashboard")}
-              className={`w-full rounded-2xl px-4 py-3 text-left text-[15px] font-semibold transition ${
-                pathname === "/dashboard"
-                  ? "bg-white text-[#0F172A] shadow-sm"
-                  : "text-zinc-500 hover:bg-white hover:text-zinc-900"
-              }`}
-            >
-              All Properties
-            </button>
-
-            {properties.length > 0 && (
-              <div className="max-h-[calc(100vh-430px)] space-y-2 overflow-y-auto pr-1 pt-2">
-                {properties.map((property) => {
-                  const active =
-                    pathname === `/dashboard/properties/${property.id}`;
-
-                  return (
-                    <button
-                      key={property.id}
-                      onClick={() =>
-                        router.push(`/dashboard/properties/${property.id}`)
-                      }
-                      className={`w-full rounded-2xl px-4 py-3 text-left text-[14px] font-medium transition ${
-                        active
-                          ? "bg-white text-[#B9476D] shadow-sm"
-                          : "text-zinc-500 hover:bg-white hover:text-zinc-900"
-                      }`}
-                    >
-                      {property.property_label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="absolute bottom-8 left-6 right-6 space-y-3">
-            <button
-              onClick={() => router.push("/dashboard/reports")}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] transition ${
-                pathname === "/dashboard/reports"
-                  ? "bg-white font-semibold text-[#B9476D] shadow-sm"
-                  : "text-zinc-500 hover:bg-white hover:text-zinc-900"
-              }`}
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
-                ↗
-              </span>
-              Reports
-            </button>
-
-            <button
-              onClick={() => router.push("/dashboard/expenses")}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] transition ${
-                pathname === "/dashboard/expenses"
-                  ? "bg-white font-semibold text-[#B9476D] shadow-sm"
-                  : "text-zinc-500 hover:bg-white hover:text-zinc-900"
-              }`}
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
-                $
-              </span>
-              Expenses
-            </button>
-
-            <button
-              onClick={() => setHelpOpen(true)}
-              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
-                ?
-              </span>
-              Help
-            </button>
-          </div>
+    <main className="min-h-screen bg-[#F7F6F3] p-3 font-sans text-[#0F172A] sm:p-4">
+      <div className="flex min-h-[calc(100vh-24px)] overflow-hidden rounded-[24px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)] sm:min-h-[calc(100vh-32px)] sm:rounded-[28px] lg:p-5">
+        <aside className="relative hidden h-[calc(100vh-72px)] w-[285px] shrink-0 overflow-hidden rounded-[24px] bg-[#F8F8F7] px-6 py-8 lg:block">
+          {sidebarContent}
         </aside>
 
-        <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden px-8 py-5">
-          <header className="flex h-[64px] shrink-0 items-center justify-between">
-            <h1 className="text-[28px] font-semibold tracking-[-0.05em]">
-              {pageTitle}
-            </h1>
+        {mobileNavOpen && (
+          <div className="fixed inset-0 z-[80] lg:hidden">
+            <button
+              aria-label="Close navigation"
+              onClick={() => setMobileNavOpen(false)}
+              className="absolute inset-0 bg-black/25"
+            />
 
-            <div className="flex items-center gap-4">
+            <aside className="absolute left-3 top-3 flex h-[calc(100vh-24px)] w-[82%] max-w-[320px] flex-col overflow-hidden rounded-[26px] bg-[#F8F8F7] px-6 py-7 shadow-[0_24px_90px_rgba(15,23,42,0.25)]">
+              <div className="mb-5 flex shrink-0 justify-start">
+                <button
+                  onClick={() => setMobileNavOpen(false)}
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-xl text-zinc-500 shadow-sm"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1">{sidebarContent}</div>
+            </aside>
+          </div>
+        )}
+
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 lg:px-8 lg:py-5">
+          <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F8F8F7] text-xl text-zinc-700 lg:hidden"
+              >
+                ☰
+              </button>
+
+              <h1 className="truncate text-[22px] font-semibold tracking-[-0.05em] sm:text-[28px]">
+                {pageTitle}
+              </h1>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2 sm:gap-4">
               {showAddPropertyButton && (
                 <button
                   onClick={() => router.push("/dashboard/add-property")}
-                  className="flex h-11 items-center gap-2 rounded-2xl bg-[#B9476D] px-6 text-[15px] font-semibold text-white transition hover:bg-[#A93F64]"
+                  className="hidden h-11 items-center gap-2 rounded-2xl bg-[#B9476D] px-5 text-[14px] font-semibold text-white transition hover:bg-[#A93F64] sm:flex lg:px-6 lg:text-[15px]"
                 >
                   <span className="text-[22px] leading-none">+</span>
                   Add Property
                 </button>
               )}
 
+              {showAddPropertyButton && (
+                <button
+                  onClick={() => router.push("/dashboard/add-property")}
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#B9476D] text-[26px] leading-none text-white sm:hidden"
+                >
+                  +
+                </button>
+              )}
+
               <div className="relative">
                 <button
                   onClick={() => setMenuOpen(!menuOpen)}
-                  className="flex items-center gap-3 rounded-2xl px-2 py-1 transition hover:bg-zinc-50"
+                  className="flex items-center gap-2 rounded-2xl px-1.5 py-1 transition hover:bg-zinc-50 sm:gap-3 sm:px-2"
                 >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0F172A] text-sm font-semibold text-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0F172A] text-sm font-semibold text-white sm:h-11 sm:w-11">
                     {user?.name?.charAt(0)?.toUpperCase() || "U"}
                   </div>
 
@@ -248,7 +307,7 @@ export default function DashboardLayoutClient({
                     </p>
                   </div>
 
-                  <span className="text-zinc-400">⌄</span>
+                  <span className="hidden text-zinc-400 sm:inline">⌄</span>
                 </button>
 
                 {menuOpen && (
@@ -275,7 +334,9 @@ export default function DashboardLayoutClient({
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-3 scrollbar-hide lg:overflow-hidden lg:pt-0">
+            {children}
+          </div>
         </section>
       </div>
 

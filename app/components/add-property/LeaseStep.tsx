@@ -42,17 +42,17 @@ export default function LeaseStep({
   return (
     <>
       <div>
-        <h1 className="text-[25px] font-semibold tracking-[-0.04em]">
-          Lease Details
-        </h1>
+        <h1 className="text-[20px] font-semibold tracking-[-0.04em] sm:text-[25px]">
+  Lease Details
+</h1>
 
-        <p className="mt-1 text-[14px] text-zinc-500">
-          Set lease terms, optional amounts, and supporting documents.
-        </p>
+<p className="mt-1 text-[13px] text-zinc-500 sm:text-[14px]">
+  Set lease terms and upload documents.
+</p>
       </div>
 
-      <div className="mt-6 space-y-5">
-        <div className="grid grid-cols-3 gap-4">
+      <div className="mt-5 space-y-4 sm:mt-6 sm:space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
           <FormField label="Start Date">
             <input
               type="date"
@@ -91,7 +91,7 @@ export default function LeaseStep({
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
           <FormField label="Monthly Rent">
             <input
               type="number"
@@ -127,8 +127,8 @@ export default function LeaseStep({
           </FormField>
         </div>
 
-        <div className="rounded-[22px] border border-zinc-200 bg-white p-5">
-          <div className="flex items-center justify-between gap-5">
+        <div className="rounded-[22px] border border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-[16px] font-semibold text-zinc-900">
                 Additional Amounts
@@ -138,7 +138,7 @@ export default function LeaseStep({
             <button
               type="button"
               onClick={addAdditionalAmount}
-              className="shrink-0 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-[14px] font-medium text-[#B9476D] hover:bg-[#FFF7FA]"
+              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[14px] font-medium text-[#B9476D] hover:bg-[#FFF7FA] sm:w-auto sm:py-2"
             >
               + Add
             </button>
@@ -154,7 +154,7 @@ export default function LeaseStep({
 
               return (
                 <div key={item.id} className="rounded-2xl bg-[#FAFAFA] p-3">
-                  <div className="grid grid-cols-[1fr_160px_auto] gap-3">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_160px_auto]">
                     <select
                       value={item.type}
                       onChange={(e) =>
@@ -193,7 +193,7 @@ export default function LeaseStep({
                     <button
                       type="button"
                       onClick={() => removeAdditionalAmount(item.id)}
-                      className="rounded-2xl border border-red-100 bg-red-50 px-4 text-[13px] font-medium text-red-500 hover:bg-red-100"
+                      className="h-[52px] rounded-2xl border border-red-100 bg-red-50 px-4 text-[13px] font-medium text-red-500 hover:bg-red-100 sm:h-auto"
                     >
                       Remove
                     </button>
@@ -220,8 +220,8 @@ export default function LeaseStep({
           </div>
         </div>
 
-        <div className="rounded-[22px] border border-zinc-200 bg-white p-5">
-          <div className="flex items-center justify-between gap-5">
+        <div className="rounded-[22px] border border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-[16px] font-semibold text-zinc-900">
                 Attachments
@@ -233,7 +233,7 @@ export default function LeaseStep({
               </p>
             </div>
 
-            <label className="shrink-0 cursor-pointer rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-[14px] font-medium text-[#B9476D] hover:bg-[#FFF7FA]">
+            <label className="w-full cursor-pointer rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-center text-[14px] font-medium text-[#B9476D] hover:bg-[#FFF7FA] sm:w-auto">
               <input
                 type="file"
                 multiple
@@ -245,7 +245,7 @@ export default function LeaseStep({
           </div>
 
           {attachments.Documents && (
-            <div className="mt-4 rounded-2xl bg-[#F8F9FA] px-4 py-3 text-[13px] text-zinc-600">
+            <div className="mt-4 break-words rounded-2xl bg-[#F8F9FA] px-4 py-3 text-[13px] text-zinc-600">
               {attachments.Documents}
             </div>
           )}

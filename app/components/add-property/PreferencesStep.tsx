@@ -54,13 +54,13 @@ export default function PreferencesStep({
   return (
     <>
       <div>
-        <h3 className="text-[20px] font-semibold tracking-[-0.04em]">
-          Choose notification preferences and confirm agreement.
-        </h3>
+       <h3 className="text-[17px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[20px]">
+  Notification preferences and agreement.
+</h3>
       </div>
 
-      <div className="mt-6 space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="mt-5 space-y-4 sm:mt-6 sm:space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
           <FormField label="Email">
             <input
               value={loginEmail}
@@ -129,12 +129,12 @@ export default function PreferencesStep({
           </FormField>
         </div>
 
-        <div className="rounded-[22px] border border-zinc-200 bg-white p-5">
+        <div className="rounded-[22px] border border-zinc-200 bg-white p-4 sm:p-5">
           <h3 className="text-[16px] font-semibold text-zinc-900">
             Notifications
           </h3>
 
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-[#E45E8A] bg-[#FFF8FB] p-4 text-center">
               <p className="text-[14px] font-semibold text-[#B9476D]">
                 Email
@@ -177,8 +177,8 @@ export default function PreferencesStep({
           </div>
         </div>
 
-        <div className="rounded-[22px] border border-zinc-200 bg-white p-5">
-          <div className="flex items-center justify-between gap-5">
+        <div className="rounded-[22px] border border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
             <div>
               <h3 className="text-[16px] font-semibold text-zinc-900">
                 Tenant Setup Fee
@@ -205,7 +205,7 @@ export default function PreferencesStep({
                   landlordAbsorbsFee: !preferencesForm.landlordAbsorbsFee,
                 })
               }
-              className={`shrink-0 rounded-2xl px-5 py-3 text-[14px] font-semibold transition ${
+              className={`h-12 w-full rounded-2xl px-5 text-[14px] font-semibold transition sm:w-auto sm:shrink-0 ${
                 preferencesForm.landlordAbsorbsFee
                   ? "bg-[#B9476D] text-white"
                   : "border border-zinc-200 bg-white text-[#B9476D] hover:bg-[#FFF7FA]"
@@ -218,13 +218,13 @@ export default function PreferencesStep({
           </div>
         </div>
 
-        <div className="rounded-[22px] border border-zinc-200 bg-white p-5">
+        <div className="rounded-[22px] border border-zinc-200 bg-white p-4 sm:p-5">
           <h3 className="text-[16px] font-semibold text-zinc-900">
             Agreement
           </h3>
 
           <div className="mt-4 space-y-3">
-            <label className="flex items-start gap-3 text-[14px] text-zinc-700">
+            <label className="flex items-start gap-3 text-[14px] leading-6 text-zinc-700">
               <input
                 type="checkbox"
                 checked={preferencesForm.authorizedAgreement}
@@ -234,7 +234,7 @@ export default function PreferencesStep({
                     authorizedAgreement: e.target.checked,
                   })
                 }
-                className="mt-1 h-4 w-4 accent-[#B9476D]"
+                className="mt-1 h-4 w-4 shrink-0 accent-[#B9476D]"
               />
 
               <span>
@@ -243,7 +243,7 @@ export default function PreferencesStep({
               </span>
             </label>
 
-            <label className="flex items-start gap-3 text-[14px] text-zinc-700">
+            <label className="flex items-start gap-3 text-[14px] leading-6 text-zinc-700">
               <input
                 type="checkbox"
                 checked={preferencesForm.termsAgreement}
@@ -253,7 +253,7 @@ export default function PreferencesStep({
                     termsAgreement: e.target.checked,
                   })
                 }
-                className="mt-1 h-4 w-4 accent-[#B9476D]"
+                className="mt-1 h-4 w-4 shrink-0 accent-[#B9476D]"
               />
 
               <span>
@@ -289,10 +289,10 @@ export default function PreferencesStep({
             onClick={() => setShowFeeNote(false)}
           />
 
-          <div className="fixed left-1/2 top-1/2 z-50 w-[520px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-zinc-200 bg-white p-7 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
+          <div className="fixed inset-x-4 top-1/2 z-50 max-h-[88vh] -translate-y-1/2 overflow-y-auto rounded-[28px] border border-zinc-200 bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.18)] sm:left-1/2 sm:w-[520px] sm:max-w-[92vw] sm:-translate-x-1/2 sm:p-7">
             <div className="flex items-start justify-between gap-5">
               <div>
-                <h4 className="text-[20px] font-semibold tracking-[-0.03em] text-zinc-900">
+                <h4 className="text-[19px] font-semibold tracking-[-0.03em] text-zinc-900 sm:text-[20px]">
                   Tenant setup benefits
                 </h4>
 
@@ -309,7 +309,7 @@ export default function PreferencesStep({
               <button
                 type="button"
                 onClick={() => setShowFeeNote(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
               >
                 ✕
               </button>
