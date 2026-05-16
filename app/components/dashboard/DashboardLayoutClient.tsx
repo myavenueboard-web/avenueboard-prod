@@ -136,13 +136,14 @@ export default function DashboardLayoutClient({
     );
   }
 
-  const sidebarContent = (
+  const desktopSidebarContent = (
     <div className="flex h-full flex-col">
-<img
-  src="/logo.png"
-  alt="AvenueBoard"
-  className="h-7 w-fit max-w-[180px] object-contain sm:h-8"
-/>
+      <img
+        src="/logo.png"
+        alt="AvenueBoard"
+        className="h-8 w-fit max-w-[195px] object-contain"
+      />
+
       <div className="mt-12 min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
         <div className="space-y-3">
           <button
@@ -230,7 +231,7 @@ export default function DashboardLayoutClient({
     <main className="min-h-screen bg-[#F7F6F3] p-3 font-sans text-[#0F172A] sm:p-4">
       <div className="flex min-h-[calc(100vh-24px)] overflow-hidden rounded-[24px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)] sm:min-h-[calc(100vh-32px)] sm:rounded-[28px] lg:p-5">
         <aside className="relative hidden h-[calc(100vh-72px)] w-[285px] shrink-0 overflow-hidden rounded-[24px] bg-[#F8F8F7] px-6 py-8 lg:block">
-          {sidebarContent}
+          {desktopSidebarContent}
         </aside>
 
         {mobileNavOpen && (
@@ -241,8 +242,14 @@ export default function DashboardLayoutClient({
               className="absolute inset-0 bg-black/25"
             />
 
-            <aside className="absolute left-3 top-3 flex h-[calc(100vh-24px)] w-[82%] max-w-[320px] flex-col overflow-hidden rounded-[26px] bg-[#F8F8F7] px-6 py-7 shadow-[0_24px_90px_rgba(15,23,42,0.25)]">
-              <div className="mb-5 flex shrink-0 justify-start">
+            <aside className="absolute left-3 top-3 flex h-[calc(100dvh-24px)] w-[82%] max-w-[320px] flex-col overflow-hidden rounded-[26px] bg-[#F8F8F7] px-6 py-6 shadow-[0_24px_90px_rgba(15,23,42,0.25)]">
+              <div className="mb-8 flex shrink-0 items-start justify-between">
+                <img
+                  src="/logo.png"
+                  alt="AvenueBoard"
+                  className="h-8 w-auto max-w-[185px] object-contain"
+                />
+
                 <button
                   onClick={() => setMobileNavOpen(false)}
                   className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-xl text-zinc-500 shadow-sm"
@@ -251,7 +258,80 @@ export default function DashboardLayoutClient({
                 </button>
               </div>
 
-              <div className="min-h-0 flex-1">{sidebarContent}</div>
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
+                <button
+                  onClick={() => goTo("/dashboard")}
+                  className={`w-full rounded-2xl px-4 py-3 text-left text-[15px] font-semibold transition ${
+                    pathname === "/dashboard"
+                      ? "bg-white text-[#0F172A] shadow-sm"
+                      : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+                  }`}
+                >
+                  All Properties
+                </button>
+
+                {properties.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {properties.map((property) => {
+                      const active =
+                        pathname === `/dashboard/properties/${property.id}`;
+
+                      return (
+                        <button
+                          key={property.id}
+                          onClick={() =>
+                            goTo(`/dashboard/properties/${property.id}`)
+                          }
+                          className={`w-full rounded-2xl px-4 py-3 text-left text-[14px] font-medium transition ${
+                            active
+                              ? "bg-white text-[#B9476D] shadow-sm"
+                              : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+                          }`}
+                        >
+                          {property.property_label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 border-t border-zinc-200 pt-5">
+                <div className="space-y-3">
+                  <button
+                    onClick={() => goTo("/dashboard/reports")}
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+                      ↗
+                    </span>
+                    Reports
+                  </button>
+
+                  <button
+                    onClick={() => goTo("/dashboard/expenses")}
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+                      $
+                    </span>
+                    Expenses
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setMobileNavOpen(false);
+                      setHelpOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+                      ?
+                    </span>
+                    Help
+                  </button>
+                </div>
+              </div>
             </aside>
           </div>
         )}

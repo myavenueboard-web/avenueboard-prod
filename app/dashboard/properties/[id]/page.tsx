@@ -275,7 +275,11 @@ export default function PropertyDetailPage() {
     try {
       const leaseIds = (property.leases || []).map((lease) => lease.id);
 
-      await supabase.from("activity_logs").delete().eq("property_id", property.id);
+      await supabase
+        .from("activity_logs")
+        .delete()
+        .eq("property_id", property.id);
+
       await supabase.from("expenses").delete().eq("property_id", property.id);
 
       if (leaseIds.length > 0) {
@@ -332,13 +336,13 @@ export default function PropertyDetailPage() {
 
   return (
     <>
-      <div className="grid h-full min-h-0 grid-cols-[1fr_320px] gap-5 overflow-hidden">
-        <div className="min-h-0 overflow-y-auto pr-1">
-          <section className="rounded-[26px] border border-zinc-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.035)]">
-            <div className="flex items-start justify-between gap-5">
+      <div className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-y-auto pb-8 lg:grid-cols-[1fr_320px] lg:gap-5 lg:overflow-hidden">
+        <div className="min-h-0 space-y-4 lg:overflow-y-auto lg:pr-1">
+          <section className="rounded-[26px] border border-zinc-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.035)] sm:p-5">
+            <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <h1 className="truncate text-[28px] font-semibold tracking-[-0.05em] text-zinc-900">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-[24px] font-semibold tracking-[-0.05em] text-zinc-900 sm:text-[28px]">
                     {property.property_label}
                   </h1>
 
@@ -349,7 +353,7 @@ export default function PropertyDetailPage() {
                   </span>
                 </div>
 
-                <p className="mt-2 text-[14px] text-zinc-500">
+                <p className="mt-2 text-[13px] leading-5 text-zinc-500 sm:text-[14px]">
                   {property.street_address}, {property.city},{" "}
                   {property.state_name} {property.zip}
                 </p>
@@ -389,7 +393,37 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-4 gap-3">
+            <div className="mt-5 rounded-[22px] border border-zinc-200 bg-[#FAFAFA] p-4 lg:hidden">
+              <p className="text-[13px] text-zinc-500">Upcoming Due</p>
+
+              <div className="mt-2 flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-[32px] font-semibold tracking-[-0.06em] text-zinc-900">
+                    ${Number(lease?.monthly_rent || 0).toLocaleString()}
+                  </p>
+
+                  <p className="mt-1 text-[13px] text-zinc-500">
+                    Due {lease?.rent_due_day || "—"}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p
+                    className={`text-[13px] font-semibold ${
+                      bankConnected ? "text-emerald-600" : "text-amber-600"
+                    }`}
+                  >
+                    {bankConnected ? "Bank verified" : "Bank pending"}
+                  </p>
+
+                  <p className="mt-1 text-[12px] text-zinc-400">
+                    Lease ends {formatDateShort(lease?.end_date)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 hidden gap-3 lg:grid xl:grid-cols-4">
               <MetricCard
                 label="Monthly Rent"
                 value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
@@ -420,14 +454,14 @@ export default function PropertyDetailPage() {
             </div>
 
             {!bankConnected && (
-              <div className="mt-5 flex items-center justify-between gap-5 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+              <div className="mt-4 rounded-[22px] border border-amber-100 bg-amber-50 p-4 lg:mt-5 lg:flex lg:items-center lg:justify-between lg:gap-5">
                 <div>
                   <p className="text-[14px] font-semibold text-amber-900">
-                    Account incomplete
+                    Connect bank account
                   </p>
                   <p className="mt-1 text-[12px] leading-5 text-amber-800">
-                    Connect your bank account to activate rent collection and
-                    allow tenants to complete payment setup.
+                    Activate rent collection and allow tenants to complete
+                    payment setup.
                   </p>
                 </div>
 
@@ -435,7 +469,7 @@ export default function PropertyDetailPage() {
                   onClick={() =>
                     window.open("https://dashboard.stripe.com/", "_blank")
                   }
-                  className="h-10 shrink-0 rounded-2xl bg-[#B9476D] px-5 text-[13px] font-semibold text-white hover:bg-[#A93F64]"
+                  className="mt-4 h-11 w-full rounded-2xl bg-[#B9476D] px-5 text-[13px] font-semibold text-white hover:bg-[#A93F64] lg:mt-0 lg:w-auto lg:shrink-0"
                 >
                   Connect Bank
                 </button>
@@ -443,14 +477,15 @@ export default function PropertyDetailPage() {
             )}
           </section>
 
-          <section className="mt-4 overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+          <section className="overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
                 <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
                   Tenants
                 </h2>
                 <p className="mt-1 text-[12px] text-zinc-500">
-                  {tenants.length} tenant record{tenants.length === 1 ? "" : "s"}
+                  {tenants.length} tenant record
+                  {tenants.length === 1 ? "" : "s"}
                 </p>
               </div>
 
@@ -459,12 +494,12 @@ export default function PropertyDetailPage() {
                   onClick={() => openTenantEdit(tenants[0])}
                   className="rounded-xl border border-zinc-200 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
                 >
-                  Manage Tenant
+                  Manage
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 p-4">
+            <div className="grid gap-3 p-4 sm:grid-cols-2">
               {tenants.length > 0 ? (
                 tenants.map((tenant) => (
                   <TenantCard
@@ -474,15 +509,15 @@ export default function PropertyDetailPage() {
                   />
                 ))
               ) : (
-                <div className="col-span-2 rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500">
+                <div className="rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500 sm:col-span-2">
                   No tenant added.
                 </div>
               )}
             </div>
           </section>
 
-          <section className="mt-4 overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+          <section className="overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
                 <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
                   Property Documents
@@ -493,7 +528,7 @@ export default function PropertyDetailPage() {
               </div>
 
               <button className="rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50">
-                Upload Document
+                Upload
               </button>
             </div>
 
@@ -531,8 +566,8 @@ export default function PropertyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-4 overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+          <section className="overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
                 <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
                   Notes
@@ -576,7 +611,7 @@ export default function PropertyDetailPage() {
           </section>
         </div>
 
-        <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
+        <aside className="hidden min-h-0 flex-col gap-4 lg:flex lg:overflow-hidden">
           <section className="rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5">
             <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
               Lease Summary
@@ -653,7 +688,7 @@ export default function PropertyDetailPage() {
               }
             />
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <InputField
                 label="City"
                 value={editForm.city}
@@ -690,7 +725,7 @@ export default function PropertyDetailPage() {
           subtitle="Update tenant name, email, or phone number."
           onClose={() => setTenantEditOpen(false)}
         >
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <InputField
               label="First Name"
               value={tenantForm.firstName}
@@ -744,7 +779,7 @@ export default function PropertyDetailPage() {
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             placeholder="Add property notes..."
-            className="min-h-[120px] w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] p-4 text-[14px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10"
+            className="min-h-[120px] w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] p-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
           />
 
           <ModalActions
@@ -889,10 +924,10 @@ function ModalShell({
 }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-[560px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
-        <div className="mb-6 flex items-start justify-between">
+      <div className="max-h-[90dvh] w-full max-w-[560px] overflow-y-auto rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.04em]">
+            <h2 className="text-[21px] font-semibold tracking-[-0.04em] sm:text-[22px]">
               {title}
             </h2>
             <p className="mt-1 text-[13px] text-zinc-500">{subtitle}</p>
@@ -900,7 +935,7 @@ function ModalShell({
 
           <button
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
           >
             ×
           </button>
@@ -922,7 +957,7 @@ function ModalActions({
   saving: boolean;
 }) {
   return (
-    <div className="mt-7 flex justify-end gap-3">
+    <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
       <button
         onClick={onCancel}
         className="h-11 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50"
@@ -954,7 +989,7 @@ function DeletePropertyModal({
 }) {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-[460px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
+      <div className="w-full max-w-[460px] rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-[22px] font-semibold text-red-600">
           !
         </div>
@@ -969,7 +1004,7 @@ function DeletePropertyModal({
           and its related history. This action cannot be undone.
         </p>
 
-        <div className="mt-7 flex justify-end gap-3">
+        <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
           <button
             onClick={onClose}
             disabled={deleting}
@@ -1006,7 +1041,7 @@ function InputField({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[14px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10"
+        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
       />
     </div>
   );

@@ -477,8 +477,8 @@ export default function AddPropertyPage() {
 
   return (
     <>
-      <div className="relative mt-2 flex-1 sm:mt-4">
-        <div className="h-[calc(100vh-210px)] overflow-y-auto pb-[230px] pr-0 sm:h-[calc(100vh-230px)] sm:pb-[130px] lg:pr-6">
+      <div className="relative mt-2 flex h-full min-h-0 flex-col sm:mt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-[220px] pr-0 lg:pr-6">
           <div className="mx-auto max-w-[760px]">
             <StepIndicator
               step={step}
@@ -527,74 +527,71 @@ export default function AddPropertyPage() {
           </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-200 bg-white px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.04)] sm:px-0">
-          <div className="mx-auto grid max-w-[760px] grid-cols-1 gap-3 px-0 sm:grid-cols-[150px_1fr_260px] sm:items-center lg:grid-cols-[160px_1fr_300px]">
-            <div className="order-3 flex justify-center sm:order-1 sm:justify-start">
-              <button
-                onClick={handleBack}
-                disabled={saving}
-                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-6 text-[15px] font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 sm:w-auto sm:px-7"
-              >
-                {step === 1 ? "Cancel" : "Back"}
-              </button>
-            </div>
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white px-6 pt-3 pb-5 shadow-[0_-8px_30px_rgba(15,23,42,0.08)]">
+  <div className="mx-auto grid max-w-[760px] gap-3">
+    <div>
+      <div className="flex items-center justify-between text-[13px] text-zinc-500">
+        <span>Step {step} of 4</span>
+        <span>{step === 4 ? "90%" : `${progress}%`}</span>
+      </div>
 
-            <div className="order-1 flex justify-center sm:order-2">
-              <div className="w-full sm:w-[220px] lg:w-[240px]">
-                <div className="flex items-center justify-between text-[13px] text-zinc-500">
-                  <span>Step {step} of 4</span>
-                  <span>{step === 4 ? "90%" : `${progress}%`}</span>
-                </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
+        <div
+          className="h-full rounded-full bg-[#B9476D] transition-all duration-300"
+          style={{ width: step === 4 ? "90%" : `${progress}%` }}
+        />
+      </div>
+    </div>
 
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
-                  <div
-                    className="h-full rounded-full bg-[#B9476D] transition-all duration-300"
-                    style={{ width: step === 4 ? "90%" : `${progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
+    <div className="grid grid-cols-[0.3fr_0.7fr] items-center gap-4">
+  <button
+    onClick={handleBack}
+    disabled={saving}
+    className="flex shrink-0 items-center gap-2 px-1 text-[15px] font-medium text-zinc-500 transition hover:text-zinc-900 disabled:opacity-50"
+  >
+    <span className="text-[18px]">←</span>
+    {step === 1 ? "Cancel" : "Back"}
+  </button>
 
-            <div className="order-2 flex justify-center sm:order-3 sm:justify-end">
-              {step === 4 ? (
-                <div className="grid w-full gap-3 sm:flex sm:w-auto sm:items-center sm:whitespace-nowrap">
-                  <button
-                    type="button"
-                    onClick={() => savePropertySetup(false)}
-                    disabled={saving}
-                    className="h-12 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 sm:h-[48px] sm:px-7"
-                  >
-                    {saving ? "Saving..." : "Set up later"}
-                  </button>
+  {step === 4 ? (
+    <button
+      onClick={() => savePropertySetup(true)}
+      disabled={!preferencesValid || saving}
+      className={`h-12 w-full rounded-2xl px-6 text-[15px] font-semibold transition ${
+        preferencesValid && !saving
+          ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+          : "cursor-not-allowed bg-zinc-100 text-zinc-400"
+      }`}
+    >
+      {saving ? "Saving..." : "Connect Bank"}
+    </button>
+  ) : (
+    <button
+      onClick={handleContinue}
+      disabled={!canContinue || saving}
+      className={`h-12 w-full rounded-2xl px-6 text-[15px] font-semibold transition ${
+        canContinue && !saving
+          ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+          : "cursor-not-allowed bg-zinc-100 text-zinc-400"
+      }`}
+    >
+      Continue
+    </button>
+  )}
+</div>
 
-                  <button
-                    onClick={() => savePropertySetup(true)}
-                    disabled={!preferencesValid || saving}
-                    className={`h-12 rounded-2xl px-6 text-[14px] font-semibold transition sm:h-[48px] sm:px-7 ${
-                      preferencesValid && !saving
-                        ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
-                        : "cursor-not-allowed bg-zinc-100 text-zinc-400"
-                    }`}
-                  >
-                    {saving ? "Saving..." : "Connect Bank"}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={handleContinue}
-                  disabled={!canContinue || saving}
-                  className={`h-12 w-full rounded-2xl px-7 text-[15px] font-semibold transition sm:w-auto sm:px-9 ${
-                    canContinue && !saving
-                      ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
-                      : "cursor-not-allowed bg-zinc-100 text-zinc-400"
-                  }`}
-                >
-                  Continue
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+    {step === 4 && (
+      <button
+        type="button"
+        onClick={() => savePropertySetup(false)}
+        disabled={saving}
+        className="h-11 rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+      >
+        {saving ? "Saving..." : "Set up later"}
+      </button>
+    )}
+  </div>
+</div>
       </div>
 
       {additionalModalOpen && (
