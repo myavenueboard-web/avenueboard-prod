@@ -51,56 +51,56 @@ export default function LoginClient() {
       return;
     }
 
-   const {
-  data: { user },
-} = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-if (!user) {
-  router.replace(redirectPath);
-  return;
-}
+    if (!user) {
+      router.replace(redirectPath);
+      return;
+    }
 
-const { data: profile } = await supabase
-  .from("profiles")
-  .select("id")
-  .eq("user_id", user.id)
-  .single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
 
-if (!profile) {
-  router.replace(redirectPath);
-  return;
-}
+    if (!profile) {
+      router.replace(redirectPath);
+      return;
+    }
 
-const { data: roles } = await supabase
-  .from("user_roles")
-  .select("role")
-  .eq("profile_id", profile.id);
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("profile_id", profile.id);
 
-const roleList = (roles || []).map((r) => r.role);
+    const roleList = (roles || []).map((r) => r.role);
 
-const hasLandlord = roleList.includes("landlord");
-const hasTenant = roleList.includes("tenant");
+    const hasLandlord = roleList.includes("landlord");
+    const hasTenant = roleList.includes("tenant");
 
-if (redirectPath !== "/dashboard") {
-  router.replace(redirectPath);
-  return;
-}
+    if (redirectPath !== "/dashboard") {
+      router.replace(redirectPath);
+      return;
+    }
 
-if (hasLandlord && hasTenant) {
-  router.replace("/select-mode");
-  return;
-}
+    if (hasLandlord && hasTenant) {
+      router.replace("/select-mode");
+      return;
+    }
 
-if (hasTenant) {
-  router.replace("/tenant");
-  return;
-}
+    if (hasTenant) {
+      router.replace("/tenant");
+      return;
+    }
 
-router.replace("/dashboard");
+    router.replace("/dashboard");
   }
 
   const inputClass =
-    "mt-3 h-[58px] w-full rounded-2xl border border-zinc-300 bg-white px-5 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#CA6180] focus:ring-4 focus:ring-[#CA6180]/10";
+    "mt-3 h-[54px] w-full rounded-2xl border border-zinc-300 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#CA6180] focus:ring-4 focus:ring-[#CA6180]/10 sm:h-[58px] sm:px-5";
 
   if (checkingSession) {
     return (
@@ -113,18 +113,18 @@ router.replace("/dashboard");
   return (
     <AuthLayout>
       <div className="w-full">
-        <h1 className="text-[42px] font-semibold tracking-[-0.05em] text-[#0F172A]">
+        <h1 className="text-[36px] font-semibold tracking-[-0.05em] text-[#0F172A] sm:text-[42px]">
           Log In
         </h1>
 
         {redirectPath.includes("/tenant/accept-invite") && (
-          <div className="mt-6 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F]">
+          <div className="mt-5 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F] sm:mt-6">
             Log in with the email address that received your tenant invitation
             to continue.
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="mt-9 space-y-5">
+        <form onSubmit={handleLogin} className="mt-8 space-y-5 sm:mt-9">
           <div>
             <label className="text-[14px] font-medium text-zinc-700">
               Email Address
@@ -138,7 +138,9 @@ router.replace("/dashboard");
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               className={`${inputClass} ${
-                prefilledEmail ? "cursor-not-allowed bg-zinc-50 text-zinc-500" : ""
+                prefilledEmail
+                  ? "cursor-not-allowed bg-zinc-50 text-zinc-500"
+                  : ""
               }`}
             />
 
@@ -150,7 +152,7 @@ router.replace("/dashboard");
           </div>
 
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <label className="text-[14px] font-medium text-zinc-700">
                 Password
               </label>
@@ -158,7 +160,7 @@ router.replace("/dashboard");
               <button
                 type="button"
                 onClick={() => router.push("/forgot-password")}
-                className="text-[13px] font-medium text-[#CA6180] hover:opacity-80"
+                className="shrink-0 text-[13px] font-medium text-[#CA6180] hover:opacity-80"
               >
                 Forgot password?
               </button>
@@ -185,7 +187,7 @@ router.replace("/dashboard");
           </div>
 
           {message && (
-            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-700 shadow-sm">
+            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-700 shadow-sm">
               {message}
             </div>
           )}
@@ -193,23 +195,25 @@ router.replace("/dashboard");
           <button
             type="submit"
             disabled={loading}
-            className="h-[58px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:opacity-60"
+            className="h-[54px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:opacity-60 sm:h-[58px]"
           >
             {loading ? "Logging in..." : "Log In"}
           </button>
         </form>
 
-        <div className="my-7 flex items-center gap-4">
+        <div className="my-6 flex items-center gap-4 sm:my-7">
           <div className="h-px flex-1 bg-zinc-200" />
-          <span className="text-[13px] text-zinc-400">Or continue with</span>
+          <span className="shrink-0 text-[12px] text-zinc-400 sm:text-[13px]">
+            Or continue with
+          </span>
           <div className="h-px flex-1 bg-zinc-200" />
         </div>
 
-        <button className="h-[52px] w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md">
+        <button className="h-[50px] w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md sm:h-[52px]">
           Continue with Google
         </button>
 
-        <p className="mt-7 text-center text-[14px] text-zinc-500">
+        <p className="mt-6 text-center text-[14px] leading-6 text-zinc-500 sm:mt-7">
           Don’t have an account?{" "}
           <button
             onClick={() => {

@@ -21,23 +21,6 @@ type VerifiedInvite = {
   property_label: string | null;
 };
 
-type TenantInvite = {
-  id: string;
-  lease_id: string;
-  email: string | null;
-  invite_status: string | null;
-  leases:
-    | {
-        id: string;
-        property_id: string;
-      }
-    | {
-        id: string;
-        property_id: string;
-      }[]
-    | null;
-};
-
 function buildAuthUrl(path: "/login" | "/signup", email: string) {
   const params = new URLSearchParams();
 
@@ -186,35 +169,26 @@ export default function AcceptInviteClient() {
         return;
       }
 
-  const { data, error } = await supabase.functions.invoke(
-  "accept-tenant-invite",
-  {
-    body: {
-      token,
-    },
-  }
-);
+      const { data, error } = await supabase.functions.invoke(
+        "accept-tenant-invite",
+        {
+          body: {
+            token,
+          },
+        }
+      );
 
-if (error || !data?.success) {
-  console.warn("Accept invite warning:", error || data);
+      if (error || !data?.success) {
+        console.warn("Accept invite warning:", error || data);
 
-  setStatus("error");
-
-  setMessage(
-    data?.error ||
-      "Something went wrong while accepting this invitation."
-  );
-
-  setAccepting(false);
-
-  return;
-}
-
-if (typeof window !== "undefined") {
-  localStorage.removeItem(
-    "avenueboard_tenant_invite_token"
-  );
-}
+        setStatus("error");
+        setMessage(
+          data?.error ||
+            "Something went wrong while accepting this invitation."
+        );
+        setAccepting(false);
+        return;
+      }
 
       if (typeof window !== "undefined") {
         localStorage.removeItem("avenueboard_tenant_invite_token");
@@ -248,23 +222,25 @@ if (typeof window !== "undefined") {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F7F6F3] px-6 font-sans text-[#0F172A]">
-      <div className="w-full max-w-[500px] rounded-[32px] border border-zinc-200 bg-white p-8 text-center shadow-[0_20px_80px_rgba(15,23,42,0.08)]">
+    <main className="flex min-h-screen items-center justify-center bg-[#F7F6F3] px-5 py-8 font-sans text-[#0F172A] sm:px-6">
+      <div className="w-full max-w-[500px] rounded-[28px] border border-zinc-200 bg-white px-6 py-8 text-center shadow-[0_20px_80px_rgba(15,23,42,0.08)] sm:rounded-[32px] sm:p-8">
         <img
           src="/logo.png"
           alt="AvenueBoard"
-          className="mx-auto h-10 w-auto"
+          className="mx-auto h-8 w-auto sm:h-10"
         />
 
-        <h1 className="mt-8 text-[28px] font-semibold tracking-[-0.05em] text-zinc-900">
+        <h1 className="mt-7 text-[26px] font-semibold tracking-[-0.05em] text-zinc-900 sm:mt-8 sm:text-[28px]">
           Tenant Invitation
         </h1>
 
-        <p className="mt-4 text-[15px] leading-7 text-zinc-500">{message}</p>
+        <p className="mt-4 break-words text-[14px] leading-7 text-zinc-500 sm:text-[15px]">
+          {message}
+        </p>
 
         {status === "loading" && (
           <div className="mt-8 flex justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent" />
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent sm:h-10 sm:w-10" />
           </div>
         )}
 
@@ -272,14 +248,14 @@ if (typeof window !== "undefined") {
           <div className="mt-8 flex flex-col gap-3">
             <button
               onClick={goToSignup}
-              className="h-12 rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]"
+              className="h-12 rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
             >
               Create Account
             </button>
 
             <button
               onClick={goToLogin}
-              className="h-12 rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50"
+              className="h-12 rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
             >
               Log In
             </button>
@@ -292,7 +268,7 @@ if (typeof window !== "undefined") {
               Account mismatch
             </p>
 
-            <p className="mt-2 text-[13px] leading-6 text-amber-800">
+            <p className="mt-2 break-words text-[13px] leading-6 text-amber-800">
               This invite was sent to{" "}
               <span className="font-semibold">{inviteEmail}</span>. You are
               logged in as <span className="font-semibold">{currentEmail}</span>.
@@ -300,7 +276,7 @@ if (typeof window !== "undefined") {
 
             <button
               onClick={logoutAndContinue}
-              className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]"
+              className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
             >
               Log Out & Continue
             </button>
@@ -312,7 +288,7 @@ if (typeof window !== "undefined") {
             <button
               onClick={acceptInvite}
               disabled={accepting}
-              className="h-12 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64] disabled:opacity-50"
+              className="h-12 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64] disabled:opacity-50"
             >
               {accepting ? "Accepting..." : "Accept Invitation"}
             </button>
@@ -321,14 +297,14 @@ if (typeof window !== "undefined") {
 
         {status === "accepted" && (
           <div className="mt-8 flex justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent" />
+            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent sm:h-10 sm:w-10" />
           </div>
         )}
 
         {status === "error" && (
           <button
             onClick={() => router.push("/login")}
-            className="mt-8 h-12 w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50"
+            className="mt-8 h-12 w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
           >
             Go to Login
           </button>

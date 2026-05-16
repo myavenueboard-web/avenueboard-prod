@@ -96,28 +96,28 @@ export default function ResetPasswordClient() {
   }
 
   const inputClass =
-    "mt-3 h-[56px] w-full rounded-2xl border border-zinc-300 bg-white px-5 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#CA6180] focus:ring-4 focus:ring-[#CA6180]/10";
+    "mt-3 h-[54px] w-full rounded-2xl border border-zinc-300 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#CA6180] focus:ring-4 focus:ring-[#CA6180]/10 sm:h-[56px] sm:px-5";
 
   return (
     <AuthLayout>
       <div className="w-full">
-        <h1 className="text-[42px] font-semibold tracking-[-0.05em] text-[#0F172A]">
+        <h1 className="text-[34px] font-semibold tracking-[-0.05em] text-[#0F172A] sm:text-[42px]">
           Create New Password
         </h1>
 
-        <p className="mt-4 text-[15px] leading-7 text-zinc-500">
+        <p className="mt-4 text-[14px] leading-7 text-zinc-500 sm:text-[15px]">
           Your new password must be secure and easy for you to remember.
         </p>
 
         {redirectPath.includes("/tenant/accept-invite") && (
-          <div className="mt-6 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F]">
+          <div className="mt-5 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F] sm:mt-6">
             After updating your password, we’ll return you to your tenant
             invitation.
           </div>
         )}
 
         {!sessionReady ? (
-          <div className="mt-8 rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-[14px] text-zinc-600">
+          <div className="mt-8 rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-[14px] leading-6 text-zinc-600">
             {message || "Preparing secure password reset..."}
           </div>
         ) : (
@@ -136,7 +136,7 @@ export default function ResetPasswordClient() {
                 className={inputClass}
               />
 
-              <div className="mt-3 flex flex-wrap gap-3 text-[12px]">
+              <div className="mt-3 flex flex-wrap gap-2.5 text-[12px] sm:gap-3">
                 <CheckItem active={checks.uppercase} label="1 uppercase" />
                 <CheckItem active={checks.number} label="1 number" />
                 <CheckItem active={checks.length} label="8 characters" />
@@ -159,7 +159,7 @@ export default function ResetPasswordClient() {
             </div>
 
             {message && (
-              <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[13px] text-zinc-700 shadow-sm">
+              <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[13px] leading-6 text-zinc-700 shadow-sm">
                 {message}
               </div>
             )}
@@ -167,7 +167,7 @@ export default function ResetPasswordClient() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-3 h-[58px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:opacity-60"
+              className="mt-3 h-[54px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:opacity-60 sm:h-[58px]"
             >
               {loading ? "Updating password..." : "Update Password"}
             </button>
@@ -178,13 +178,7 @@ export default function ResetPasswordClient() {
   );
 }
 
-function CheckItem({
-  active,
-  label,
-}: {
-  active: boolean;
-  label: string;
-}) {
+function CheckItem({ active, label }: { active: boolean; label: string }) {
   return (
     <span
       className={`flex items-center gap-1 ${
