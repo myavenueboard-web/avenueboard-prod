@@ -923,25 +923,32 @@ function ModalShell({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="max-h-[90dvh] w-full max-w-[560px] overflow-y-auto rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-[21px] font-semibold tracking-[-0.04em] sm:text-[22px]">
-              {title}
-            </h2>
-            <p className="mt-1 text-[13px] text-zinc-500">{subtitle}</p>
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/30 backdrop-blur-sm">
+      <div className="flex min-h-full items-start justify-center p-3 sm:p-6">
+        <div className="w-full max-w-[560px] overflow-hidden rounded-[28px] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
+          <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-5 pb-4 pt-5 sm:px-6">
+            <div className="min-w-0">
+              <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[22px]">
+                {title}
+              </h2>
+
+              <p className="mt-1 text-[13px] leading-5 text-zinc-500">
+                {subtitle}
+              </p>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            >
+              ×
+            </button>
           </div>
 
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-          >
-            ×
-          </button>
+          <div className="max-h-[72dvh] overflow-y-auto px-5 py-5 sm:px-6">
+            {children}
+          </div>
         </div>
-
-        {children}
       </div>
     </div>
   );
@@ -957,10 +964,10 @@ function ModalActions({
   saving: boolean;
 }) {
   return (
-    <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
+    <div className="mt-7 grid gap-3 border-t border-zinc-100 pt-5 sm:flex sm:justify-end">
       <button
         onClick={onCancel}
-        className="h-11 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50"
+        className="h-11 w-full rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 sm:w-auto"
       >
         Cancel
       </button>
@@ -968,7 +975,7 @@ function ModalActions({
       <button
         onClick={onSave}
         disabled={saving}
-        className="h-11 rounded-2xl bg-[#B9476D] px-6 text-[14px] font-semibold text-white hover:bg-[#A93F64] disabled:opacity-50"
+        className="h-11 w-full rounded-2xl bg-[#B9476D] px-6 text-[14px] font-semibold text-white hover:bg-[#A93F64] disabled:opacity-50 sm:w-auto"
       >
         {saving ? "Saving..." : "Save Changes"}
       </button>

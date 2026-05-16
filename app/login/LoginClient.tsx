@@ -111,11 +111,20 @@ export default function LoginClient() {
   }
 
   return (
-    <AuthLayout>
-      <div className="w-full">
-        <h1 className="text-[36px] font-semibold tracking-[-0.05em] text-[#0F172A] sm:text-[42px]">
-          Log In
-        </h1>
+  <AuthLayout>
+  <div className="absolute left-6 top-6 sm:left-10 sm:top-10">
+    <img
+      src="/logo.png"
+      alt="AvenueBoard"
+      className="h-7 w-auto object-contain sm:h-8"
+    />
+  </div>
+
+  <div className="w-full">
+
+    <h1 className="text-[36px] font-semibold tracking-[-0.05em] text-[#0F172A] sm:text-[42px]">
+      Log In
+    </h1>
 
         {redirectPath.includes("/tenant/accept-invite") && (
           <div className="mt-5 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F] sm:mt-6">

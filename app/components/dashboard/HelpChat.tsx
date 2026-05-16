@@ -43,7 +43,6 @@ const topics: HelpTopic[] = [
       },
     ],
   },
-
   {
     label: "Invite tenant",
     questions: [
@@ -64,7 +63,6 @@ const topics: HelpTopic[] = [
       },
     ],
   },
-
   {
     label: "Lease setup",
     questions: [
@@ -85,7 +83,6 @@ const topics: HelpTopic[] = [
       },
     ],
   },
-
   {
     label: "Bank account",
     questions: [
@@ -106,7 +103,6 @@ const topics: HelpTopic[] = [
       },
     ],
   },
-
   {
     label: "Notifications",
     questions: [
@@ -127,7 +123,6 @@ const topics: HelpTopic[] = [
       },
     ],
   },
-
   {
     label: "Tenant fee",
     questions: [
@@ -150,12 +145,8 @@ const topics: HelpTopic[] = [
   },
 ];
 
-export default function HelpChat({
-  open,
-  onClose,
-}: HelpChatProps) {
-  const [selectedTopic, setSelectedTopic] =
-    useState<HelpTopic | null>(null);
+export default function HelpChat({ open, onClose }: HelpChatProps) {
+  const [selectedTopic, setSelectedTopic] = useState<HelpTopic | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -183,12 +174,10 @@ export default function HelpChat({
         from: "assistant",
         text: "Hi, what do you need help with?",
       },
-
       {
         from: "user",
         text: topic.label,
       },
-
       {
         from: "assistant",
         text: `Here are a few common questions related to ${topic.label.toLowerCase()}.`,
@@ -199,17 +188,14 @@ export default function HelpChat({
   function selectQuestion(item: HelpQuestion) {
     setMessages((prev) => [
       ...prev,
-
       {
         from: "user",
         text: item.question,
       },
-
       {
         from: "assistant",
         text: item.answer,
       },
-
       {
         from: "assistant",
         text: "Need more help? You can always contact support below.",
@@ -240,101 +226,103 @@ export default function HelpChat({
         className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
       />
 
-      <div className="fixed bottom-8 right-8 z-50 flex h-[640px] w-[440px] max-w-[92vw] flex-col overflow-hidden rounded-[30px] border border-zinc-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.22)]">
-        <div className="flex items-start justify-between border-b border-zinc-100 px-6 py-5">
-          <div>
-            <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-[#0F172A]">
-              AvenueBoard Help
-            </h2>
+      <aside className="fixed right-0 top-0 z-50 h-[100dvh] w-[86vw] max-w-[440px] overflow-hidden bg-white shadow-[0_24px_90px_rgba(15,23,42,0.22)] sm:bottom-8 sm:right-8 sm:top-auto sm:h-[640px] sm:w-[440px] sm:rounded-[30px] sm:border sm:border-zinc-200">
+        <div className="flex h-full flex-col">
+          <div className="shrink-0 border-b border-zinc-100 px-5 py-5 sm:px-6">
+            <div className="flex items-start justify-between gap-5">
+              <div>
+                <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-[#0F172A] sm:text-[21px]">
+                  AvenueBoard Help
+                </h2>
 
-            <p className="mt-1 text-[13px] text-zinc-500">
-              Guided support for setup and rent collection.
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto bg-[#FAFAFA] px-5 py-5">
-          <div className="space-y-3">
-            {messages.map((message, index) => (
-              <div
-                key={`${message.text}-${index}`}
-                className={`flex ${
-                  message.from === "user"
-                    ? "justify-end"
-                    : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[86%] rounded-[22px] px-4 py-3 text-[13px] leading-6 shadow-sm ${
-                    message.from === "user"
-                      ? "rounded-tr-md bg-[#B9476D] font-medium text-white"
-                      : "rounded-tl-md bg-white text-zinc-600"
-                  }`}
-                >
-                  {message.text}
-                </div>
+                <p className="mt-1 text-[13px] leading-5 text-zinc-500">
+                  Guided support for setup and rent collection.
+                </p>
               </div>
-            ))}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {!selectedTopic && (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {topics.map((topic) => (
-                <button
-                  key={topic.label}
-                  onClick={() => selectTopic(topic)}
-                  className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-[13px] font-medium text-zinc-700 transition hover:border-[#E45E8A] hover:bg-[#FFF8FB] hover:text-[#B9476D]"
-                >
-                  {topic.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {selectedTopic && (
-            <div className="mt-5 space-y-2">
-              {selectedTopic.questions.map((item) => (
-                <button
-                  key={item.question}
-                  onClick={() => selectQuestion(item)}
-                  className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-left text-[13px] font-medium text-zinc-700 transition hover:border-[#E45E8A] hover:bg-[#FFF8FB] hover:text-[#B9476D]"
-                >
-                  {item.question}
-                </button>
-              ))}
 
               <button
-                onClick={resetChat}
-                className="mt-2 text-[13px] font-medium text-zinc-400 hover:text-zinc-700"
+                onClick={onClose}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xl text-zinc-500 hover:bg-zinc-200 sm:h-9 sm:w-9 sm:text-base"
               >
-                Choose another topic
+                ×
               </button>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="border-t border-zinc-100 bg-white px-5 py-4">
-          <button
-            onClick={contactSupport}
-            className="h-[50px] w-full rounded-2xl bg-[#0F172A] text-[14px] font-semibold text-white transition hover:bg-[#1E293B]"
-          >
-            Contact Support
-          </button>
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAFAFA] px-5 py-5">
+            <div className="space-y-3">
+              {messages.map((message, index) => (
+                <div
+                  key={`${message.text}-${index}`}
+                  className={`flex ${
+                    message.from === "user" ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[86%] rounded-[22px] px-4 py-3 text-[13px] leading-6 shadow-sm ${
+                      message.from === "user"
+                        ? "rounded-tr-md bg-[#B9476D] font-medium text-white"
+                        : "rounded-tl-md bg-white text-zinc-600"
+                    }`}
+                  >
+                    {message.text}
+                  </div>
+                </div>
+              ))}
 
-          <p className="mt-3 text-center text-[12px] text-zinc-400">
-            AI assistant and live chat can be added here later.
-          </p>
+              <div ref={messagesEndRef} />
+            </div>
+
+            {!selectedTopic && (
+              <div className="mt-5 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+                {topics.map((topic) => (
+                  <button
+                    key={topic.label}
+                    onClick={() => selectTopic(topic)}
+                    className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-left text-[13px] font-medium text-zinc-700 transition hover:border-[#E45E8A] hover:bg-[#FFF8FB] hover:text-[#B9476D] sm:rounded-full sm:py-2"
+                  >
+                    {topic.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedTopic && (
+              <div className="mt-5 space-y-2">
+                {selectedTopic.questions.map((item) => (
+                  <button
+                    key={item.question}
+                    onClick={() => selectQuestion(item)}
+                    className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-left text-[13px] font-medium text-zinc-700 transition hover:border-[#E45E8A] hover:bg-[#FFF8FB] hover:text-[#B9476D]"
+                  >
+                    {item.question}
+                  </button>
+                ))}
+
+                <button
+                  onClick={resetChat}
+                  className="mt-2 text-[13px] font-medium text-zinc-400 hover:text-zinc-700"
+                >
+                  Choose another topic
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0 border-t border-zinc-100 bg-white px-5 py-4">
+            <button
+              onClick={contactSupport}
+              className="h-[50px] w-full rounded-2xl bg-[#0F172A] text-[14px] font-semibold text-white transition hover:bg-[#1E293B]"
+            >
+              Contact Support
+            </button>
+
+            <p className="mt-3 text-center text-[12px] text-zinc-400">
+              AI assistant and live chat can be added here later.
+            </p>
+          </div>
         </div>
-      </div>
+      </aside>
     </>
   );
 }

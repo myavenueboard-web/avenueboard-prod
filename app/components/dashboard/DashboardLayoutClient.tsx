@@ -228,8 +228,8 @@ export default function DashboardLayoutClient({
   );
 
   return (
-    <main className="min-h-screen bg-[#F7F6F3] p-3 font-sans text-[#0F172A] sm:p-4">
-      <div className="flex min-h-[calc(100vh-24px)] overflow-hidden rounded-[24px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)] sm:min-h-[calc(100vh-32px)] sm:rounded-[28px] lg:p-5">
+    <main className="h-screen overflow-hidden bg-[#F7F6F3] p-2 font-sans text-[#0F172A] sm:p-4">
+      <div className="flex h-full overflow-hidden rounded-[24px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)] sm:rounded-[28px] lg:p-5">
         <aside className="relative hidden h-[calc(100vh-72px)] w-[285px] shrink-0 overflow-hidden rounded-[24px] bg-[#F8F8F7] px-6 py-8 lg:block">
           {desktopSidebarContent}
         </aside>
@@ -336,21 +336,20 @@ export default function DashboardLayoutClient({
           </div>
         )}
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 lg:px-8 lg:py-5">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 py-3 sm:px-6 lg:px-8 lg:py-5">
           <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <button
-                onClick={() => setMobileNavOpen(true)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F8F8F7] text-xl text-zinc-700 lg:hidden"
-              >
-                ☰
-              </button>
+  <button
+    onClick={() => setMobileNavOpen(true)}
+    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F8F8F7] text-xl text-zinc-700 lg:hidden"
+  >
+    ☰
+  </button>
 
-              <h1 className="truncate text-[22px] font-semibold tracking-[-0.05em] sm:text-[28px]">
-                {pageTitle}
-              </h1>
-            </div>
-
+<h1 className="truncate text-[22px] font-semibold tracking-[-0.05em] sm:text-[28px]">
+  {pageTitle}
+</h1>
+</div>
             <div className="flex shrink-0 items-center gap-2 sm:gap-4">
               {showAddPropertyButton && (
                 <button

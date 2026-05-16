@@ -213,8 +213,7 @@ export default function ReportsPage() {
 
   return (
     <>
-
-      <div className="mt-5 grid grid-cols-4 gap-4">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <ReportCard
           label="Expected Rent"
           value={`$${expectedRent.toLocaleString()}`}
@@ -236,49 +235,49 @@ export default function ReportsPage() {
       </div>
 
       <section className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
-      <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4">
-  <div>
-    <h2 className="text-[16px] font-semibold">Expense Breakdown</h2>
-    <p className="mt-1 text-[12px] text-zinc-500">
-      {filteredExpenses.length} expense records
-    </p>
-  </div>
+        <div className="shrink-0 border-b border-zinc-100 px-4 py-4 sm:flex sm:items-center sm:justify-between sm:px-5">
+          <div>
+            <h2 className="text-[16px] font-semibold">Expense Breakdown</h2>
+            <p className="mt-1 text-[12px] text-zinc-500">
+              {filteredExpenses.length} expense records
+            </p>
+          </div>
 
-  <div className="flex items-center gap-3">
-    <select
-      value={selectedProperty}
-      onChange={(e) => setSelectedProperty(e.target.value)}
-      className="h-10 rounded-2xl border border-zinc-200 bg-white px-4 text-[13px] outline-none focus:border-[#B9476D] focus:ring-4 focus:ring-[#B9476D]/10"
-    >
-      <option value="all">All Properties</option>
-      {properties.map((property) => (
-        <option key={property.id} value={property.id}>
-          {property.property_label}
-        </option>
-      ))}
-    </select>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-0 sm:flex sm:items-center">
+            <select
+              value={selectedProperty}
+              onChange={(e) => setSelectedProperty(e.target.value)}
+              className="h-10 min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] outline-none focus:border-[#B9476D] focus:ring-4 focus:ring-[#B9476D]/10 sm:px-4"
+            >
+              <option value="all">All Properties</option>
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {property.property_label}
+                </option>
+              ))}
+            </select>
 
-    <select
-      value={selectedRange}
-      onChange={(e) => setSelectedRange(e.target.value)}
-      className="h-10 rounded-2xl border border-zinc-200 bg-white px-4 text-[13px] outline-none focus:border-[#B9476D] focus:ring-4 focus:ring-[#B9476D]/10"
-    >
-      <option value="all">All Time</option>
-      <option value="30">Last 30 Days</option>
-      <option value="90">Last 90 Days</option>
-      <option value="365">Last 1 Year</option>
-    </select>
+            <select
+              value={selectedRange}
+              onChange={(e) => setSelectedRange(e.target.value)}
+              className="h-10 min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] outline-none focus:border-[#B9476D] focus:ring-4 focus:ring-[#B9476D]/10 sm:px-4"
+            >
+              <option value="all">All Time</option>
+              <option value="30">Last 30 Days</option>
+              <option value="90">Last 90 Days</option>
+              <option value="365">Last 1 Year</option>
+            </select>
 
-    <button
-      onClick={exportReport}
-      className="h-10 rounded-2xl bg-[#B9476D] px-5 text-[13px] font-semibold text-white hover:bg-[#A93F64]"
-    >
-      Export Report
-    </button>
-  </div>
-</div>
+            <button
+              onClick={exportReport}
+              className="col-span-2 h-10 rounded-2xl bg-[#B9476D] px-5 text-[13px] font-semibold text-white hover:bg-[#A93F64] sm:col-span-1"
+            >
+              Export Report
+            </button>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-[1.2fr_1fr_1fr] border-b border-zinc-100 bg-[#FAFAFA] px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+        <div className="grid grid-cols-[1.1fr_0.9fr_0.8fr] border-b border-zinc-100 bg-[#FAFAFA] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 sm:grid-cols-[1.2fr_1fr_1fr] sm:px-5 sm:text-[12px]">
           <span>Property</span>
           <span>Paid Date</span>
           <span className="text-right">Amount</span>
@@ -286,9 +285,9 @@ export default function ReportsPage() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {filteredExpenses.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-8 text-center">
+            <div className="flex h-full items-center justify-center px-6 text-center sm:px-8">
               <div className="flex flex-col items-center justify-center py-14">
-                <h3 className="text-[22px] font-semibold tracking-[-0.04em] text-zinc-900">
+                <h3 className="text-[20px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[22px]">
                   No report data available
                 </h3>
 
@@ -302,13 +301,13 @@ export default function ReportsPage() {
             filteredExpenses.map((expense) => (
               <div
                 key={expense.id}
-                className="grid grid-cols-[1.2fr_1fr_1fr] items-center border-b border-zinc-100 px-5 py-4 text-[13px] hover:bg-zinc-50"
+                className="grid grid-cols-[1.1fr_0.9fr_0.8fr] items-center border-b border-zinc-100 px-4 py-4 text-[13px] hover:bg-zinc-50 sm:grid-cols-[1.2fr_1fr_1fr] sm:px-5"
               >
-                <p className="font-semibold text-zinc-900">
+                <p className="min-w-0 truncate font-semibold text-zinc-900">
                   {expense.properties?.property_label || "Unknown"}
                 </p>
 
-                <p className="text-zinc-500">
+                <p className="truncate text-zinc-500">
                   {formatDate(expense.paid_date)}
                 </p>
 
@@ -336,11 +335,11 @@ function ReportCard({
   success?: boolean;
 }) {
   return (
-    <div className="rounded-[24px] border border-zinc-200 bg-white p-5">
+    <div className="min-w-0 rounded-[22px] border border-zinc-200 bg-white p-4 sm:rounded-[24px] sm:p-5">
       <p className="text-[13px] text-zinc-500">{label}</p>
 
       <p
-        className={`mt-3 text-[28px] font-semibold tracking-[-0.05em] ${
+        className={`mt-3 truncate text-[24px] font-semibold tracking-[-0.05em] sm:text-[28px] ${
           warning
             ? "text-red-600"
             : success

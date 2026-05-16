@@ -70,9 +70,7 @@ export default function AcceptInviteClient() {
 
         const { data: verifyData, error: verifyError } =
           await supabase.functions.invoke("verify-tenant-invite", {
-            body: {
-              token: inviteToken,
-            },
+            body: { token: inviteToken },
           });
 
         if (verifyError || !verifyData?.valid || !verifyData?.invite) {
@@ -172,9 +170,7 @@ export default function AcceptInviteClient() {
       const { data, error } = await supabase.functions.invoke(
         "accept-tenant-invite",
         {
-          body: {
-            token,
-          },
+          body: { token },
         }
       );
 
@@ -222,69 +218,72 @@ export default function AcceptInviteClient() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F7F6F3] px-5 py-8 font-sans text-[#0F172A] sm:px-6">
-      <div className="w-full max-w-[500px] rounded-[28px] border border-zinc-200 bg-white px-6 py-8 text-center shadow-[0_20px_80px_rgba(15,23,42,0.08)] sm:rounded-[32px] sm:p-8">
-        <img
-          src="/logo.png"
-          alt="AvenueBoard"
-          className="mx-auto h-8 w-auto sm:h-10"
-        />
+    <main className="min-h-[100dvh] overflow-x-hidden bg-[#F7F6F3] px-4 py-5 font-sans text-[#0F172A] sm:flex sm:items-center sm:justify-center sm:px-6 sm:py-8">
+      <div className="mx-auto flex min-h-[calc(100dvh-40px)] w-full max-w-[500px] flex-col rounded-[28px] border border-zinc-200 bg-white px-5 py-6 text-center shadow-[0_20px_80px_rgba(15,23,42,0.08)] sm:min-h-0 sm:rounded-[32px] sm:p-8">
+        <div className="shrink-0">
+          <img
+            src="/logo.png"
+            alt="AvenueBoard"
+            className="mx-auto h-7 w-auto object-contain sm:h-9"
+          />
 
-        <h1 className="mt-7 text-[26px] font-semibold tracking-[-0.05em] text-zinc-900 sm:mt-8 sm:text-[28px]">
-          Tenant Invitation
-        </h1>
+          <h1 className="mt-7 text-[28px] font-semibold tracking-[-0.05em] text-zinc-900 sm:mt-8 sm:text-[30px]">
+            Tenant Invitation
+          </h1>
 
-        <p className="mt-4 break-words text-[14px] leading-7 text-zinc-500 sm:text-[15px]">
-          {message}
-        </p>
+          <p className="mt-4 break-words text-[14px] leading-7 text-zinc-500 sm:text-[15px]">
+            {message}
+          </p>
+        </div>
 
-        {status === "loading" && (
-          <div className="mt-8 flex justify-center">
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent sm:h-10 sm:w-10" />
-          </div>
-        )}
+        <div className="flex flex-1 flex-col justify-center py-7">
+          {status === "loading" && (
+            <div className="flex justify-center">
+              <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent sm:h-10 sm:w-10" />
+            </div>
+          )}
 
-        {status === "logged_out" && (
-          <div className="mt-8 flex flex-col gap-3">
-            <button
-              onClick={goToSignup}
-              className="h-12 rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
-            >
-              Create Account
-            </button>
+          {status === "logged_out" && (
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={goToSignup}
+                className="h-12 rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
+              >
+                Create Account
+              </button>
 
-            <button
-              onClick={goToLogin}
-              className="h-12 rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
-            >
-              Log In
-            </button>
-          </div>
-        )}
+              <button
+                onClick={goToLogin}
+                className="h-12 rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
+              >
+                Log In
+              </button>
+            </div>
+          )}
 
-        {status === "wrong_user" && (
-          <div className="mt-8 rounded-2xl bg-amber-50 p-4 text-left">
-            <p className="text-[13px] font-semibold text-amber-900">
-              Account mismatch
-            </p>
+          {status === "wrong_user" && (
+            <div className="rounded-2xl bg-amber-50 p-4 text-left">
+              <p className="text-[13px] font-semibold text-amber-900">
+                Account mismatch
+              </p>
 
-            <p className="mt-2 break-words text-[13px] leading-6 text-amber-800">
-              This invite was sent to{" "}
-              <span className="font-semibold">{inviteEmail}</span>. You are
-              logged in as <span className="font-semibold">{currentEmail}</span>.
-            </p>
+              <p className="mt-2 break-words text-[13px] leading-6 text-amber-800">
+                This invite was sent to{" "}
+                <span className="font-semibold">{inviteEmail}</span>. You are
+                logged in as{" "}
+                <span className="font-semibold">{currentEmail}</span>.
+              </p>
 
-            <button
-              onClick={logoutAndContinue}
-              className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
-            >
-              Log Out & Continue
-            </button>
-          </div>
-        )}
+              <button
+                onClick={logoutAndContinue}
+                className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
+              >
+                Log Out & Continue
+              </button>
+            </div>
+          )}
 
-        {status === "ready" && (
-          <div className="mt-8">
+          {status === "ready" && (
             <button
               onClick={acceptInvite}
               disabled={accepting}
@@ -292,23 +291,23 @@ export default function AcceptInviteClient() {
             >
               {accepting ? "Accepting..." : "Accept Invitation"}
             </button>
-          </div>
-        )}
+          )}
 
-        {status === "accepted" && (
-          <div className="mt-8 flex justify-center">
-            <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent sm:h-10 sm:w-10" />
-          </div>
-        )}
+          {status === "accepted" && (
+            <div className="flex justify-center">
+              <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#B9476D] border-t-transparent sm:h-10 sm:w-10" />
+            </div>
+          )}
 
-        {status === "error" && (
-          <button
-            onClick={() => router.push("/login")}
-            className="mt-8 h-12 w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
-          >
-            Go to Login
-          </button>
-        )}
+          {status === "error" && (
+            <button
+              onClick={() => router.push("/login")}
+              className="h-12 w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
+            >
+              Go to Login
+            </button>
+          )}
+        </div>
       </div>
     </main>
   );

@@ -39,7 +39,7 @@ export default function ProfileSettingsPanel({
         className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
       />
 
-      <aside className="fixed right-0 top-0 z-50 h-screen w-[86vw] max-w-[420px] overflow-hidden bg-white shadow-[0_24px_90px_rgba(15,23,42,0.22)] sm:w-[420px]">
+      <aside className="fixed bottom-0 right-0 top-0 z-50 h-[100dvh] w-[88vw] max-w-[420px] overflow-hidden bg-white shadow-[0_24px_90px_rgba(15,23,42,0.22)] sm:w-[420px]">
         <div className="flex h-full flex-col">
           <div className="shrink-0 px-5 py-5 sm:px-7 sm:py-7">
             <div className="flex items-start justify-between gap-5">
@@ -147,7 +147,7 @@ export default function ProfileSettingsPanel({
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-zinc-200 bg-white px-5 py-4 sm:px-7 sm:py-7">
+          <div className="shrink-0 border-t border-zinc-200 bg-white px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 sm:px-7 sm:pb-7 sm:pt-7">
             <div className="grid grid-cols-1 gap-3 sm:space-y-3">
               <button
                 onClick={onSave}

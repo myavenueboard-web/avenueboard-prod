@@ -52,7 +52,9 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(true);
 
   const [expenseOpen, setExpenseOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
+  const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(
+    null
+  );
   const [deleteExpense, setDeleteExpense] = useState<ExpenseItem | null>(null);
 
   const [savingExpense, setSavingExpense] = useState(false);
@@ -305,16 +307,14 @@ export default function ExpensesPage() {
   return (
     <>
       <div className="flex shrink-0 items-center justify-between">
-        <div>
-          <p className="mt-1 text-[14px] text-zinc-500">
-            Track property expenses in a clean list view.
-          </p>
-        </div>
+        <p className="mt-1 text-[14px] text-zinc-500">
+          Track property expenses in a clean list view.
+        </p>
       </div>
 
       <div className="mt-6 min-h-0 flex-1 overflow-hidden">
         <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
-          <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-5 py-4">
+          <div className="shrink-0 border-b border-zinc-100 px-4 py-4 sm:flex sm:items-center sm:justify-between sm:px-5">
             <div>
               <h2 className="text-[16px] font-semibold">Expense List</h2>
 
@@ -324,7 +324,7 @@ export default function ExpensesPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-0 sm:flex sm:items-center">
               <button
                 onClick={openAddExpense}
                 disabled={properties.length === 0}
@@ -342,7 +342,7 @@ export default function ExpensesPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-[1.1fr_2fr_1fr_1fr_150px] border-b border-zinc-100 bg-[#FAFAFA] px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+          <div className="hidden grid-cols-[1.1fr_2fr_1fr_1fr_150px] border-b border-zinc-100 bg-[#FAFAFA] px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-zinc-400 sm:grid">
             <span>Property</span>
             <span>Description</span>
             <span>Category</span>
@@ -368,25 +368,65 @@ export default function ExpensesPage() {
               expenses.map((expense) => (
                 <div
                   key={expense.id}
-                  className="grid grid-cols-[1.1fr_2fr_1fr_1fr_150px] items-center border-b border-zinc-100 px-5 py-4 text-[13px] hover:bg-zinc-50"
+                  className="border-b border-zinc-100 px-4 py-4 hover:bg-zinc-50 sm:grid sm:grid-cols-[1.1fr_2fr_1fr_1fr_150px] sm:items-center sm:px-5"
                 >
-                  <p className="truncate font-semibold text-zinc-900">
+                  <div className="sm:hidden">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-[14px] font-semibold text-zinc-900">
+                          {expense.properties?.property_label ||
+                            "Unknown Property"}
+                        </p>
+
+                        <p className="mt-1 truncate text-[13px] text-zinc-500">
+                          {expense.description}
+                        </p>
+
+                        <p className="mt-1 text-[12px] text-zinc-400">
+                          {expense.category || "Other"} •{" "}
+                          {formatDate(expense.paid_date)}
+                        </p>
+                      </div>
+
+                      <p className="shrink-0 text-[16px] font-semibold text-zinc-900">
+                        ${Number(expense.amount).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-end gap-4">
+                      <button
+                        onClick={() => openEditExpense(expense)}
+                        className="text-[13px] font-semibold text-[#B9476D] hover:text-[#A93F64]"
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() => setDeleteExpense(expense)}
+                        className="text-[13px] font-semibold text-red-500 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="hidden truncate font-semibold text-zinc-900 sm:block">
                     {expense.properties?.property_label || "Unknown Property"}
                   </p>
 
-                  <p className="truncate text-zinc-600">
+                  <p className="hidden truncate text-zinc-600 sm:block">
                     {expense.description}
                   </p>
 
-                  <p className="truncate text-zinc-500">
+                  <p className="hidden truncate text-zinc-500 sm:block">
                     {expense.category || "Other"}
                   </p>
 
-                  <p className="text-zinc-500">
+                  <p className="hidden text-zinc-500 sm:block">
                     {formatDate(expense.paid_date)}
                   </p>
 
-                  <div className="flex items-center justify-end gap-3">
+                  <div className="hidden items-center justify-end gap-3 sm:flex">
                     <p className="font-semibold text-zinc-900">
                       ${Number(expense.amount).toLocaleString()}
                     </p>
@@ -447,7 +487,7 @@ export default function ExpensesPage() {
               placeholder="Example: Plumbing repair"
             />
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <SelectInput
                 label="Category"
                 value={expenseForm.category}
@@ -483,7 +523,7 @@ export default function ExpensesPage() {
             </div>
           </div>
 
-          <div className="mt-7 flex justify-end gap-3">
+          <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
             <button
               onClick={() => {
                 setExpenseOpen(false);
@@ -549,8 +589,8 @@ function ModalShell({
 }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-[620px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
-        <div className="mb-6 flex items-start justify-between">
+      <div className="max-h-[90dvh] w-full max-w-[620px] overflow-y-auto rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-[22px] font-semibold tracking-[-0.04em]">
               {title}
@@ -560,7 +600,7 @@ function ModalShell({
 
           <button
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
           >
             ×
           </button>
@@ -585,7 +625,7 @@ function DeleteExpenseModal({
 }) {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-[460px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
+      <div className="w-full max-w-[460px] rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-[22px] font-semibold text-red-600">
           !
         </div>
@@ -600,7 +640,7 @@ function DeleteExpenseModal({
           This action cannot be undone.
         </p>
 
-        <div className="mt-7 flex justify-end gap-3">
+        <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
           <button
             onClick={onClose}
             disabled={deleting}
@@ -643,7 +683,7 @@ function InputField({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[14px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10"
+        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
       />
     </div>
   );
@@ -666,7 +706,7 @@ function SelectInput({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[14px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10"
+        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
