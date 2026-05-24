@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 type StepIndicatorProps = {
   step: number;
   propertyValid: boolean;
@@ -12,8 +14,8 @@ export default function StepIndicator({
   leaseValid,
 }: StepIndicatorProps) {
   return (
-    <div className="mb-5 overflow-hidden">
-      <div className="flex items-center justify-between gap-1 sm:gap-3">
+    <div className="mb-4 overflow-hidden">
+      <div className="flex items-center justify-between gap-[2px] sm:gap-3">
         <Step
           complete={step > 1 && propertyValid}
           active={step === 1}
@@ -44,7 +46,12 @@ export default function StepIndicator({
         <Step
           active={step === 4}
           icon="☷"
-          label="Prefs"
+          label={
+            <>
+              <span className="sm:hidden">Prefs</span>
+              <span className="hidden sm:inline">Preferences</span>
+            </>
+          }
         />
       </div>
     </div>
@@ -70,7 +77,7 @@ function Step({
   active?: boolean;
   complete?: boolean;
   icon: string;
-  label: string;
+  label: ReactNode;
 }) {
   return (
     <div
@@ -90,9 +97,7 @@ function Step({
         {complete ? "✓" : icon}
       </span>
 
-      <span className="text-[11px] font-medium sm:text-[15px]">
-        {label}
-      </span>
+      <span className="text-[11px] font-medium sm:text-[15px]">{label}</span>
     </div>
   );
 }

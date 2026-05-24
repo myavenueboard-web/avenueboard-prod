@@ -478,8 +478,8 @@ export default function AddPropertyPage() {
   return (
     <>
       <div className="relative mt-2 flex h-full min-h-0 flex-col sm:mt-4">
-        <div className="min-h-0 flex-1 overflow-y-auto pb-[220px] pr-0 lg:pr-6">
-          <div className="mx-auto max-w-[760px]">
+  <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[220px] sm:px-6 lg:px-0 lg:pr-6">
+    <div className="mx-auto w-full max-w-[760px]">
             <StepIndicator
               step={step}
               propertyValid={!!propertyValid}
@@ -527,8 +527,8 @@ export default function AddPropertyPage() {
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white px-6 pt-3 pb-5 shadow-[0_-8px_30px_rgba(15,23,42,0.08)]">
-  <div className="mx-auto grid max-w-[760px] gap-3">
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white px-4 pt-3 pb-4 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] sm:px-6 lg:left-[320px]">
+  <div className="mx-auto grid w-full max-w-[760px] gap-3">
     <div>
       <div className="flex items-center justify-between text-[13px] text-zinc-500">
         <span>Step {step} of 4</span>
