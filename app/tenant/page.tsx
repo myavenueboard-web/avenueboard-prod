@@ -31,6 +31,28 @@ type LeaseDocument = {
   created_at?: string | null;
 };
 
+type PaymentMethod = {
+  id: string;
+  lease_id: string;
+  brand: string | null;
+  last4: string | null;
+  exp_month: string | null;
+  exp_year: string | null;
+  is_default: boolean | null;
+};
+
+type RentPayment = {
+  id: string;
+  lease_id: string;
+  payment_method_id: string | null;
+  amount: number;
+  period_label: string | null;
+  status: string | null;
+  receipt_url: string | null;
+  paid_at: string | null;
+  created_at: string | null;
+};
+
 type UserInfo = {
   name: string;
   email: string;
@@ -42,6 +64,8 @@ export default function TenantDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [leases, setLeases] = useState<TenantLease[]>([]);
   const [documents, setDocuments] = useState<LeaseDocument[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
   const [hasLandlordRole, setHasLandlordRole] = useState(false);
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
@@ -102,24 +126,44 @@ export default function TenantDashboardPage() {
         const propertyIds = accessRows.map((item) => item.property_id);
         const leaseIds = accessRows.map((item) => item.lease_id);
 
-        const [{ data: propertyData }, { data: leaseData }, { data: docData }] =
-          await Promise.all([
-            supabase
-              .from("properties")
-              .select(
-                "id, property_label, street_address, city, state_name, zip, unit_name"
-              )
-              .in("id", propertyIds),
-            supabase
-              .from("leases")
-              .select("id, start_date, end_date, monthly_rent, rent_due_day")
-              .in("id", leaseIds),
-            supabase
-              .from("lease_documents")
-              .select("id, lease_id, file_name, file_url, file_type, created_at")
-              .in("lease_id", leaseIds)
-              .order("created_at", { ascending: false }),
-          ]);
+        const [
+          { data: propertyData },
+          { data: leaseData },
+          { data: docData },
+          { data: paymentMethodData },
+          { data: rentPaymentData },
+        ] = await Promise.all([
+          supabase
+            .from("properties")
+            .select(
+              "id, property_label, street_address, city, state_name, zip, unit_name"
+            )
+            .in("id", propertyIds),
+
+          supabase
+            .from("leases")
+            .select("id, start_date, end_date, monthly_rent, rent_due_day")
+            .in("id", leaseIds),
+
+          supabase
+            .from("lease_documents")
+            .select("id, lease_id, file_name, file_url, file_type, created_at")
+            .in("lease_id", leaseIds)
+            .order("created_at", { ascending: false }),
+
+          supabase
+            .from("payment_methods")
+            .select("id, lease_id, brand, last4, exp_month, exp_year, is_default")
+            .in("lease_id", leaseIds),
+
+          supabase
+            .from("rent_payments")
+            .select(
+              "id, lease_id, payment_method_id, amount, period_label, status, receipt_url, paid_at, created_at"
+            )
+            .in("lease_id", leaseIds)
+            .order("created_at", { ascending: false }),
+        ]);
 
         const propertyMap = new Map(
           (propertyData || []).map((property: any) => [property.id, property])
@@ -153,6 +197,8 @@ export default function TenantDashboardPage() {
 
         setLeases(normalizedLeases);
         setDocuments((docData || []) as LeaseDocument[]);
+        setPaymentMethods((paymentMethodData || []) as PaymentMethod[]);
+        setRentPayments((rentPaymentData || []) as RentPayment[]);
         setSelectedLeaseId(normalizedLeases[0]?.lease_id || "");
       } catch (error) {
         console.error("Tenant dashboard error:", error);
@@ -172,43 +218,53 @@ export default function TenantDashboardPage() {
     return documents.filter((doc) => doc.lease_id === selectedLease.lease_id);
   }, [documents, selectedLease]);
 
+  const selectedPaymentMethods = useMemo(() => {
+    if (!selectedLease) return [];
+    return paymentMethods.filter(
+      (method) => method.lease_id === selectedLease.lease_id
+    );
+  }, [paymentMethods, selectedLease]);
+
+  const selectedRentPayments = useMemo(() => {
+    if (!selectedLease) return [];
+    return rentPayments.filter(
+      (payment) => payment.lease_id === selectedLease.lease_id
+    );
+  }, [rentPayments, selectedLease]);
+
   if (loading) {
     return (
-      <main className="flex h-[100dvh] items-center justify-center bg-[#F7F6F3] text-sm text-zinc-500">
+      <main className="flex h-screen items-center justify-center bg-[#F7F6F3] text-sm text-zinc-500">
         Loading tenant portal...
       </main>
     );
   }
 
   return (
-    <main className="min-h-[100dvh] overflow-x-hidden bg-[#F7F6F3] p-2 font-sans text-[#111827] sm:p-3 lg:h-screen lg:overflow-hidden">
-      <div className="flex min-h-[calc(100dvh-16px)] flex-col overflow-hidden rounded-[26px] bg-white shadow-[0_18px_70px_rgba(15,23,42,0.08)] sm:min-h-[calc(100dvh-24px)] sm:rounded-[28px] lg:h-full">
-        <header className="relative flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-4 sm:h-[76px] sm:px-8 sm:py-0">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-5">
-            <img
-              src="/logo.png"
-              alt="AvenueBoard"
-              className="h-7 w-auto shrink-0 sm:h-9"
-            />
+    <main className="h-screen overflow-hidden bg-[#F7F6F3] p-3 font-sans text-[#111827]">
+      <div className="flex h-full flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
+        <header className="relative flex h-[76px] shrink-0 items-center justify-between border-b border-zinc-100 px-8">
+          <div className="flex items-center gap-5">
+            <img src="/logo.png" alt="AvenueBoard" className="h-9 w-auto" />
 
-            <div className="hidden h-9 w-px bg-zinc-200 sm:block" />
+            <div className="h-9 w-px bg-zinc-200" />
 
-            <div className="min-w-0">
-              <p className="truncate text-[14px] font-semibold text-zinc-900">
+            <div>
+              <p className="text-[14px] font-semibold text-zinc-900">
                 Tenant Portal
               </p>
-              <p className="mt-0.5 truncate text-[12px] text-zinc-400">
+              <p className="mt-0.5 text-[12px] text-zinc-400">
                 {selectedLease?.property_label || "Rent, lease, and documents"}
               </p>
             </div>
           </div>
 
-          <div className="relative shrink-0">
+          <div className="relative">
             <button
               onClick={() => setProfileOpen((value) => !value)}
-              className="flex h-11 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-2 text-left transition hover:bg-zinc-50 sm:h-12 sm:gap-3 sm:px-3 sm:pl-4"
+              className="flex h-12 items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-3 pl-4 text-left transition hover:bg-zinc-50"
             >
-              <div className="hidden sm:block">
+              <div>
                 <p className="max-w-[180px] truncate text-[13px] font-semibold text-zinc-900">
                   {userInfo.name}
                 </p>
@@ -221,11 +277,11 @@ export default function TenantDashboardPage() {
                 {getInitials(userInfo.name)}
               </div>
 
-              <span className="hidden text-zinc-400 sm:inline">⌄</span>
+              <span className="text-zinc-400">⌄</span>
             </button>
 
             {profileOpen && (
-              <div className="absolute right-0 top-[54px] z-20 w-[260px] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.14)] sm:top-[58px]">
+              <div className="absolute right-0 top-[58px] z-20 w-[260px] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.14)]">
                 <div className="border-b border-zinc-100 px-4 py-4">
                   <p className="truncate text-[14px] font-semibold text-zinc-900">
                     {userInfo.name}
@@ -269,10 +325,10 @@ export default function TenantDashboardPage() {
         {leases.length === 0 ? (
           <div className="flex flex-1 items-center justify-center px-6 text-center">
             <div>
-              <h1 className="text-[26px] font-semibold tracking-[-0.04em] sm:text-[28px]">
+              <h1 className="text-[28px] font-semibold tracking-[-0.04em]">
                 No active lease access
               </h1>
-              <p className="mt-3 max-w-[440px] text-[14px] leading-7 text-zinc-500 sm:text-[15px]">
+              <p className="mt-3 max-w-[440px] text-[15px] leading-7 text-zinc-500">
                 Your landlord invitation has not been connected yet. Open your
                 invite email and accept the invitation to access your tenant
                 portal.
@@ -280,9 +336,9 @@ export default function TenantDashboardPage() {
             </div>
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 lg:overflow-hidden">
-            <div className="mb-4 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-[14px] font-medium text-zinc-500 sm:text-[15px]">
+          <div className="flex min-h-0 flex-1 flex-col px-6 py-5">
+            <div className="mb-4 flex shrink-0 items-center justify-between">
+              <p className="text-[15px] font-medium text-zinc-500">
                 {formatToday()}
               </p>
 
@@ -290,7 +346,7 @@ export default function TenantDashboardPage() {
                 <select
                   value={selectedLeaseId}
                   onChange={(e) => setSelectedLeaseId(e.target.value)}
-                  className="h-10 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-[13px] font-semibold text-zinc-700 outline-none sm:w-auto"
+                  className="h-10 rounded-2xl border border-zinc-200 bg-white px-4 text-[13px] font-semibold text-zinc-700 outline-none"
                 >
                   {leases.map((lease) => (
                     <option key={lease.lease_id} value={lease.lease_id}>
@@ -301,16 +357,25 @@ export default function TenantDashboardPage() {
               )}
             </div>
 
-            <div className="grid min-h-0 gap-4 lg:h-full lg:grid-cols-[1fr_380px] lg:gap-5">
-              <section className="grid min-h-0 gap-4 lg:grid-rows-[185px_1fr_220px] lg:gap-5">
-                <UpcomingPayment lease={selectedLease} />
-                <PaymentHistory lease={selectedLease} />
+            <div className="grid min-h-0 flex-1 grid-cols-[1fr_380px] gap-5">
+              <section className="grid min-h-0 grid-rows-[185px_1fr_220px] gap-5">
+                <UpcomingPayment
+                  lease={selectedLease}
+                  paymentMethods={selectedPaymentMethods}
+                />
+
+                <PaymentHistory
+                  lease={selectedLease}
+                  payments={selectedRentPayments}
+                  paymentMethods={selectedPaymentMethods}
+                />
+
                 <LeaseActivity documents={selectedDocuments} />
               </section>
 
-              <aside className="grid min-h-0 gap-4 lg:grid-rows-[1fr_190px_180px] lg:gap-5">
+              <aside className="grid min-h-0 grid-rows-[1fr_190px_180px] gap-5">
                 <LeaseDetails lease={selectedLease} />
-                <PaymentMethods />
+                <PaymentMethods paymentMethods={selectedPaymentMethods} />
                 <QuickLinks />
               </aside>
             </div>
@@ -321,12 +386,21 @@ export default function TenantDashboardPage() {
   );
 }
 
-function UpcomingPayment({ lease }: { lease?: TenantLease }) {
+function UpcomingPayment({
+  lease,
+  paymentMethods,
+}: {
+  lease?: TenantLease;
+  paymentMethods: PaymentMethod[];
+}) {
+  const defaultMethod =
+    paymentMethods.find((method) => method.is_default) || paymentMethods[0];
+
   return (
     <Card>
-      <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-4 sm:px-6">
+      <div className="flex items-start justify-between border-b border-zinc-100 px-6 py-4">
         <div>
-          <h1 className="text-[17px] font-semibold tracking-[-0.03em] sm:text-[18px]">
+          <h1 className="text-[18px] font-semibold tracking-[-0.03em]">
             Upcoming Payment
           </h1>
           <p className="mt-1 text-[13px] text-zinc-500">
@@ -334,26 +408,32 @@ function UpcomingPayment({ lease }: { lease?: TenantLease }) {
           </p>
         </div>
 
-        <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-600">
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-600">
           Due {lease?.rent_due_day || "—"}
         </span>
       </div>
 
-      <div className="grid gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_1.15fr_170px] lg:items-center lg:gap-5">
+      <div className="grid grid-cols-[1fr_1.15fr_170px] items-center gap-5 px-6 py-5">
         <div>
-          <p className="text-[36px] font-semibold tracking-[-0.06em] sm:text-[32px]">
+          <p className="text-[32px] font-semibold tracking-[-0.06em]">
             ${Number(lease?.monthly_rent || 0).toLocaleString()}
           </p>
           <p className="mt-1 text-[13px] text-zinc-500">Amount Due</p>
         </div>
 
-        <div className="flex items-center justify-between rounded-2xl border border-zinc-100 bg-[#FAFAFA] px-4 py-4 sm:px-5">
+        <div className="flex items-center justify-between rounded-2xl border border-zinc-100 bg-[#FAFAFA] px-5 py-4">
           <div>
             <p className="text-[14px] font-semibold text-zinc-900">
-              Payment method not set
+              {defaultMethod
+                ? `${formatBrand(defaultMethod.brand)} •••• ${defaultMethod.last4}`
+                : "Payment method not set"}
             </p>
             <p className="mt-1 text-[13px] text-zinc-500">
-              ACH / card setup pending
+              {defaultMethod
+                ? `Expires ${defaultMethod.exp_month || "--"}/${
+                    defaultMethod.exp_year || "--"
+                  }`
+                : "ACH / card setup pending"}
             </p>
           </div>
 
@@ -364,7 +444,7 @@ function UpcomingPayment({ lease }: { lease?: TenantLease }) {
 
         <div className="text-center">
           <button className="h-12 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]">
-            Set Up Payments
+            {defaultMethod ? "Make Payment" : "Set Up Payments"}
           </button>
           <p className="mt-2 text-[12px] text-zinc-400">256-bit SSL</p>
         </div>
@@ -373,12 +453,20 @@ function UpcomingPayment({ lease }: { lease?: TenantLease }) {
   );
 }
 
-function PaymentHistory({ lease }: { lease?: TenantLease }) {
+function PaymentHistory({
+  lease,
+  payments,
+  paymentMethods,
+}: {
+  lease?: TenantLease;
+  payments: RentPayment[];
+  paymentMethods: PaymentMethod[];
+}) {
   return (
     <Card>
-      <div className="flex shrink-0 flex-col gap-3 border-b border-zinc-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-6 py-4">
         <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.03em] sm:text-[18px]">
+          <h2 className="text-[18px] font-semibold tracking-[-0.03em]">
             Payment History
           </h2>
           <p className="mt-1 text-[13px] text-zinc-500">
@@ -395,7 +483,7 @@ function PaymentHistory({ lease }: { lease?: TenantLease }) {
         </select>
       </div>
 
-      <div className="hidden shrink-0 grid-cols-[1.4fr_1fr_130px_120px_130px] border-b border-zinc-100 bg-[#FAFAFA] px-5 py-3 text-[13px] text-zinc-500 lg:grid">
+      <div className="grid shrink-0 grid-cols-[1.4fr_1fr_130px_120px_130px] border-b border-zinc-100 bg-[#FAFAFA] px-5 py-3 text-[13px] text-zinc-500">
         <p>Period</p>
         <p>Method</p>
         <p>Amount</p>
@@ -403,8 +491,52 @@ function PaymentHistory({ lease }: { lease?: TenantLease }) {
         <p className="text-right">Receipt</p>
       </div>
 
-      <div className="min-h-[160px] flex-1 overflow-y-auto">
-        <EmptyPaymentRow amount={lease?.monthly_rent || 0} />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {payments.length === 0 ? (
+          <EmptyPaymentRow amount={lease?.monthly_rent || 0} />
+        ) : (
+          <div className="divide-y divide-zinc-100">
+            {payments.map((payment) => {
+              const method = paymentMethods.find(
+                (item) => item.id === payment.payment_method_id
+              );
+
+              return (
+                <div
+                  key={payment.id}
+                  className="grid grid-cols-[1.4fr_1fr_130px_120px_130px] items-center px-5 py-4 text-[14px]"
+                >
+                  <p>{payment.period_label || formatDate(payment.paid_at)}</p>
+                  <p>
+                    {method
+                      ? `${formatBrand(method.brand)} •••• ${method.last4}`
+                      : "—"}
+                  </p>
+                  <p>${Number(payment.amount || 0).toLocaleString()}</p>
+                  <p>
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-semibold capitalize text-emerald-600">
+                      {payment.status || "pending"}
+                    </span>
+                  </p>
+                  <div className="text-right">
+                    {payment.receipt_url ? (
+                      <a
+                        href={payment.receipt_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[13px] font-semibold text-[#B9476D]"
+                      >
+                        Download
+                      </a>
+                    ) : (
+                      <span className="text-[13px] text-zinc-400">—</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -412,7 +544,7 @@ function PaymentHistory({ lease }: { lease?: TenantLease }) {
 
 function EmptyPaymentRow({ amount }: { amount: number }) {
   return (
-    <div className="flex h-full min-h-[150px] items-center justify-center px-5 py-8 text-center">
+    <div className="flex h-full min-h-[150px] items-center justify-center px-5 text-center">
       <div>
         <p className="text-[14px] font-semibold text-zinc-900">
           No payments recorded yet
@@ -431,9 +563,9 @@ function EmptyPaymentRow({ amount }: { amount: number }) {
 function LeaseActivity({ documents }: { documents: LeaseDocument[] }) {
   return (
     <Card>
-      <div className="flex shrink-0 flex-col gap-3 border-b border-zinc-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-6 py-4">
         <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.03em] sm:text-[18px]">
+          <h2 className="text-[18px] font-semibold tracking-[-0.03em]">
             Lease Activity
           </h2>
           <p className="mt-1 text-[13px] text-zinc-500">
@@ -446,7 +578,7 @@ function LeaseActivity({ documents }: { documents: LeaseDocument[] }) {
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {documents.length === 0 ? (
           <div className="rounded-2xl bg-orange-50 px-5 py-4">
             <p className="text-[13px] font-semibold text-orange-950">
@@ -461,10 +593,10 @@ function LeaseActivity({ documents }: { documents: LeaseDocument[] }) {
             {documents.map((doc) => (
               <div
                 key={doc.id}
-                className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5"
+                className="flex items-center justify-between px-5 py-4"
               >
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-semibold text-zinc-900">
+                <div>
+                  <p className="text-[14px] font-semibold text-zinc-900">
                     {doc.file_name}
                   </p>
                   <p className="mt-1 text-[12px] text-zinc-400">
@@ -477,14 +609,12 @@ function LeaseActivity({ documents }: { documents: LeaseDocument[] }) {
                     href={doc.file_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 rounded-xl border border-zinc-200 px-4 py-2 text-[12px] font-semibold text-[#B9476D] hover:bg-zinc-50"
+                    className="rounded-xl border border-zinc-200 px-4 py-2 text-[12px] font-semibold text-[#B9476D] hover:bg-zinc-50"
                   >
                     View
                   </a>
                 ) : (
-                  <span className="shrink-0 text-[12px] text-zinc-400">
-                    Stored
-                  </span>
+                  <span className="text-[12px] text-zinc-400">Stored</span>
                 )}
               </div>
             ))}
@@ -498,14 +628,14 @@ function LeaseActivity({ documents }: { documents: LeaseDocument[] }) {
 function LeaseDetails({ lease }: { lease?: TenantLease }) {
   return (
     <Card>
-      <div className="shrink-0 border-b border-zinc-100 px-4 py-4 sm:px-5">
-        <h2 className="text-[17px] font-semibold tracking-[-0.03em] sm:text-[18px]">
+      <div className="shrink-0 border-b border-zinc-100 px-5 py-4">
+        <h2 className="text-[18px] font-semibold tracking-[-0.03em]">
           Lease Details
         </h2>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="grid gap-4">
           <DetailItem icon="⌂" label="Unit" value={lease?.unit_name || "—"} />
           <DetailItem
             icon="🏢"
@@ -534,11 +664,15 @@ function LeaseDetails({ lease }: { lease?: TenantLease }) {
   );
 }
 
-function PaymentMethods() {
+function PaymentMethods({
+  paymentMethods,
+}: {
+  paymentMethods: PaymentMethod[];
+}) {
   return (
     <Card>
-      <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
-        <h2 className="text-[17px] font-semibold tracking-[-0.03em] sm:text-[18px]">
+      <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+        <h2 className="text-[18px] font-semibold tracking-[-0.03em]">
           Payment Methods
         </h2>
 
@@ -547,15 +681,41 @@ function PaymentMethods() {
         </button>
       </div>
 
-      <div className="p-4 sm:p-5">
-        <div className="rounded-2xl bg-[#FAFAFA] px-4 py-4">
-          <p className="text-[14px] font-semibold text-zinc-900">
-            No payment method added
-          </p>
-          <p className="mt-1 text-[13px] text-zinc-500">
-            ACH and card setup will be connected after payment onboarding.
-          </p>
-        </div>
+      <div className="p-5">
+        {paymentMethods.length === 0 ? (
+          <div className="rounded-2xl bg-[#FAFAFA] px-4 py-4">
+            <p className="text-[14px] font-semibold text-zinc-900">
+              No payment method added
+            </p>
+            <p className="mt-1 text-[13px] text-zinc-500">
+              ACH and card setup will be connected after payment onboarding.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {paymentMethods.map((method) => (
+              <div
+                key={method.id}
+                className="flex items-center justify-between rounded-2xl bg-[#FAFAFA] px-4 py-3"
+              >
+                <div>
+                  <p className="text-[14px] font-semibold text-zinc-900">
+                    {formatBrand(method.brand)} •••• {method.last4}
+                  </p>
+                  <p className="mt-1 text-[12px] text-zinc-500">
+                    Expires {method.exp_month || "--"}/{method.exp_year || "--"}
+                  </p>
+                </div>
+
+                {method.is_default && (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-600">
+                    Default
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -564,13 +724,13 @@ function PaymentMethods() {
 function QuickLinks() {
   return (
     <Card>
-      <div className="border-b border-zinc-100 px-4 py-4 sm:px-5">
-        <h2 className="text-[17px] font-semibold tracking-[-0.03em] sm:text-[18px]">
+      <div className="border-b border-zinc-100 px-5 py-4">
+        <h2 className="text-[18px] font-semibold tracking-[-0.03em]">
           Quick Links
         </h2>
       </div>
 
-      <div className="space-y-3 p-4 sm:p-5">
+      <div className="space-y-3 p-5">
         <QuickLink label="Email Landlord" />
         <QuickLink label="View Lease PDF" />
         <QuickLink label="Download Statement" />
@@ -602,9 +762,9 @@ function DetailItem({
         {icon}
       </div>
 
-      <div className="min-w-0">
+      <div>
         <p className="text-[13px] text-zinc-500">{label}</p>
-        <p className="mt-0.5 break-words text-[15px] font-semibold leading-5 text-zinc-900">
+        <p className="mt-0.5 text-[15px] font-semibold leading-5 text-zinc-900">
           {value}
         </p>
       </div>
@@ -655,4 +815,9 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+}
+
+function formatBrand(brand?: string | null) {
+  if (!brand) return "Payment Method";
+  return brand.charAt(0).toUpperCase() + brand.slice(1);
 }

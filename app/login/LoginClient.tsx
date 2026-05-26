@@ -112,13 +112,6 @@ export default function LoginClient() {
 
   return (
   <AuthLayout>
-  <div className="absolute left-6 top-6 sm:left-10 sm:top-10">
-    <img
-      src="/logo.png"
-      alt="AvenueBoard"
-      className="h-7 w-auto object-contain sm:h-8"
-    />
-  </div>
 
   <div className="w-full">
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
@@ -46,6 +46,13 @@ type PropertyRecord = {
   }[];
 };
 
+type PropertyNote = {
+  id: string;
+  text: string;
+  type: "private" | "shared";
+  created_at: string;
+};
+
 export default function PropertyDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -68,7 +75,6 @@ export default function PropertyDetailPage() {
     zip: "",
   });
 
-  const [tenantEditOpen, setTenantEditOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<TenantRecord | null>(
     null
   );
@@ -81,11 +87,24 @@ export default function PropertyDetailPage() {
   });
 
   const [noteOpen, setNoteOpen] = useState(false);
-  const [notes, setNotes] = useState<string[]>([]);
+  const [notes, setNotes] = useState<PropertyNote[]>([]);
   const [newNote, setNewNote] = useState("");
+  const [noteType, setNoteType] = useState<"private" | "shared">("private");
+  const [activities, setActivities] = useState<any[]>([]);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [paymentRequestOpen, setPaymentRequestOpen] = useState(false);
+  const [selectedPaymentTenant, setSelectedPaymentTenant] =
+  useState<TenantRecord | null>(null);
+  const [additionalAmount, setAdditionalAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [sendingPaymentRequest, setSendingPaymentRequest] = useState(false);
+  const [tenantManageOpen, setTenantManageOpen] = useState(false);
+  const [tenantMode, setTenantMode] = useState<"add" | "edit">("add");
+  const [inviteConfirmOpen, setInviteConfirmOpen] = useState(false);
+  const [inviteTenant, setInviteTenant] = useState<TenantRecord | null>(null);
+  const [sendingInvite, setSendingInvite] = useState(false);
 
   useEffect(() => {
     async function loadPropertyDashboard() {
@@ -147,6 +166,17 @@ export default function PropertyDetailPage() {
 
         setProperty(loadedProperty);
 
+        const { data: activityData, error: activityError } = await supabase
+  .from("activity_logs")
+  .select("*")
+  .eq("property_id", propertyId)
+  .order("created_at", { ascending: false })
+  .limit(10);
+
+if (!activityError) {
+  setActivities(activityData || []);
+}
+
         setEditForm({
           propertyLabel: loadedProperty.property_label || "",
           streetAddress: loadedProperty.street_address || "",
@@ -156,10 +186,15 @@ export default function PropertyDetailPage() {
         });
 
         setNotes([
-          `${loadedProperty.property_label} monthly rent is $${Number(
-            lease?.monthly_rent || 0
-          ).toLocaleString()}. Lease ends on ${formatDate(lease?.end_date)}.`,
-        ]);
+  {
+    id: crypto.randomUUID(),
+    text: `${loadedProperty.property_label} monthly rent is $${Number(
+      lease?.monthly_rent || 0
+    ).toLocaleString()}. Lease ends on ${formatDate(lease?.end_date)}.`,
+    type: "private",
+    created_at: new Date().toISOString(),
+  },
+]);
 
         if (searchParams.get("edit") === "true") {
           setEditOpen(true);
@@ -212,16 +247,213 @@ export default function PropertyDetailPage() {
     setSavingEdit(false);
   }
 
-  function openTenantEdit(tenant: TenantRecord) {
-    setSelectedTenant(tenant);
-    setTenantForm({
-      firstName: tenant.first_name || "",
-      lastName: tenant.last_name || "",
-      email: tenant.email || "",
-      phone: tenant.phone || "",
-    });
-    setTenantEditOpen(true);
+
+  function openTenantAdd() {
+  setSelectedTenant(null);
+  setTenantMode("add");
+  setTenantForm({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
+  setTenantManageOpen(true);
+}
+
+function openTenantManageEdit(tenant: TenantRecord) {
+  setSelectedTenant(tenant);
+  setTenantMode("edit");
+  setTenantForm({
+    firstName: tenant.first_name || "",
+    lastName: tenant.last_name || "",
+    email: tenant.email || "",
+    phone: tenant.phone || "",
+  });
+  setTenantManageOpen(true);
+}
+
+  async function handleRequestTenantPayment(tenant: TenantRecord) {
+  if (!property || sendingPaymentRequest) return;
+
+  setSendingPaymentRequest(true);
+
+  const { error } = await supabase.functions.invoke("send-payment-request", {
+    body: {
+      tenant_id: tenant.id,
+      tenant_email: tenant.email,
+      tenant_name: `${tenant.first_name} ${tenant.last_name}`,
+      property_id: property.id,
+      property_label: property.property_label,
+      lease_id: property.leases?.[0]?.id || null,
+      monthly_rent: property.leases?.[0]?.monthly_rent || 0,
+      rent_due_day: property.leases?.[0]?.rent_due_day || null,
+      additional_amount: additionalAmount ? Number(additionalAmount) : 0,
+      note: paymentNote.trim() || null,
+    },
+  });
+
+  setSendingPaymentRequest(false);
+
+  if (error) {
+    console.error("Payment request error:", error);
+    alert("Unable to send payment request.");
+    return;
   }
+
+  await supabase.from("activity_logs").insert({
+    property_id: property.id,
+    profile_id: profileId,
+    lease_id: property.leases?.[0]?.id || null,
+    activity_type: "payment_request_sent",
+    title: "Payment request sent",
+    description: `Payment request sent to ${tenant.email}`,
+  });
+  alert("Payment request sent successfully.");
+  setAdditionalAmount("");
+  setPaymentNote("");
+  setSelectedPaymentTenant(null);
+  setPaymentRequestOpen(false);
+}
+
+async function handleDeleteTenant(tenant: TenantRecord) {
+  const confirmDelete = confirm(
+    `Delete ${tenant.first_name} ${tenant.last_name}?`
+  );
+
+  if (!confirmDelete || !property) return;
+
+  const { error } = await supabase
+    .from("lease_tenants")
+    .delete()
+    .eq("id", tenant.id);
+
+  if (error) {
+    console.error("Delete tenant error:", error);
+    alert("Unable to delete tenant.");
+    return;
+  }
+
+  setProperty({
+    ...property,
+    leases: property.leases?.map((lease) => ({
+      ...lease,
+      lease_tenants: lease.lease_tenants?.filter((t) => t.id !== tenant.id),
+    })),
+  });
+}
+
+async function sendTenantInvite(tenant: TenantRecord, showSuccess = true) {
+  if (!property) return false;
+
+  const { error } = await supabase.functions.invoke("resend-email", {
+    body: {
+      tenantEmail: tenant.email,
+      tenantName: `${tenant.first_name} ${tenant.last_name}`,
+      propertyName: property.property_label,
+      inviteLink: `${window.location.origin}/tenant/accept-invite?tenant_id=${tenant.id}`,
+    },
+  });
+
+  if (error) {
+    console.error("Tenant invite error:", error);
+    alert("Unable to send invite. Please try again.");
+    return false;
+  }
+
+  await supabase.from("activity_logs").insert({
+    property_id: property.id,
+    profile_id: profileId,
+    lease_id: property.leases?.[0]?.id || null,
+    activity_type: "tenant_invite_resent",
+    title: "Tenant invite sent",
+    description: `Invite sent to ${tenant.email}`,
+  });
+
+  if (showSuccess) {
+    alert("Invite sent successfully.");
+  }
+
+  return true;
+}
+
+  function handleResendTenantInvite(tenant: TenantRecord) {
+  if (!tenant.email) {
+    alert("This tenant does not have an email address.");
+    return;
+  }
+
+  setInviteTenant(tenant);
+  setInviteConfirmOpen(true);
+}
+
+async function confirmResendTenantInvite() {
+  if (!inviteTenant || !property) return;
+
+  setSendingInvite(true);
+
+  const sent = await sendTenantInvite(inviteTenant, false);
+
+  setSendingInvite(false);
+
+  if (!sent) return;
+
+  setInviteConfirmOpen(false);
+  setInviteTenant(null);
+
+  alert("Invite sent successfully.");
+}
+
+async function handleAddTenant() {
+  if (!property || !lease?.id) return;
+
+  setSavingTenant(true);
+
+  const { data, error } = await supabase
+    .from("lease_tenants")
+    .insert({
+      lease_id: lease.id,
+      first_name: tenantForm.firstName.trim(),
+      last_name: tenantForm.lastName.trim(),
+      email: tenantForm.email.trim() || null,
+      phone: tenantForm.phone.trim() || null,
+      tenant_role: "secondary",
+invite_status: "not_sent",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Add tenant error:", error);
+    alert("Unable to add tenant.");
+    setSavingTenant(false);
+    return;
+  }
+
+  const newTenant = data as TenantRecord;
+
+  setProperty({
+    ...property,
+    leases: property.leases?.map((leaseItem) =>
+      leaseItem.id === lease.id
+        ? {
+            ...leaseItem,
+            lease_tenants: [...(leaseItem.lease_tenants || []), newTenant],
+          }
+        : leaseItem
+    ),
+  });
+
+
+  setTenantForm({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
+
+  setTenantManageOpen(false);
+  setSavingTenant(false);
+}
 
   async function handleSaveTenantEdit() {
     if (!selectedTenant || !property) return;
@@ -262,7 +494,7 @@ export default function PropertyDetailPage() {
       })),
     });
 
-    setTenantEditOpen(false);
+    setTenantManageOpen(false);
     setSelectedTenant(null);
     setSavingTenant(false);
   }
@@ -310,13 +542,44 @@ export default function PropertyDetailPage() {
     }
   }
 
-  function handleSaveNote() {
-    if (!newNote.trim()) return;
+  async function handleSaveNote() {
+  if (!newNote.trim() || !property) return;
 
-    setNotes((prev) => [newNote.trim(), ...prev]);
-    setNewNote("");
-    setNoteOpen(false);
-  }
+  const noteText = newNote.trim();
+
+  const newNoteRecord: PropertyNote = {
+    id: crypto.randomUUID(),
+    text: noteText,
+    type: noteType,
+    created_at: new Date().toISOString(),
+  };
+
+  setNotes((prev) => [newNoteRecord, ...prev]);
+
+  await supabase.from("activity_logs").insert({
+    property_id: property.id,
+    profile_id: profileId,
+    lease_id: property.leases?.[0]?.id || null,
+    activity_type: "note_added",
+    title: noteType === "shared" ? "Shared note added" : "Private note added",
+    description: noteText,
+  });
+
+  setActivities((prev) => [
+    {
+      id: crypto.randomUUID(),
+      title: noteType === "shared" ? "Shared note added" : "Private note added",
+      description: noteText,
+      created_at: new Date().toISOString(),
+    },
+    ...prev,
+  ]);
+
+  setNewNote("");
+  setNoteType("private");
+  setNoteOpen(false);
+}
+  
 
   if (loading) {
     return (
@@ -336,15 +599,15 @@ export default function PropertyDetailPage() {
 
   return (
     <>
-      <div className="grid h-full min-h-0 grid-cols-1 gap-4 overflow-y-auto pb-8 lg:grid-cols-[1fr_320px] lg:gap-5 lg:overflow-hidden">
-        <div className="min-h-0 space-y-4 lg:overflow-y-auto lg:pr-1">
-          <section className="rounded-[26px] border border-zinc-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.035)] sm:p-5">
+      <div className="mt-2 grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto pb-4 lg:mt-3 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-3 lg:overflow-hidden">
+        <div className="min-h-0 space-y-3 lg:overflow-y-auto lg:pr-0">
+          <section className="rounded-[22px] border border-[#E8E5DE] bg-white p-4 shadow-[0_4px_18px_rgba(15,23,42,0.03)]">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-[24px] font-semibold tracking-[-0.05em] text-zinc-900 sm:text-[28px]">
-                    {property.property_label}
-                  </h1>
+                  <h1 className="truncate text-[30px] font-[750] tracking-[-0.045em] text-zinc-900 sm:text-[34px]">
+  {property.property_label}
+</h1>
 
                   <span
                     className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${leaseStatus.badgeClass}`}
@@ -353,22 +616,43 @@ export default function PropertyDetailPage() {
                   </span>
                 </div>
 
-                <p className="mt-2 text-[13px] leading-5 text-zinc-500 sm:text-[14px]">
-                  {property.street_address}, {property.city},{" "}
-                  {property.state_name} {property.zip}
-                </p>
+                <p className="mt-3 flex items-center gap-2 text-[14px] font-medium leading-6 text-zinc-500 sm:text-[15px]">
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    className="shrink-0 text-zinc-400"
+  >
+    <path
+      d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
+      stroke="currentColor"
+      strokeWidth="2"
+    />
+  </svg>
+
+  <span>
+    {property.street_address}, {property.city}, {property.state_name} {property.zip}
+  </span>
+</p>
               </div>
 
               <div className="relative shrink-0">
                 <button
                   onClick={() => setActionMenuOpen(!actionMenuOpen)}
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-black/5 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
                 >
                   ⋯
                 </button>
 
                 {actionMenuOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
+                  <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-black/5 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
                     <button
                       onClick={() => {
                         setActionMenuOpen(false);
@@ -393,7 +677,7 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
-            <div className="mt-5 rounded-[22px] border border-zinc-200 bg-[#FAFAFA] p-4 lg:hidden">
+            <div className="mt-5 rounded-[22px] border border-black/5 bg-[#FAFAFA] p-4 lg:hidden">
               <p className="text-[13px] text-zinc-500">Upcoming Due</p>
 
               <div className="mt-2 flex items-end justify-between gap-4">
@@ -423,7 +707,7 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
-            <div className="mt-6 hidden gap-3 lg:grid xl:grid-cols-4">
+            <div className="mt-4 hidden gap-3 lg:grid xl:grid-cols-4">
               <MetricCard
                 label="Monthly Rent"
                 value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
@@ -447,7 +731,7 @@ export default function PropertyDetailPage() {
 
               <MetricCard
                 label="Lease Ends"
-                value={formatDateShort(lease?.end_date)}
+                value={formatDate(lease?.end_date)}
                 subtext={leaseStatus.label}
                 warning={leaseStatus.label !== "Active"}
               />
@@ -477,10 +761,10 @@ export default function PropertyDetailPage() {
             )}
           </section>
 
-          <section className="overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
+          <section className="relative overflow-visible rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
-                <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
+                <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
                   Tenants
                 </h2>
                 <p className="mt-1 text-[12px] text-zinc-500">
@@ -491,22 +775,28 @@ export default function PropertyDetailPage() {
 
               {tenants.length > 0 && (
                 <button
-                  onClick={() => openTenantEdit(tenants[0])}
-                  className="rounded-xl border border-zinc-200 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
+                  onClick={openTenantAdd}
+                  className="rounded-xl border border-black/5 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
                 >
-                  Manage
+                  Add / Modify
                 </button>
               )}
             </div>
 
-            <div className="grid gap-3 p-4 sm:grid-cols-2">
+            <div className="space-y-3 p-4">
               {tenants.length > 0 ? (
                 tenants.map((tenant) => (
                   <TenantCard
                     key={tenant.id}
                     tenant={tenant}
-                    onEdit={() => openTenantEdit(tenant)}
-                  />
+                    onEdit={() => openTenantManageEdit(tenant)}
+                    onResendInvite={() => handleResendTenantInvite(tenant)}
+                    onRequestPayment={() => {
+                    setSelectedPaymentTenant(tenant);
+                    setPaymentRequestOpen(true);
+                }}
+onDelete={() => handleDeleteTenant(tenant)}
+                />
                 ))
               ) : (
                 <div className="rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500 sm:col-span-2">
@@ -516,10 +806,67 @@ export default function PropertyDetailPage() {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
+
+          <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
+  <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
+    <div>
+      <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+        Notes
+      </h2>
+      <p className="mt-1 text-[12px] text-zinc-500">
+        Shared and private property notes
+      </p>
+    </div>
+
+    <button
+      onClick={() => setNoteOpen(true)}
+      className="rounded-xl border border-black/5 px-4 py-2 text-[13px] font-semibold text-[#B9476D] transition-all duration-200 hover:bg-zinc-50"
+    >
+      Add Note
+    </button>
+  </div>
+
+  <div className="grid gap-3 p-4 sm:grid-cols-2">
+    {notes.length === 0 ? (
+      <div className="rounded-[18px] bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500 sm:col-span-2">
+        No notes yet.
+      </div>
+    ) : (
+      notes.slice(0, 2).map((note) => (
+  <div
+    key={note.id}
+    className={`rounded-[18px] px-4 py-3 ${
+      note.type === "private" ? "bg-[#FFF8EA]" : "bg-[#EFF7FF]"
+    }`}
+  >
+    <span
+      className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+        note.type === "private"
+          ? "bg-[#FFE8B8] text-[#8A5A00]"
+          : "bg-[#DCEEFF] text-[#1D5F9F]"
+      }`}
+    >
+      {note.type === "private" ? "Private Note" : "Shared Note"}
+    </span>
+
+    <p className="mt-3 text-[13px] font-medium leading-5 text-zinc-900">
+      {note.text}
+    </p>
+
+    <p className="mt-3 text-[12px] text-zinc-500">
+      {formatDate(note.created_at)} •{" "}
+      {note.type === "private" ? "Landlord" : "Shared with Tenant"}
+    </p>
+  </div>
+))
+    )}
+  </div>
+</section>
+
+                    <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
-                <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
+                <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
                   Property Documents
                 </h2>
                 <p className="mt-1 text-[12px] text-zinc-500">
@@ -527,7 +874,7 @@ export default function PropertyDetailPage() {
                 </p>
               </div>
 
-              <button className="rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50">
+              <button className="rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-semibold text-[#B9476D] transition-all duration-200 hover:bg-zinc-50">
                 Upload
               </button>
             </div>
@@ -537,7 +884,7 @@ export default function PropertyDetailPage() {
                 documents.map((doc) => (
                   <button
                     key={doc.id}
-                    className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 py-3 text-left hover:bg-zinc-50"
+                    className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-3 text-left transition-all duration-200 hover:bg-zinc-50"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-semibold text-zinc-900">
@@ -555,65 +902,46 @@ export default function PropertyDetailPage() {
               ) : (
                 <div className="rounded-2xl bg-[#FAFAFA] px-4 py-8 text-center">
                   <p className="text-[14px] font-semibold text-zinc-800">
-                    No documents uploaded
+                    No lease documents yet
                   </p>
 
                   <p className="mt-2 text-[12px] leading-5 text-zinc-500">
-                    Lease agreements and uploads will appear here.
+                    Upload lease agreements, notices, or supporting files for this property.
                   </p>
                 </div>
               )}
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
-              <div>
-                <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
-                  Notes
-                </h2>
-                <p className="mt-1 text-[12px] text-zinc-500">
-                  Internal property notes
-                </p>
-              </div>
+          <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
+            <div className="border-b border-zinc-100 px-5 py-4">
+              <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+                Recent Activity
+              </h2>
 
-              <button
-                onClick={() => setNoteOpen(true)}
-                className="rounded-xl border border-zinc-200 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
-              >
-                Add Note
-              </button>
+              <p className="mt-1 text-[12px] text-zinc-500">
+                Latest property updates
+              </p>
             </div>
 
             <div className="space-y-3 p-4">
-              {notes.length === 0 ? (
-                <div className="rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500">
-                  No notes yet.
-                </div>
-              ) : (
-                notes.map((note, index) => (
-                  <div key={index} className="rounded-2xl bg-[#FFF6EE] p-3">
-                    <p className="text-[12px] font-semibold text-zinc-900">
-                      {new Date().toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </p>
-
-                    <p className="mt-2 text-[13px] leading-5 text-zinc-600">
-                      {note}
-                    </p>
-                  </div>
+              {activities.length > 0 ? (
+                activities.map((activity) => (
+                  <ActivityItem key={activity.id} activity={activity} />
                 ))
+              ) : (
+                <div className="rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500">
+                  No activity yet.
+                </div>
               )}
             </div>
           </section>
         </div>
 
-        <aside className="hidden min-h-0 flex-col gap-4 lg:flex lg:overflow-hidden">
-          <section className="rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5">
-            <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
+
+        <aside className="hidden min-h-0 flex-col gap-3 lg:flex lg:overflow-hidden">
+          <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
+            <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
               Lease Summary
             </h2>
 
@@ -644,24 +972,61 @@ export default function PropertyDetailPage() {
             </div>
           </section>
 
-          <section className="rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5">
-            <h2 className="text-[16px] font-semibold tracking-[-0.03em]">
-              Payment Settings
-            </h2>
+          <section className="rounded-[24px] bg-white p-5 shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
+  <div className="flex items-start justify-between gap-3">
+    <div>
+      <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+        Payment Setup
+      </h2>
 
-            <p className="mt-2 text-[12px] leading-5 text-zinc-500">
-              Manage bank payout and payment setup through Stripe.
-            </p>
+      <p className="mt-1 text-[12px] text-zinc-500">
+        Powered by <span className="font-semibold text-[#635BFF]">stripe</span>
+      </p>
+    </div>
 
-            <button
-              onClick={() =>
-                window.open("https://dashboard.stripe.com/", "_blank")
-              }
-              className="mt-4 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]"
-            >
-              Manage Stripe Settings
-            </button>
-          </section>
+    <span
+      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+        bankConnected
+          ? "bg-emerald-50 text-emerald-700"
+          : "bg-amber-50 text-amber-700"
+      }`}
+    >
+      {bankConnected ? "Active" : "Needs Action"}
+    </span>
+  </div>
+
+  <div className="mt-5 space-y-4">
+    <div className="flex items-center justify-between">
+      <p className="text-[13px] text-zinc-500">Payout Method</p>
+      <p className="text-[13px] font-semibold text-zinc-900">
+        {bankConnected ? "Direct Deposit" : "Not connected"}
+      </p>
+    </div>
+
+    <div className="flex items-center justify-between">
+      <p className="text-[13px] text-zinc-500">Next Payout</p>
+      <p className="text-[13px] font-semibold text-zinc-900">
+        {bankConnected ? "Available after setup" : "Pending setup"}
+      </p>
+    </div>
+
+    <div className="flex items-center justify-between">
+      <p className="text-[13px] text-zinc-500">Tenant Payments</p>
+      <p className="text-[13px] font-semibold text-zinc-900">
+        {bankConnected ? "Enabled" : "Paused"}
+      </p>
+    </div>
+  </div>
+
+  <button
+    onClick={() =>
+      window.open("https://dashboard.stripe.com/", "_blank")
+    }
+    className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]"
+  >
+    Manage Payment Settings
+  </button>
+</section>
         </aside>
       </div>
 
@@ -719,76 +1084,213 @@ export default function PropertyDetailPage() {
         </ModalShell>
       )}
 
-      {tenantEditOpen && (
-        <ModalShell
-          title="Edit Tenant"
-          subtitle="Update tenant name, email, or phone number."
-          onClose={() => setTenantEditOpen(false)}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <InputField
-              label="First Name"
-              value={tenantForm.firstName}
-              onChange={(value) =>
-                setTenantForm({ ...tenantForm, firstName: value })
-              }
-            />
+      {tenantManageOpen && (
+  <ModalShell
+    title={tenantMode === "add" ? "Add Tenant" : "Edit Tenant"}
+    subtitle={
+      tenantMode === "add"
+        ? "Add an additional tenant to this lease."
+        : "Update or remove this tenant."
+    }
+    onClose={() => setTenantManageOpen(false)}
+  >
+    <div className="grid gap-3 sm:grid-cols-2">
+      <InputField
+        label="First Name"
+        value={tenantForm.firstName}
+        onChange={(value) =>
+          setTenantForm({ ...tenantForm, firstName: value })
+        }
+      />
 
-            <InputField
-              label="Last Name"
-              value={tenantForm.lastName}
-              onChange={(value) =>
-                setTenantForm({ ...tenantForm, lastName: value })
-              }
-            />
-          </div>
+      <InputField
+        label="Last Name"
+        value={tenantForm.lastName}
+        onChange={(value) =>
+          setTenantForm({ ...tenantForm, lastName: value })
+        }
+      />
+    </div>
 
-          <div className="mt-4 space-y-4">
-            <InputField
-              label="Email"
-              value={tenantForm.email}
-              onChange={(value) =>
-                setTenantForm({ ...tenantForm, email: value })
-              }
-            />
+    <div className="mt-4 space-y-4">
+      <InputField
+        label="Email"
+        value={tenantForm.email}
+        onChange={(value) => setTenantForm({ ...tenantForm, email: value })}
+      />
 
-            <InputField
-              label="Phone"
-              value={tenantForm.phone}
-              onChange={(value) =>
-                setTenantForm({ ...tenantForm, phone: value })
-              }
-            />
-          </div>
+      <InputField
+        label="Phone"
+        value={tenantForm.phone}
+        onChange={(value) => setTenantForm({ ...tenantForm, phone: value })}
+      />
+    </div>
 
-          <ModalActions
-            onCancel={() => setTenantEditOpen(false)}
-            onSave={handleSaveTenantEdit}
-            saving={savingTenant}
-          />
-        </ModalShell>
-      )}
+    <ModalActions
+      onCancel={() => setTenantManageOpen(false)}
+      onSave={tenantMode === "add" ? handleAddTenant : handleSaveTenantEdit}
+      saving={savingTenant}
+      saveLabel={tenantMode === "add" ? "Add Tenant" : "Save Changes"}
+    />
+  </ModalShell>
+)}
 
       {noteOpen && (
-        <ModalShell
-          title="Add Note"
-          subtitle="Add an internal note for this property."
-          onClose={() => setNoteOpen(false)}
+  <ModalShell
+    title="Add Note"
+    subtitle="Add an internal note for this property."
+    onClose={() => setNoteOpen(false)}
+  >
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setNoteType("private")}
+          className={`h-[64px] rounded-2xl border text-[14px] font-semibold transition-all duration-200 ${
+            noteType === "private"
+              ? "border-[#B9476D] bg-[#FFF1F5] text-[#B9476D] shadow-[0_4px_18px_rgba(185,71,109,0.12)]"
+              : "border-black/5 bg-[#FAFAFA] text-zinc-700 hover:bg-white"
+          }`}
         >
-          <textarea
-            value={newNote}
-            onChange={(e) => setNewNote(e.target.value)}
-            placeholder="Add property notes..."
-            className="min-h-[120px] w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] p-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
-          />
+          Private Note
+        </button>
 
-          <ModalActions
-            onCancel={() => setNoteOpen(false)}
-            onSave={handleSaveNote}
-            saving={false}
-          />
-        </ModalShell>
+        <button
+          type="button"
+          onClick={() => setNoteType("shared")}
+          className={`h-[64px] rounded-2xl border text-[14px] font-semibold transition-all duration-200 ${
+            noteType === "shared"
+              ? "border-[#7DA8FF] bg-[#EEF4FF] text-[#2D5BBA] shadow-[0_4px_18px_rgba(125,168,255,0.14)]"
+              : "border-black/5 bg-[#FAFAFA] text-zinc-700 hover:bg-white"
+          }`}
+        >
+          Shared Note
+        </button>
+      </div>
+
+      {noteType === "shared" && (
+        <div className="rounded-2xl border border-[#D8E6FF] bg-[#F3F7FF] px-4 py-3">
+          <p className="text-[13px] font-medium text-[#2D5BBA]">
+            Tenants will be able to view this note.
+          </p>
+        </div>
       )}
+
+      <textarea
+        value={newNote}
+        onChange={(e) => setNewNote(e.target.value)}
+        placeholder="Add property notes..."
+        className="min-h-[180px] w-full rounded-[24px] border border-black/5 bg-[#FAFAFA] p-5 text-[15px] leading-6 outline-none transition-all duration-200 focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10"
+      />
+
+      <div className="rounded-2xl border border-[#EEE7FF] bg-[#F8F5FF] px-4 py-3">
+        <p className="text-[13px] font-semibold text-[#6D4FD8]">
+          Note Tip
+        </p>
+
+        <p className="mt-1 text-[12px] leading-5 text-zinc-600">
+          Use notes to track reminders, tenant conversations, property issues,
+          or lease-related updates.
+        </p>
+      </div>
+
+      <ModalActions
+        onCancel={() => setNoteOpen(false)}
+        onSave={handleSaveNote}
+        saving={false}
+        saveLabel="Add Note"
+      />
+    </div>
+  </ModalShell>
+)}
+
+        {paymentRequestOpen && selectedPaymentTenant && (
+  <ModalShell
+    title="Request Payment"
+    subtitle="Send an additional payment due notification."
+    onClose={() => {
+  setPaymentRequestOpen(false);
+  setSelectedPaymentTenant(null);
+  setAdditionalAmount("");
+  setPaymentNote("");
+}}
+  >
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+  <p className="text-[13px] font-semibold text-amber-900">
+    Automatic reminders are already enabled.
+  </p>
+
+  <p className="mt-1 text-[12px] leading-5 text-amber-800">
+    Tenants will receive rent due reminders 5 days and 3 days before the due date.
+    Sending this will send an additional payment due notification.
+  </p>
+</div>
+
+      <InputField
+        label="Additional Amount Optional"
+        value={additionalAmount}
+        onChange={setAdditionalAmount}
+      />
+
+      <textarea
+        value={paymentNote}
+        onChange={(e) => setPaymentNote(e.target.value)}
+        placeholder="Optional note to tenant..."
+        className="min-h-[130px] w-full rounded-[22px] border border-black/5 bg-[#FAFAFA] p-4 text-[14px] leading-6 outline-none transition focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10"
+      />
+
+      <ModalActions
+  onCancel={() => {
+    setPaymentRequestOpen(false);
+    setSelectedPaymentTenant(null);
+    setAdditionalAmount("");
+    setPaymentNote("");
+  }}
+  onSave={() => handleRequestTenantPayment(selectedPaymentTenant)}
+  saving={sendingPaymentRequest}
+  saveLabel={
+    additionalAmount
+      ? "Add Amount & Send Request"
+      : "Send Payment Request"
+  }
+/>
+    </div>
+  </ModalShell>
+)}
+
+    {inviteConfirmOpen && inviteTenant && (
+  <ModalShell
+    title="Resend tenant invite?"
+    subtitle={`This will send a new portal invitation to ${inviteTenant.email}.`}
+    onClose={() => {
+      if (!sendingInvite) {
+        setInviteConfirmOpen(false);
+        setInviteTenant(null);
+      }
+    }}
+  >
+    <div className="rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-4">
+      <p className="text-[14px] font-semibold text-zinc-900">
+        {inviteTenant.first_name} {inviteTenant.last_name}
+      </p>
+
+      <p className="mt-1 text-[13px] text-zinc-500">
+        {inviteTenant.email}
+      </p>
+    </div>
+
+    <ModalActions
+      onCancel={() => {
+        setInviteConfirmOpen(false);
+        setInviteTenant(null);
+      }}
+      onSave={confirmResendTenantInvite}
+      saving={sendingInvite}
+      saveLabel="Send Invite"
+    />
+  </ModalShell>
+)}
 
       {deleteOpen && (
         <DeletePropertyModal
@@ -818,22 +1320,24 @@ function MetricCard({
   success?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-[#FAFAFA] p-4">
-      <p className="text-[12px] text-zinc-500">{label}</p>
+    <div className="rounded-[18px] border border-[#E4E1DA] bg-white px-4 py-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)]">
+      <p className="text-[12px] font-semibold text-slate-500">{label}</p>
 
       <p
-        className={`mt-2 truncate text-[22px] font-semibold tracking-[-0.05em] ${
+        className={`mt-2 truncate text-[22px] font-[800] tracking-[-0.05em] ${
           warning
             ? "text-amber-600"
             : success
             ? "text-emerald-600"
-            : "text-zinc-900"
+            : "text-slate-950"
         }`}
       >
         {value}
       </p>
 
-      <p className="mt-1 truncate text-[12px] text-zinc-500">{subtext}</p>
+      <p className="mt-1 truncate text-[12px] font-medium text-slate-500">
+        {subtext}
+      </p>
     </div>
   );
 }
@@ -841,52 +1345,130 @@ function MetricCard({
 function TenantCard({
   tenant,
   onEdit,
+  onResendInvite,
+  onRequestPayment,
+  onDelete,
 }: {
   tenant: TenantRecord;
   onEdit: () => void;
+  onResendInvite: () => void;
+  onRequestPayment: () => void;
+  onDelete: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+useEffect(() => {
+  function handleClickOutside(event: MouseEvent) {
+    if (
+      menuRef.current &&
+      !menuRef.current.contains(event.target as Node)
+    ) {
+      setMenuOpen(false);
+    }
+  }
+
+  document.addEventListener("mousedown", handleClickOutside);
+
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, []);
+
   const initials = `${tenant.first_name?.charAt(0) || ""}${
     tenant.last_name?.charAt(0) || ""
   }`;
 
+  const inviteAccepted = tenant.invite_status === "accepted";
+
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-[#FAFAFA] p-3">
+    <div
+  ref={menuRef}
+  className="relative z-10 overflow-visible flex items-center gap-4 rounded-[18px] border border-black/5 bg-[#FAFAFA] px-4 py-3 transition-all duration-200 hover:bg-white hover:shadow-sm"
+>
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#B9476D] text-[13px] font-semibold text-white">
         {initials || "T"}
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-[14px] font-semibold text-zinc-900">
-                {tenant.first_name} {tenant.last_name}
-              </p>
+        <div className="flex items-center gap-2">
+          <p className="truncate text-[14px] font-[800] text-slate-950">
+            {tenant.first_name} {tenant.last_name}
+          </p>
 
-              {tenant.tenant_role === "primary" && (
-                <span className="rounded-full bg-[#FFF1F5] px-2 py-[3px] text-[9px] font-semibold text-[#B9476D]">
-                  Primary
-                </span>
-              )}
-            </div>
+          {tenant.tenant_role === "primary" && (
+            <span className="rounded-full bg-[#FFF1F5] px-2 py-[3px] text-[9px] font-semibold text-[#B9476D]">
+              Primary
+            </span>
+          )}
 
-            <p className="mt-1 truncate text-[12px] text-zinc-500">
-              {tenant.email || "No email"}
-            </p>
-          </div>
+          {tenant.tenant_role === "primary" && (
+  <span
+    className={`rounded-full px-2 py-[3px] text-[9px] font-semibold ${
+      inviteAccepted
+        ? "bg-emerald-50 text-emerald-700"
+        : "bg-amber-50 text-amber-700"
+    }`}
+  >
+    {inviteAccepted ? "Invite accepted · Dashboard enabled" : "Invite sent"}
+  </span>
+)}
+        </div>
 
+        <p className="mt-1 truncate text-[12px] text-zinc-500">
+          {tenant.email || "No email"}
+        </p>
+      </div>
+
+    <div className="relative z-20 flex items-center gap-3">
+  <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    inviteAccepted ? onRequestPayment() : onResendInvite();
+  }}
+  className="relative z-30 rounded-xl border border-black/5 bg-white px-3 py-2 text-[12px] font-semibold text-[#B9476D] transition hover:bg-zinc-50"
+>
+  {tenant.tenant_role === "primary"
+  ? inviteAccepted
+    ? "Request Payment"
+    : "Resend Invite"
+  : "Request Payment"}
+</button>
+
+<button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    setMenuOpen(!menuOpen);
+  }}
+  className="relative z-30 flex h-8 w-8 items-center justify-center text-[18px] font-bold text-zinc-700 transition hover:text-black"
+>
+  ⋮
+</button>
+</div>
+
+      {menuOpen && (
+        <div className="absolute right-0 top-12 z-[80] w-[190px] rounded-2xl border border-black/5 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
           <button
             onClick={onEdit}
-            className="shrink-0 rounded-xl border border-zinc-200 px-3 py-1.5 text-[11px] font-semibold text-[#B9476D] hover:bg-zinc-50"
+            className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-slate-700 hover:bg-zinc-50"
           >
-            Edit
+            Edit tenant
+          </button>
+
+
+          <button
+            onClick={onDelete}
+            className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-red-600 hover:bg-red-50"
+          >
+            Delete tenant
           </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
 function RightInfo({
   label,
   value,
@@ -896,16 +1478,48 @@ function RightInfo({
   value: string;
   warning?: boolean;
 }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-4">
-      <p className="text-[13px] text-zinc-500">{label}</p>
+  if (label === "Status") {
+    return (
+      <div className="flex items-center justify-between rounded-2xl bg-[#FAFAFA] px-4 py-3">
+        <p className="text-[13px] font-semibold text-slate-500">{label}</p>
 
-      <p
-        className={`text-right text-[14px] font-semibold ${
-          warning ? "text-amber-600" : "text-zinc-900"
-        }`}
-      >
+        <span
+          className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+            warning
+              ? "bg-amber-50 text-amber-700"
+              : "bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          {value}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between rounded-2xl bg-[#FAFAFA] px-4 py-3">
+      <p className="text-[13px] font-semibold text-slate-500">{label}</p>
+
+      <p className="text-right text-[14px] font-[800] text-slate-950">
         {value}
+      </p>
+    </div>
+  );
+}
+
+function ActivityItem({ activity }: { activity: any }) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
+      <p className="text-[13px] font-semibold text-zinc-900">
+        {activity.title}
+      </p>
+
+      <p className="mt-1 text-[12px] text-zinc-500">
+        {activity.description}
+      </p>
+
+      <p className="mt-2 text-[11px] text-zinc-400">
+        {formatDate(activity.created_at)}
       </p>
     </div>
   );
@@ -924,8 +1538,8 @@ function ModalShell({
 }) {
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/30 backdrop-blur-sm">
-      <div className="flex min-h-full items-start justify-center p-3 sm:p-6">
-        <div className="w-full max-w-[560px] overflow-hidden rounded-[28px] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-[720px] overflow-hidden rounded-[32px] bg-white shadow-[0_40px_120px_rgba(15,23,42,0.22)]">
           <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-5 pb-4 pt-5 sm:px-6">
             <div className="min-w-0">
               <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[22px]">
@@ -958,16 +1572,18 @@ function ModalActions({
   onCancel,
   onSave,
   saving,
+  saveLabel = "Save Changes",
 }: {
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
+  saveLabel?: string;
 }) {
   return (
     <div className="mt-7 grid gap-3 border-t border-zinc-100 pt-5 sm:flex sm:justify-end">
       <button
         onClick={onCancel}
-        className="h-11 w-full rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 sm:w-auto"
+        className="h-11 w-full rounded-2xl border border-black/5 bg-white px-6 text-[14px] font-semibold text-zinc-700 transition-all duration-200 hover:bg-zinc-50 sm:w-auto"
       >
         Cancel
       </button>
@@ -977,7 +1593,7 @@ function ModalActions({
         disabled={saving}
         className="h-11 w-full rounded-2xl bg-[#B9476D] px-6 text-[14px] font-semibold text-white hover:bg-[#A93F64] disabled:opacity-50 sm:w-auto"
       >
-        {saving ? "Saving..." : "Save Changes"}
+        {saving ? "Saving..." : saveLabel}
       </button>
     </div>
   );
@@ -1015,7 +1631,7 @@ function DeletePropertyModal({
           <button
             onClick={onClose}
             disabled={deleting}
-            className="h-11 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            className="h-11 rounded-2xl border border-black/5 bg-white px-6 text-[14px] font-semibold text-zinc-700 transition-all duration-200 hover:bg-zinc-50 disabled:opacity-50"
           >
             Go Back
           </button>
@@ -1048,7 +1664,7 @@ function InputField({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-[#FAFAFA] px-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
+        className="mt-2 h-12 w-full rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 text-[16px] outline-none focus:border-[#B9476D] focus:bg-white focus:ring-4 focus:ring-[#B9476D]/10 sm:text-[14px]"
       />
     </div>
   );

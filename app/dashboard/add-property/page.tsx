@@ -82,13 +82,13 @@ export default function AddPropertyPage() {
     termsAgreement: false,
   });
 
-  const [additionalTenants, setAdditionalTenants] = useState<
-    AdditionalTenant[]
-  >([]);
+  const [additionalTenants, setAdditionalTenants] = useState<AdditionalTenant[]>(
+    []
+  );
 
-  const [additionalAmounts, setAdditionalAmounts] = useState<
-    AdditionalAmount[]
-  >([]);
+  const [additionalAmounts, setAdditionalAmounts] = useState<AdditionalAmount[]>(
+    []
+  );
 
   const [attachments, setAttachments] = useState<Record<string, string>>({});
 
@@ -477,9 +477,9 @@ export default function AddPropertyPage() {
 
   return (
     <>
-      <div className="relative mt-2 flex h-full min-h-0 flex-col sm:mt-4">
-  <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[220px] sm:px-6 lg:px-0 lg:pr-6">
-    <div className="mx-auto w-full max-w-[760px]">
+      <div className="relative flex h-full min-h-0 flex-col pt-6 sm:pt-8 lg:pt-10">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[260px] sm:px-6 lg:px-0 lg:pr-6 lg:pb-[260px]">
+          <div className="mx-auto w-full max-w-[900px]">
             <StepIndicator
               step={step}
               propertyValid={!!propertyValid}
@@ -487,55 +487,55 @@ export default function AddPropertyPage() {
               leaseValid={!!leaseValid}
             />
 
-            {step === 1 && (
-              <PropertyStep
-                propertyForm={propertyForm}
-                setPropertyForm={setPropertyForm}
-              />
-            )}
+            <div className="mt-4 scale-[1.01] lg:mt-5">
+              {step === 1 && (
+                <PropertyStep
+                  propertyForm={propertyForm}
+                  setPropertyForm={setPropertyForm}
+                />
+              )}
 
-            {step === 2 && (
-              <TenantStep
-                tenantForm={tenantForm}
-                setTenantForm={setTenantForm}
-                additionalTenants={additionalTenants}
-                removeAdditionalTenant={removeAdditionalTenant}
-                openAdditionalTenantModal={() => setAdditionalModalOpen(true)}
-              />
-            )}
+              {step === 2 && (
+                <TenantStep
+                  tenantForm={tenantForm}
+                  setTenantForm={setTenantForm}
+                  additionalTenants={additionalTenants}
+                  removeAdditionalTenant={removeAdditionalTenant}
+                  openAdditionalTenantModal={() => setAdditionalModalOpen(true)}
+                />
+              )}
 
-            {step === 3 && (
-              <LeaseStep
-                leaseForm={leaseForm}
-                setLeaseForm={setLeaseForm}
-                additionalAmounts={additionalAmounts}
-                addAdditionalAmount={addAdditionalAmount}
-                updateAdditionalAmount={updateAdditionalAmount}
-                removeAdditionalAmount={removeAdditionalAmount}
-                attachments={attachments}
-                handleDocumentsUpload={handleDocumentsUpload}
-              />
-            )}
+              {step === 3 && (
+                <LeaseStep
+                  leaseForm={leaseForm}
+                  setLeaseForm={setLeaseForm}
+                  additionalAmounts={additionalAmounts}
+                  addAdditionalAmount={addAdditionalAmount}
+                  updateAdditionalAmount={updateAdditionalAmount}
+                  removeAdditionalAmount={removeAdditionalAmount}
+                  attachments={attachments}
+                  handleDocumentsUpload={handleDocumentsUpload}
+                />
+              )}
 
-            {step === 4 && (
-              <PreferencesStep
-                loginEmail={user?.email || ""}
-                preferencesForm={preferencesForm}
-                setPreferencesForm={setPreferencesForm}
-              />
-            )}
-          </div>
-        </div>
+              {step === 4 && (
+                <PreferencesStep
+                  loginEmail={user?.email || ""}
+                  preferencesForm={preferencesForm}
+                  setPreferencesForm={setPreferencesForm}
+                />
+              )}
+            </div>
 
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white px-4 pt-3 pb-4 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] sm:px-6 lg:left-[320px]">
-  <div className="mx-auto grid w-full max-w-[760px] gap-3">
-    <div>
-      <div className="flex items-center justify-between text-[13px] text-zinc-500">
+            <div className="fixed bottom-[22px] left-[285px] right-0 z-20 hidden bg-white px-8 pb-6 pt-5 lg:block">
+  <div className="mx-auto w-full max-w-[900px]">
+    <div className="mb-7">
+      <div className="flex items-center justify-between text-[13px] font-medium text-zinc-500">
         <span>Step {step} of 4</span>
         <span>{step === 4 ? "90%" : `${progress}%`}</span>
       </div>
 
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
+      <div className="mt-3 h-[10px] overflow-hidden rounded-full bg-zinc-100">
         <div
           className="h-full rounded-full bg-[#B9476D] transition-all duration-300"
           style={{ width: step === 4 ? "90%" : `${progress}%` }}
@@ -543,55 +543,104 @@ export default function AddPropertyPage() {
       </div>
     </div>
 
-    <div className="grid grid-cols-[0.3fr_0.7fr] items-center gap-4">
-  <button
-    onClick={handleBack}
-    disabled={saving}
-    className="flex shrink-0 items-center gap-2 px-1 text-[15px] font-medium text-zinc-500 transition hover:text-zinc-900 disabled:opacity-50"
-  >
-    <span className="text-[18px]">←</span>
-    {step === 1 ? "Cancel" : "Back"}
-  </button>
-
-  {step === 4 ? (
-    <button
-      onClick={() => savePropertySetup(true)}
-      disabled={!preferencesValid || saving}
-      className={`h-12 w-full rounded-2xl px-6 text-[15px] font-semibold transition ${
-        preferencesValid && !saving
-          ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
-          : "cursor-not-allowed bg-zinc-100 text-zinc-400"
-      }`}
-    >
-      {saving ? "Saving..." : "Connect Bank"}
-    </button>
-  ) : (
-    <button
-      onClick={handleContinue}
-      disabled={!canContinue || saving}
-      className={`h-12 w-full rounded-2xl px-6 text-[15px] font-semibold transition ${
-        canContinue && !saving
-          ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
-          : "cursor-not-allowed bg-zinc-100 text-zinc-400"
-      }`}
-    >
-      Continue
-    </button>
-  )}
-</div>
-
-    {step === 4 && (
+    <div className="flex items-center justify-between gap-8">
       <button
-        type="button"
-        onClick={() => savePropertySetup(false)}
+        onClick={handleBack}
         disabled={saving}
-        className="h-11 rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+        className="flex items-center gap-2 text-[15px] font-medium text-zinc-500 transition hover:text-zinc-900 disabled:opacity-50"
       >
-        {saving ? "Saving..." : "Set up later"}
+        <span className="text-[18px]">←</span>
+        {step === 1 ? "Cancel" : "Back"}
       </button>
-    )}
+
+      <div className="flex min-w-[440px] items-center gap-3">
+        {step === 4 && (
+          <button
+            type="button"
+            onClick={() => savePropertySetup(false)}
+            disabled={saving}
+            className="h-12 flex-1 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Set up later"}
+          </button>
+        )}
+
+        <button
+          onClick={step === 4 ? () => savePropertySetup(true) : handleContinue}
+          disabled={!canContinue || saving}
+          className={`h-12 flex-1 rounded-2xl px-8 text-[15px] font-semibold transition ${
+            canContinue && !saving
+              ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+              : "cursor-not-allowed bg-zinc-100 text-zinc-400"
+          }`}
+        >
+          {saving ? "Saving..." : step === 4 ? "Connect Bank" : "Continue"}
+        </button>
+      </div>
+    </div>
   </div>
 </div>
+
+          </div>
+        </div>
+
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white px-4 pb-4 pt-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] sm:px-6 lg:hidden">
+          <div className="mx-auto grid w-full max-w-[760px] gap-3">
+            <div>
+              <div className="flex items-center justify-between text-[13px] text-zinc-500">
+                <span>Step {step} of 4</span>
+                <span>{step === 4 ? "90%" : `${progress}%`}</span>
+              </div>
+
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full bg-[#B9476D] transition-all duration-300"
+                  style={{ width: step === 4 ? "90%" : `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[0.3fr_0.7fr] items-center gap-4">
+              <button
+                onClick={handleBack}
+                disabled={saving}
+                className="flex shrink-0 items-center gap-2 px-1 text-[15px] font-medium text-zinc-500 transition hover:text-zinc-900 disabled:opacity-50"
+              >
+                <span className="text-[18px]">←</span>
+                {step === 1 ? "Cancel" : "Back"}
+              </button>
+
+              <button
+                onClick={
+                  step === 4 ? () => savePropertySetup(true) : handleContinue
+                }
+                disabled={!canContinue || saving}
+                className={`h-12 w-full rounded-2xl px-6 text-[15px] font-semibold transition ${
+                  canContinue && !saving
+                    ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+                    : "cursor-not-allowed bg-zinc-100 text-zinc-400"
+                }`}
+              >
+                {saving
+                  ? "Saving..."
+                  : step === 4
+                  ? "Connect Bank"
+                  : "Continue"}
+              </button>
+            </div>
+
+            {step === 4 && (
+              <button
+                type="button"
+                onClick={() => savePropertySetup(false)}
+                disabled={saving}
+                className="h-11 rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Set up later"}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {additionalModalOpen && (

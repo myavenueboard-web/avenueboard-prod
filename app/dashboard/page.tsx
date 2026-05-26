@@ -311,8 +311,9 @@ function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
         </div>
 
         <h2 className="mt-7 max-w-[460px] text-[16px] font-medium leading-7 text-zinc-900 sm:mt-8 sm:text-[18px]">
-          Your dashboard is currently empty. Add your first property to start
-          managing rent collection in one place.
+          Welcome to your new rental workspace.
+          <br />
+Add your first property to begin managing tenants, leases, and payments seamlessly.
         </h2>
 
         <button
