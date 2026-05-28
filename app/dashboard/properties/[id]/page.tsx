@@ -105,6 +105,7 @@ export default function PropertyDetailPage() {
   const [inviteConfirmOpen, setInviteConfirmOpen] = useState(false);
   const [inviteTenant, setInviteTenant] = useState<TenantRecord | null>(null);
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteSentSuccess, setInviteSentSuccess] = useState(false);
 
   useEffect(() => {
     async function loadPropertyDashboard() {
@@ -369,10 +370,6 @@ async function sendTenantInvite(tenant: TenantRecord, showSuccess = true) {
     description: `Invite sent to ${tenant.email}`,
   });
 
-  if (showSuccess) {
-    alert("Invite sent successfully.");
-  }
-
   return true;
 }
 
@@ -397,10 +394,13 @@ async function confirmResendTenantInvite() {
 
   if (!sent) return;
 
-  setInviteConfirmOpen(false);
-  setInviteTenant(null);
+  setInviteSentSuccess(true);
 
-  alert("Invite sent successfully.");
+  setTimeout(() => {
+    setInviteConfirmOpen(false);
+    setInviteTenant(null);
+    setInviteSentSuccess(false);
+  }, 1400);
 }
 
 async function handleAddTenant() {
@@ -1259,7 +1259,7 @@ onDelete={() => handleDeleteTenant(tenant)}
   </ModalShell>
 )}
 
-    {inviteConfirmOpen && inviteTenant && (
+{inviteConfirmOpen && inviteTenant && (
   <ModalShell
     title="Resend tenant invite?"
     subtitle={`This will send a new portal invitation to ${inviteTenant.email}.`}
@@ -1267,31 +1267,47 @@ onDelete={() => handleDeleteTenant(tenant)}
       if (!sendingInvite) {
         setInviteConfirmOpen(false);
         setInviteTenant(null);
+        setInviteSentSuccess(false);
       }
     }}
   >
-    <div className="rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-4">
-      <p className="text-[14px] font-semibold text-zinc-900">
-        {inviteTenant.first_name} {inviteTenant.last_name}
-      </p>
+    {inviteSentSuccess ? (
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-5 text-center">
+        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-[20px] font-bold text-emerald-700">
+          ✓
+        </div>
 
-      <p className="mt-1 text-[13px] text-zinc-500">
-        {inviteTenant.email}
-      </p>
-    </div>
+        <p className="mt-3 text-[15px] font-semibold text-emerald-900">
+          Invite email sent
+        </p>
+      </div>
+    ) : (
+      <>
+        <div className="rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-4">
+          <p className="text-[14px] font-semibold text-zinc-900">
+            {inviteTenant.first_name} {inviteTenant.last_name}
+          </p>
 
-    <ModalActions
-      onCancel={() => {
-        setInviteConfirmOpen(false);
-        setInviteTenant(null);
-      }}
-      onSave={confirmResendTenantInvite}
-      saving={sendingInvite}
-      saveLabel="Send Invite"
-    />
+          <p className="mt-1 text-[13px] text-zinc-500">
+            {inviteTenant.email}
+          </p>
+        </div>
+
+        <ModalActions
+          onCancel={() => {
+            setInviteConfirmOpen(false);
+            setInviteTenant(null);
+            setInviteSentSuccess(false);
+          }}
+          onSave={confirmResendTenantInvite}
+          saving={sendingInvite}
+          saveLabel="Send Invite"
+        />
+      </>
+    )}
   </ModalShell>
 )}
-
+   
       {deleteOpen && (
         <DeletePropertyModal
           propertyName={property.property_label}
@@ -1380,6 +1396,7 @@ useEffect(() => {
   }`;
 
   const inviteAccepted = tenant.invite_status === "accepted";
+  const isPrimaryTenant = tenant.tenant_role === "primary";
 
   return (
     <div
@@ -1421,20 +1438,18 @@ useEffect(() => {
       </div>
 
     <div className="relative z-20 flex items-center gap-3">
+  {isPrimaryTenant && (
   <button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-    inviteAccepted ? onRequestPayment() : onResendInvite();
-  }}
-  className="relative z-30 rounded-xl border border-black/5 bg-white px-3 py-2 text-[12px] font-semibold text-[#B9476D] transition hover:bg-zinc-50"
->
-  {tenant.tenant_role === "primary"
-  ? inviteAccepted
-    ? "Request Payment"
-    : "Resend Invite"
-  : "Request Payment"}
-</button>
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      inviteAccepted ? onRequestPayment() : onResendInvite();
+    }}
+    className="relative z-30 rounded-xl border border-black/5 bg-white px-3 py-2 text-[12px] font-semibold text-[#B9476D] transition hover:bg-zinc-50"
+  >
+    {inviteAccepted ? "Request Payment" : "Resend Invite"}
+  </button>
+)}
 
 <button
   type="button"
