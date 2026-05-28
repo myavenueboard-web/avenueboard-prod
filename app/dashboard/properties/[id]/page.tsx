@@ -776,7 +776,7 @@ invite_status: "not_sent",
             )}
           </section>
 
-          <section className="relative overflow-visible rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
+          <section className="relative z-20 overflow-visible rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
                 <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
@@ -798,7 +798,7 @@ invite_status: "not_sent",
               )}
             </div>
 
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 overflow-visible p-4">
               {tenants.length > 0 ? (
                 tenants.map((tenant) => (
                   <TenantCard
@@ -1416,7 +1416,7 @@ useEffect(() => {
   return (
     <div
   ref={menuRef}
-  className="relative z-10 overflow-visible flex items-center gap-4 rounded-[18px] border border-black/5 bg-[#FAFAFA] px-4 py-3 transition-all duration-200 hover:bg-white hover:shadow-sm"
+  className="relative overflow-visible flex items-center gap-4 rounded-[18px] border border-black/5 bg-[#FAFAFA] px-4 py-3 transition-all duration-200 hover:bg-white hover:shadow-sm"
 >
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#B9476D] text-[13px] font-semibold text-white">
         {initials || "T"}
