@@ -107,6 +107,14 @@ export default function PropertyDetailPage() {
   const [inviteTenant, setInviteTenant] = useState<TenantRecord | null>(null);
   const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteSentSuccess, setInviteSentSuccess] = useState(false);
+  const [leaseEditOpen, setLeaseEditOpen] = useState(false);
+  const [savingLease, setSavingLease] = useState(false);
+  const [leaseForm, setLeaseForm] = useState({
+   startDate: "",
+   endDate: "",
+   monthlyRent: "",
+   rentDueDay: "",
+   });
 
   useEffect(() => {
     async function loadPropertyDashboard() {
@@ -549,6 +557,57 @@ invite_status: "not_sent",
     }
   }
 
+  async function handleSaveLeaseEdit() {
+  if (!property || !lease?.id) return;
+
+  setSavingLease(true);
+
+  const { error } = await supabase
+    .from("leases")
+    .update({
+      start_date: leaseForm.startDate,
+      end_date: leaseForm.endDate,
+      monthly_rent: Number(leaseForm.monthlyRent),
+      rent_due_day: leaseForm.rentDueDay,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", lease.id);
+
+  if (error) {
+    console.error("Lease update error:", error);
+    alert("Unable to update lease.");
+    setSavingLease(false);
+    return;
+  }
+
+  setProperty({
+    ...property,
+    leases: property.leases?.map((leaseItem) =>
+      leaseItem.id === lease.id
+        ? {
+            ...leaseItem,
+            start_date: leaseForm.startDate,
+            end_date: leaseForm.endDate,
+            monthly_rent: Number(leaseForm.monthlyRent),
+            rent_due_day: leaseForm.rentDueDay,
+          }
+        : leaseItem
+    ),
+  });
+
+  await supabase.from("activity_logs").insert({
+    property_id: property.id,
+    profile_id: profileId,
+    lease_id: lease.id,
+    activity_type: leaseEndingSoon ? "lease_extended" : "lease_updated",
+    title: leaseEndingSoon ? "Lease extended" : "Lease updated",
+    description: `${property.property_label} lease details were updated.`,
+  });
+
+  setLeaseEditOpen(false);
+  setSavingLease(false);
+}
+
   async function handleSaveNote() {
   if (!newNote.trim() || !property) return;
 
@@ -599,6 +658,16 @@ invite_status: "not_sent",
   if (!property) return null;
 
   const lease = property.leases?.[0];
+  const leaseEndingSoon = lease?.end_date
+  ? (() => {
+      const diffDays = Math.ceil(
+        (new Date(lease.end_date).getTime() - new Date().getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+
+      return diffDays >= 0 && diffDays <= 60;
+    })()
+  : false;
   const leaseStatus = getLeaseStatus(lease?.end_date);
   const bankConnected = property.bank_status === "connected";
   const tenants = (lease?.lease_tenants || []).sort((a, b) => {
@@ -790,7 +859,7 @@ invite_status: "not_sent",
 
               {tenants.length > 0 && (
                 <button
-                  onClick={openTenantAdd}
+                  onClick={() => router.push(`/dashboard/properties/${propertyId}/edit?step=2`)}
                   className="rounded-xl border border-black/5 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
                 >
                   Add / Modify
@@ -804,7 +873,9 @@ invite_status: "not_sent",
                   <TenantCard
                     key={tenant.id}
                     tenant={tenant}
-                    onEdit={() => openTenantManageEdit(tenant)}
+                    onEdit={() =>
+  router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
+}
                     onResendInvite={() => handleResendTenantInvite(tenant)}
                     onRequestPayment={() => {
                     setSelectedPaymentTenant(tenant);
@@ -877,7 +948,6 @@ onDelete={() => handleDeleteTenant(tenant)}
     )}
   </div>
 </section>
-
                     <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
@@ -956,9 +1026,24 @@ onDelete={() => handleDeleteTenant(tenant)}
 
         <aside className="hidden min-h-0 flex-col gap-3 lg:flex lg:overflow-hidden">
           <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
-            <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
-              Lease Summary
-            </h2>
+            <div className="flex items-center justify-between gap-3">
+  <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+    Lease Summary
+  </h2>
+
+  <button
+    onClick={() =>
+  router.push(`/dashboard/properties/${propertyId}/edit?step=3`)
+}
+    className={`rounded-xl px-3 py-1.5 text-[12px] font-semibold transition ${
+      leaseEndingSoon
+        ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+        : "border border-black/5 text-[#B9476D] hover:bg-zinc-50"
+    }`}
+     >
+    {leaseEndingSoon ? "Extend Lease" : "Edit"}
+    </button>
+    </div>
 
             <div className="mt-5 grid gap-3">
               <RightInfo
@@ -1320,6 +1405,49 @@ onDelete={() => handleDeleteTenant(tenant)}
         />
       </>
     )}
+  </ModalShell>
+)}
+
+{leaseEditOpen && (
+  <ModalShell
+    title={leaseEndingSoon ? "Extend Lease" : "Edit Lease"}
+    subtitle="Update lease dates, rent amount, and rent due day."
+    onClose={() => setLeaseEditOpen(false)}
+  >
+    <div className="grid gap-3 sm:grid-cols-2">
+      <InputField
+        label="Lease Start Date"
+        value={leaseForm.startDate}
+        onChange={(value) => setLeaseForm({ ...leaseForm, startDate: value })}
+      />
+
+      <InputField
+        label="Lease End Date"
+        value={leaseForm.endDate}
+        onChange={(value) => setLeaseForm({ ...leaseForm, endDate: value })}
+      />
+    </div>
+
+    <div className="mt-4 space-y-4">
+      <InputField
+        label="Monthly Rent"
+        value={leaseForm.monthlyRent}
+        onChange={(value) => setLeaseForm({ ...leaseForm, monthlyRent: value })}
+      />
+
+      <InputField
+        label="Rent Due Day"
+        value={leaseForm.rentDueDay}
+        onChange={(value) => setLeaseForm({ ...leaseForm, rentDueDay: value })}
+      />
+    </div>
+
+    <ModalActions
+      onCancel={() => setLeaseEditOpen(false)}
+      onSave={handleSaveLeaseEdit}
+      saving={savingLease}
+      saveLabel={leaseEndingSoon ? "Extend Lease" : "Save Lease"}
+    />
   </ModalShell>
 )}
    

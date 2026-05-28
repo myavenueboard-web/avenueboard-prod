@@ -162,6 +162,11 @@ export default function DashboardLayoutClient({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<LandlordNotification[]>([]);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  
+  const visibleNotifications = notifications.filter(
+  (notification) => !dismissedNotifications.includes(notification.id)
+);
+  
   const unreadNotificationCount = notifications.filter(
   (notification) => !dismissedNotifications.includes(notification.id)
 ).length;
@@ -548,19 +553,17 @@ export default function DashboardLayoutClient({
                       </div>
 
                       <div className="max-h-[420px] overflow-y-auto">
-                        {notifications.length === 0 ? (
+                        {visibleNotifications.length === 0 ? (
                           <div className="px-5 py-10 text-center">
-                            <p className="text-[14px] font-medium text-zinc-700">
-                              No notifications right now
-                            </p>
-                          </div>
+  <p className="text-[14px] font-semibold text-zinc-800">
+    No new notifications
+  </p>
+  <p className="mt-2 text-[12px] leading-5 text-zinc-500">
+    You’re all caught up.
+  </p>
+</div>
                         ) : (
-                          notifications
-  .filter(
-    (notification) =>
-      !dismissedNotifications.includes(notification.id)
-  )
-  .map((notification) => (
+                          visibleNotifications.map((notification) => (
                             <div
   key={notification.id}
   className="border-b border-zinc-100 px-5 py-4"
