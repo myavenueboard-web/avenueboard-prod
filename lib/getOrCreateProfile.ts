@@ -10,6 +10,8 @@ export async function getOrCreateProfile() {
     throw new Error("User not authenticated");
   }
 
+  const accountType = user.user_metadata?.account_type;
+
   const { data: existingProfile, error: fetchError } = await supabase
     .from("profiles")
     .select("*")
@@ -17,7 +19,10 @@ export async function getOrCreateProfile() {
     .single();
 
   if (existingProfile) {
-    await ensureUserRole(existingProfile.id, "landlord");
+    if (accountType === "landlord") {
+      await ensureUserRole(existingProfile.id, "landlord");
+    }
+
     return existingProfile;
   }
 
@@ -25,16 +30,14 @@ export async function getOrCreateProfile() {
     throw fetchError;
   }
 
-  const newProfilePayload = {
-    user_id: user.id,
-    email: user.email || "",
-    display_name:
-      user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
-  };
-
   const { data: newProfile, error: insertError } = await supabase
     .from("profiles")
-    .insert(newProfilePayload)
+    .insert({
+      user_id: user.id,
+      email: user.email || "",
+      display_name:
+        user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
+    })
     .select()
     .single();
 
@@ -42,7 +45,9 @@ export async function getOrCreateProfile() {
     throw insertError;
   }
 
-  await ensureUserRole(newProfile.id, "landlord");
+  if (accountType === "landlord") {
+    await ensureUserRole(newProfile.id, "landlord");
+  }
 
   return newProfile;
 }
@@ -59,6 +64,6 @@ async function ensureUserRole(profileId: string, role: "landlord" | "tenant") {
   );
 
   if (error) {
-  console.warn("User role setup warning:", error.message || error);
-}
+    console.warn("User role setup warning:", error.message || error);
+  }
 }
