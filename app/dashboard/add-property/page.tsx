@@ -235,20 +235,20 @@ export default function AddPropertyPage() {
           last_name: tenant.lastName.trim(),
           email: tenant.email.trim() || null,
           phone: tenant.phone.trim() || null,
-          tenant_role: "additional",
-          invite_status: tenant.email.trim() ? "pending" : "not_sent",
+          tenant_role: "secondary",
+          invite_status: "not_sent",
         })),
       ];
 
       const { data: createdTenants, error: tenantsError } = await supabase
         .from("lease_tenants")
         .insert(tenantRows)
-        .select("id, email, first_name, last_name, invite_token");
+        .select("id, email, first_name, last_name, tenant_role, invite_token");
 
       if (tenantsError) throw tenantsError;
 
       const tenantInvites = (createdTenants || [])
-        .filter((tenant) => tenant.email)
+        .filter((tenant) => tenant.email && tenant.tenant_role === "primary")
         .map((tenant) => ({
           id: tenant.id,
           email: tenant.email as string,

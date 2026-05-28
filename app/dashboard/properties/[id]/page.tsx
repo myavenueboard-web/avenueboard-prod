@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 
 type TenantRecord = {
+  invite_token: string | null;
   id: string;
   first_name: string;
   last_name: string;
@@ -141,7 +142,8 @@ export default function PropertyDetailPage() {
                 email,
                 phone,
                 tenant_role,
-                invite_status
+                invite_status,
+                invite_token
               ),
               lease_documents (
                 id,
@@ -346,12 +348,17 @@ async function handleDeleteTenant(tenant: TenantRecord) {
 async function sendTenantInvite(tenant: TenantRecord, showSuccess = true) {
   if (!property) return false;
 
+if (!tenant.invite_token) {
+  alert("Invite token is missing for this tenant. Please recreate the invite.");
+  return false;
+}
+
   const { error } = await supabase.functions.invoke("resend-email", {
     body: {
       tenantEmail: tenant.email,
       tenantName: `${tenant.first_name} ${tenant.last_name}`,
       propertyName: property.property_label,
-      inviteLink: `${window.location.origin}/tenant/accept-invite?tenant_id=${tenant.id}`,
+      inviteLink: `${window.location.origin}/tenant/accept-invite?token=${tenant.invite_token}`,
     },
   });
 
