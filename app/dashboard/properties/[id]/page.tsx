@@ -601,7 +601,15 @@ invite_status: "not_sent",
   const lease = property.leases?.[0];
   const leaseStatus = getLeaseStatus(lease?.end_date);
   const bankConnected = property.bank_status === "connected";
-  const tenants = lease?.lease_tenants || [];
+  const tenants = (lease?.lease_tenants || []).sort((a, b) => {
+  const aPrimary = a.tenant_role?.toLowerCase() === "primary";
+  const bPrimary = b.tenant_role?.toLowerCase() === "primary";
+
+  if (aPrimary && !bPrimary) return -1;
+  if (!aPrimary && bPrimary) return 1;
+
+  return 0;
+});
   const documents = lease?.lease_documents || [];
 
   return (
