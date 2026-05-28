@@ -6,6 +6,10 @@ import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import ProfileSettingsPanel from "@/app/components/dashboard/ProfileSettingsPanel";
 import HelpChat from "@/app/components/dashboard/HelpChat";
+import {
+  getLandlordNotifications,
+  LandlordNotification,
+} from "@/lib/getLandlordNotifications";
 
 type UserProfile = {
   name: string;
@@ -17,13 +21,6 @@ type SidebarProperty = {
   property_label: string;
 };
 
-type NotificationItem = {
-  id: string;
-  title: string;
-  description: string;
-  created_at?: string;
-  read?: boolean;
-};
 
 function SidebarIconShell({
   active,
@@ -163,12 +160,12 @@ export default function DashboardLayoutClient({
   const [phone, setPhone] = useState("");
 
   const [notificationOpen, setNotificationOpen] = useState(false);
-
-  const notifications: NotificationItem[] = [];
-
+  const [notifications, setNotifications] = useState<LandlordNotification[]>([]);
+  const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const unreadNotificationCount = notifications.filter(
-    (notification) => !notification.read
-  ).length;
+  (notification) => !dismissedNotifications.includes(notification.id)
+).length;
+  
 
   useEffect(() => {
     async function loadShell() {
@@ -203,6 +200,8 @@ export default function DashboardLayoutClient({
           .order("created_at", { ascending: false });
 
         setProperties((propertyData || []) as SidebarProperty[]);
+        const dynamicNotifications = await getLandlordNotifications(profile.id);
+        setNotifications(dynamicNotifications);
       } catch (error) {
         console.error("Dashboard shell load error:", error);
         router.push("/login");
@@ -242,6 +241,8 @@ export default function DashboardLayoutClient({
 
     setProfileOpen(false);
   }
+
+  
 
   function goTo(path: string) {
     setMobileNavOpen(false);
@@ -554,18 +555,40 @@ export default function DashboardLayoutClient({
                             </p>
                           </div>
                         ) : (
-                          notifications.map((notification) => (
+                          notifications
+  .filter(
+    (notification) =>
+      !dismissedNotifications.includes(notification.id)
+  )
+  .map((notification) => (
                             <div
-                              key={notification.id}
-                              className="border-b border-zinc-100 px-5 py-4"
-                            >
-                              <p className="text-[13px] font-semibold text-zinc-900">
-                                {notification.title}
-                              </p>
-                              <p className="mt-1 text-[12px] leading-5 text-zinc-500">
-                                {notification.description}
-                              </p>
-                            </div>
+  key={notification.id}
+  className="border-b border-zinc-100 px-5 py-4"
+>
+  <div className="flex items-start justify-between gap-3">
+    <div className="min-w-0">
+      <p className="text-[13px] font-semibold text-zinc-900">
+        {notification.title}
+      </p>
+
+      <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+        {notification.message}
+      </p>
+    </div>
+
+    <button
+      onClick={() =>
+        setDismissedNotifications((prev) => [
+          ...prev,
+          notification.id,
+        ])
+      }
+      className="shrink-0 text-[16px] text-zinc-400 hover:text-zinc-700"
+    >
+      ×
+    </button>
+  </div>
+</div>
                           ))
                         )}
                       </div>
