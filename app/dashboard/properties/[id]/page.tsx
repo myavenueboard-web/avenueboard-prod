@@ -646,6 +646,31 @@ invite_status: "not_sent",
   setNoteOpen(false);
 }
   
+    async function handleConnectStripe() {
+  try {
+    const response = await fetch("/api/stripe/connect-account", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        propertyId,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.url) {
+      alert("Unable to start Stripe setup.");
+      return;
+    }
+
+    window.location.href = data.url;
+  } catch (error) {
+    console.error("Stripe connect error:", error);
+    alert("Unable to start Stripe setup.");
+  }
+}
 
   if (loading) {
     return (
@@ -834,9 +859,7 @@ invite_status: "not_sent",
                 </div>
 
                 <button
-                  onClick={() =>
-                    window.open("https://dashboard.stripe.com/", "_blank")
-                  }
+                  onClick={() => handleConnectStripe()}
                   className="mt-4 h-11 w-full rounded-2xl bg-[#B9476D] px-5 text-[13px] font-semibold text-white hover:bg-[#A93F64] lg:mt-0 lg:w-auto lg:shrink-0"
                 >
                   Connect Bank
@@ -1119,12 +1142,10 @@ onDelete={() => handleDeleteTenant(tenant)}
   </div>
 
   <button
-    onClick={() =>
-      window.open("https://dashboard.stripe.com/", "_blank")
-    }
+  onClick={() => handleConnectStripe()}
     className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]"
   >
-    Manage Payment Settings
+    Manage Payout Settings
   </button>
 </section>
         </aside>

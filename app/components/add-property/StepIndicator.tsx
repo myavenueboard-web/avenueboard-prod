@@ -14,7 +14,7 @@ export default function StepIndicator({
   leaseValid,
 }: StepIndicatorProps) {
   return (
-    <div className="mb-4 overflow-hidden">
+    <div className="mb-6 overflow-hidden">
       <div className="flex items-center justify-between gap-[2px] sm:gap-3">
         <Step
           complete={step > 1 && propertyValid}
@@ -48,8 +48,8 @@ export default function StepIndicator({
           icon="☷"
           label={
             <>
-              <span className="sm:hidden">Prefs</span>
-              <span className="hidden sm:inline">Preferences</span>
+              <span className="sm:hidden">Agreement</span>
+              <span className="hidden sm:inline">Agreement</span>
             </>
           }
         />
@@ -61,7 +61,7 @@ export default function StepIndicator({
 function Connector({ active }: { active: boolean }) {
   return (
     <div
-      className={`h-[2px] w-4 rounded-full sm:w-10 ${
+      className={`h-[2px] w-4 rounded-full sm:w-14 ${
         active ? "bg-[#B9476D]" : "bg-zinc-200"
       }`}
     />

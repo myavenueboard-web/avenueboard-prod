@@ -60,6 +60,16 @@ export default function DashboardPage() {
 
         const profile = await getOrCreateProfile();
 
+        await supabase.from("user_roles").upsert(
+        {
+         profile_id: profile.id,
+            role: "landlord",
+        },
+        {
+         onConflict: "profile_id,role",
+         }
+);
+
         const { data: propertyData, error: propertyError } = await supabase
           .from("properties")
           .select(
@@ -214,9 +224,31 @@ export default function DashboardPage() {
                     setOpenMenuId(null);
                     setDeleteProperty(property);
                   }}
-                  onConnectBank={() => {
-                    window.open("https://dashboard.stripe.com/", "_blank");
-                  }}
+                  onConnectBank={async () => {
+  try {
+    const response = await fetch("/api/stripe/connect-account", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        propertyId: property.id,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.url) {
+      alert(data.error || "Unable to start Stripe setup. Please try again.");
+      return;
+    }
+
+    window.location.href = data.url;
+  } catch (error) {
+    console.error("Stripe connect error:", error);
+    alert("Unable to start Stripe setup. Please try again.");
+  }
+}}
                 />
               ))}
             </div>
