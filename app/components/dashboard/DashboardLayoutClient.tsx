@@ -162,6 +162,7 @@ export default function DashboardLayoutClient({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<LandlordNotification[]>([]);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  const [hasTenantPortal, setHasTenantPortal] = useState(false);
   
   const visibleNotifications = notifications.filter(
   (notification) => !dismissedNotifications.includes(notification.id)
@@ -205,6 +206,15 @@ export default function DashboardLayoutClient({
           .order("created_at", { ascending: false });
 
         setProperties((propertyData || []) as SidebarProperty[]);
+        const { data: tenantAccessData } = await supabase
+  .from("tenant_access")
+  .select("id")
+  .eq("tenant_profile_id", profile.id)
+  .eq("invite_status", "accepted")
+  .limit(1);
+
+setHasTenantPortal((tenantAccessData || []).length > 0);
+
         const dynamicNotifications = await getLandlordNotifications(profile.id);
         setNotifications(dynamicNotifications);
       } catch (error) {
@@ -308,14 +318,16 @@ export default function DashboardLayoutClient({
               <button
                 key={property.id}
                 onClick={() => goTo(`/dashboard/properties/${property.id}`)}
-                className={`flex w-full items-center gap-3 rounded-[18px] px-4 py-3 text-left text-[14px] font-bold transition-all duration-200 ${
+                className={`flex w-full items-center gap-2 rounded-[18px] px-4 py-3 text-left text-[14px] font-bold transition-all duration-200 ${
                   active
                     ? "bg-[#FCEEF3] text-[#B9476D]"
                     : "text-slate-700 hover:bg-white hover:text-slate-950"
                 }`}
               >
                 <SidebarBuildingIcon active={active} />
-                <span className="truncate">{property.property_label}</span>
+                <span className="truncate text-[14px] font-semibold">
+  {property.property_label}
+</span>
               </button>
             );
           })}
@@ -364,7 +376,7 @@ export default function DashboardLayoutClient({
   return (
     <main className="h-screen overflow-hidden bg-[#F7F6F3] font-sans text-[#0F172A]">
       <div className="flex h-full overflow-hidden rounded-[28px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)]">
-        <aside className="relative hidden h-full w-[285px] shrink-0 overflow-hidden border-r border-zinc-100 bg-[#FBFBFA] px-7 py-8 lg:block">
+        <aside className="relative hidden h-full w-[255px] shrink-0 overflow-hidden border-r border-zinc-100 bg-[#FBFBFA] px-2 py-8 lg:block">
           {desktopSidebarContent}
         </aside>
 
@@ -395,7 +407,7 @@ export default function DashboardLayoutClient({
               <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
                 <button
                   onClick={() => goTo("/dashboard")}
-                  className={`w-full rounded-[18px] px-4 py-3 text-left text-[15px] font-semibold transition-all duration-200 ${
+                  className={`w-full rounded-[18px] px-3 py-3 text-left text-[15px] font-semibold transition-all duration-200 ${
                     pathname === "/dashboard"
                       ? "bg-white text-[#0F172A] shadow-sm"
                       : "text-zinc-500 hover:bg-white hover:text-zinc-900"
@@ -489,7 +501,7 @@ export default function DashboardLayoutClient({
               {showAddPropertyButton && (
                 <button
                   onClick={() => router.push("/dashboard/add-property")}
-                  className="hidden h-11 items-center gap-2 rounded-2xl bg-[#B9476D] px-5 text-[14px] font-semibold text-white transition hover:bg-[#A93F64] sm:flex lg:px-6 lg:text-[15px]"
+                  className="hidden h-11 items-center gap-2 rounded-2xl border border-[#E8D7DE] bg-[#FFF7FA] px-5 text-[14px] font-semibold text-[#B9476D] transition hover:border-[#DDB6C6] hover:bg-[#FCEEF3] sm:flex lg:px-6 lg:text-[15px]"
                 >
                   <span className="text-[22px] leading-none">+</span>
                   Add Property
@@ -614,7 +626,7 @@ export default function DashboardLayoutClient({
 
                   <div className="hidden text-left lg:block">
                     <p className="text-[14px] font-semibold">{user?.name}</p>
-                    <p className="max-w-[160px] truncate text-[12px] text-zinc-400">
+                    <p className="max-w-[220px] truncate text-[12px] text-zinc-400">
                       {user?.email}
                     </p>
                   </div>
@@ -631,6 +643,17 @@ export default function DashboardLayoutClient({
                     />
 
                     <div className="absolute right-0 top-14 z-50 w-[230px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
+  {hasTenantPortal && (
+  <button
+    onClick={() => {
+      setMenuOpen(false);
+      router.push("/tenant");
+    }}
+    className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-[#B9476D] hover:bg-[#FCEEF3]"
+  >
+    Switch to Tenant Portal
+  </button>
+)}
                       <button
                         onClick={() => {
                           setMenuOpen(false);

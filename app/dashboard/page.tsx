@@ -47,6 +47,21 @@ export default function DashboardPage() {
   const [deleteProperty, setDeleteProperty] =
     useState<DashboardProperty | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const paidCount = properties.filter(
+  (property) => property.leases?.[0]?.payment_status === "paid"
+).length;
+
+const lateCount = properties.filter(
+  (property) => property.leases?.[0]?.payment_status === "late"
+).length;
+
+const pendingPaymentCount = properties.filter((property) => {
+  const status = property.leases?.[0]?.payment_status;
+  return !status || status === "pending";
+}).length;
+
+const collectionRate =
+  properties.length > 0 ? Math.round((paidCount / properties.length) * 100) : 0;
 
   useEffect(() => {
     async function loadDashboard() {
@@ -61,14 +76,14 @@ export default function DashboardPage() {
         const profile = await getOrCreateProfile();
 
         await supabase.from("user_roles").upsert(
-        {
-         profile_id: profile.id,
+          {
+            profile_id: profile.id,
             role: "landlord",
-        },
-        {
-         onConflict: "profile_id,role",
-         }
-);
+          },
+          {
+            onConflict: "profile_id,role",
+          }
+        );
 
         const { data: propertyData, error: propertyError } = await supabase
           .from("properties")
@@ -136,6 +151,22 @@ export default function DashboardPage() {
     properties[0]?.leases?.[0]?.rent_due_day?.replace(" of the Month", "") ||
     "—";
 
+  const activeProperties = properties.filter(
+    (property) => property.status === "active"
+  ).length;
+
+  const pendingBankCount = properties.filter(
+    (property) => property.bank_status !== "connected"
+  ).length;
+
+  const averageRent =
+    properties.length > 0 ? Math.round(totalMonthlyRent / properties.length) : 0;
+
+  const highestRent = properties.reduce((max, property) => {
+    const rent = Number(property.leases?.[0]?.monthly_rent || 0);
+    return rent > max ? rent : max;
+  }, 0);
+
   async function handleDeleteProperty() {
     if (!deleteProperty || deleting) return;
 
@@ -149,18 +180,12 @@ export default function DashboardPage() {
         .delete()
         .eq("property_id", deleteProperty.id);
 
-      await supabase
-        .from("expenses")
-        .delete()
-        .eq("property_id", deleteProperty.id);
+      await supabase.from("expenses").delete().eq("property_id", deleteProperty.id);
 
       if (leaseIds.length > 0) {
         await supabase.from("lease_tenants").delete().in("lease_id", leaseIds);
         await supabase.from("lease_amounts").delete().in("lease_id", leaseIds);
-        await supabase
-          .from("lease_preferences")
-          .delete()
-          .in("lease_id", leaseIds);
+        await supabase.from("lease_preferences").delete().in("lease_id", leaseIds);
         await supabase.from("lease_documents").delete().in("lease_id", leaseIds);
         await supabase.from("leases").delete().in("id", leaseIds);
       }
@@ -225,88 +250,204 @@ export default function DashboardPage() {
                     setDeleteProperty(property);
                   }}
                   onConnectBank={async () => {
-  try {
-    const response = await fetch("/api/stripe/connect-account", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        propertyId: property.id,
-      }),
-    });
+                    try {
+                      const response = await fetch("/api/stripe/connect-account", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                          propertyId: property.id,
+                        }),
+                      });
 
-    const data = await response.json();
+                      const data = await response.json();
 
-    if (!response.ok || !data.url) {
-      alert(data.error || "Unable to start Stripe setup. Please try again.");
-      return;
-    }
+                      if (!response.ok || !data.url) {
+                        alert(
+                          data.error ||
+                            "Unable to start Stripe setup. Please try again."
+                        );
+                        return;
+                      }
 
-    window.location.href = data.url;
-  } catch (error) {
-    console.error("Stripe connect error:", error);
-    alert("Unable to start Stripe setup. Please try again.");
-  }
-}}
+                      window.location.href = data.url;
+                    } catch (error) {
+                      console.error("Stripe connect error:", error);
+                      alert("Unable to start Stripe setup. Please try again.");
+                    }
+                  }}
                 />
               ))}
             </div>
           </div>
 
-          <aside className="grid gap-5 lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden">
-            <div className="shrink-0 rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5">
-              <h3 className="text-[16px] font-semibold tracking-[-0.03em]">
-                Summary
-              </h3>
+          <aside className="grid gap-3 pb-6 lg:flex lg:max-h-[calc(100vh-150px)] lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:pr-1">
+  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+    <div className="flex items-center justify-between">
+      <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
+        Overview
+      </h3>
 
-              <div className="mt-5 grid gap-3">
-                <SummaryItem
-                  label="Total Properties"
-                  value={`${properties.length}`}
-                />
-                <SummaryItem
-                  label="Monthly Rent"
-                  value={`$${totalMonthlyRent.toLocaleString()}`}
-                />
-                <SummaryItem
-                  label="Bank Status"
-                  value={hasBankPending ? "Pending" : "Connected"}
-                  warning={hasBankPending}
-                />
-                <SummaryItem label="Next Due" value={nextDueText} />
-              </div>
-            </div>
+      <span className="rounded-full border border-zinc-200 px-3 py-1 text-[10px] font-semibold text-zinc-500">
+        This Month
+      </span>
+    </div>
 
-            <div className="flex min-h-[260px] flex-col rounded-[24px] border border-zinc-200 bg-[#FBFBFB] p-5 lg:min-h-0 lg:flex-1">
-              <h3 className="shrink-0 text-[16px] font-semibold tracking-[-0.03em]">
-                Recent Activity
-              </h3>
+    <div className="mt-4 grid grid-cols-2 gap-4">
+      <div>
+        <p className="text-[11px] font-medium text-zinc-500">Monthly Rent</p>
+        <p className="mt-1 text-[25px] font-[800] tracking-[-0.06em] text-zinc-950">
+          ${totalMonthlyRent.toLocaleString()}
+        </p>
+        <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+          Stable
+        </span>
+      </div>
 
-              <div className="mt-5 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                {activities.length === 0 ? (
-                  <div className="rounded-2xl bg-white p-4">
-                    <p className="text-[13px] font-semibold text-zinc-900">
-                      No activity yet
-                    </p>
-                    <p className="mt-2 text-[12px] leading-5 text-zinc-500">
-                      Activity will appear here after you add properties,
-                      tenants, leases, documents, and payment setup updates.
-                    </p>
-                  </div>
-                ) : (
-                  activities.map((activity) => (
-                    <ActivityItem
-                      key={activity.id}
-                      title={activity.title}
-                      text={activity.description || ""}
-                      warning={activity.activity_type === "bank_pending"}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-          </aside>
+      <div className="border-l border-zinc-100 pl-4">
+        <p className="text-[11px] font-medium text-zinc-500">Properties</p>
+        <p className="mt-1 text-[25px] font-[800] tracking-[-0.06em] text-zinc-950">
+          {properties.length}
+        </p>
+        <p className="mt-2 text-[11px] font-medium text-zinc-500">
+          <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Active {activeProperties}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+  <div className="flex items-center justify-between">
+    <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
+      Payout Performance
+    </h3>
+
+    <span className="rounded-full bg-zinc-950 px-2.5 py-1 text-[10px] font-semibold text-white">
+      12 Months
+    </span>
+  </div>
+
+  <div className="mt-4 rounded-[18px] bg-[#FAFAFA] px-3.5 py-4">
+    <div className="flex items-end justify-between">
+      <div>
+        <p className="text-[11px] font-medium text-zinc-500">
+          Collection Rate
+        </p>
+        <p className="mt-1 text-[25px] font-[800] tracking-[-0.06em] text-zinc-950">
+          {collectionRate}%
+        </p>
+      </div>
+
+      <p className="text-right text-[11px] leading-5 text-zinc-500">
+        <span className="font-semibold text-emerald-700">{paidCount}</span> paid
+        <br />
+        <span className="font-semibold text-amber-600">{lateCount}</span> late
+      </p>
+    </div>
+
+    <div className="mt-4 flex h-[52px] items-end gap-1.5">
+      {[0, 0, 0, 0, 0, 0, 0, 0, 0, lateCount, pendingPaymentCount, paidCount].map(
+        (value, index) => {
+          const isLate = index === 9 && lateCount > 0;
+          const isPending = index === 10 && pendingPaymentCount > 0;
+
+          return (
+            <span
+              key={index}
+              className={`flex-1 rounded-full ${
+                isLate
+                  ? "bg-amber-400"
+                  : isPending
+                  ? "bg-zinc-300"
+                  : "bg-emerald-400"
+              }`}
+              style={{ height: `${index < 8 ? 42 : index === 8 ? 58 : 72}%` }}
+            />
+          );
+        }
+      )}
+    </div>
+
+    <div className="mt-2 flex justify-between text-[10px] font-medium text-zinc-400">
+      <span>Jan</span>
+      <span>Dec</span>
+    </div>
+  </div>
+
+  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-zinc-100 pt-3">
+    <PerformanceMini label="Paid" value={`${paidCount}`} tone="green" />
+    <PerformanceMini label="Pending" value={`${pendingPaymentCount}`} tone="neutral" />
+    <PerformanceMini label="Late" value={`${lateCount}`} tone="amber" />
+  </div>
+</section>
+
+  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+  <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
+    Quick Summary
+  </h3>
+
+  <div className="mt-4 divide-y divide-zinc-100 rounded-[18px] border border-zinc-100 bg-[#FAFAFA]">
+    <CompactSummaryRow
+      label="Properties"
+      value={`${properties.length}`}
+      subtext="Total active portfolio"
+      tone="green"
+    />
+
+    <CompactSummaryRow
+      label="Action Needed"
+      value={`${pendingBankCount}`}
+      subtext="Pending bank setup"
+      tone="amber"
+    />
+
+    <CompactSummaryRow
+      label="Bank Status"
+      value={hasBankPending ? "Pending" : "Ready"}
+      subtext={hasBankPending ? `${pendingBankCount} pending` : "All connected"}
+      tone={hasBankPending ? "amber" : "green"}
+    />
+
+    <CompactSummaryRow
+      label="Next Due"
+      value={nextDueText}
+      subtext="Upcoming rent cycle"
+      tone="neutral"
+    />
+  </div>
+</section>
+
+  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+    <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
+      Recent Activity
+    </h3>
+
+    <div className="mt-4 space-y-4">
+      {activities.length === 0 ? (
+        <div className="rounded-2xl bg-zinc-50 p-4">
+          <p className="text-[13px] font-semibold text-zinc-900">
+            No activity yet
+          </p>
+          <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+            Updates will appear here after property, tenant, lease, document, or payment activity.
+          </p>
+        </div>
+      ) : (
+        activities.slice(0, 6).map((activity) => (
+          <PremiumActivityItem
+            key={activity.id}
+            title={activity.title}
+            text={activity.description || ""}
+            warning={activity.activity_type === "bank_pending"}
+          />
+        ))
+      )}
+    </div>
+  </section>
+</aside>
+
         </div>
       )}
 
@@ -345,7 +486,8 @@ function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
         <h2 className="mt-7 max-w-[460px] text-[16px] font-medium leading-7 text-zinc-900 sm:mt-8 sm:text-[18px]">
           Welcome to your new rental workspace.
           <br />
-Add your first property to begin managing tenants, leases, and payments seamlessly.
+          Add your first property to begin managing tenants, leases, and payments
+          seamlessly.
         </h2>
 
         <button
@@ -356,6 +498,68 @@ Add your first property to begin managing tenants, leases, and payments seamless
           Add Property
         </button>
       </div>
+    </div>
+  );
+}
+
+function CompactSummaryRow({
+  label,
+  value,
+  subtext,
+  tone,
+}: {
+  label: string;
+  value: string;
+  subtext: string;
+  tone: "green" | "amber" | "neutral";
+}) {
+  const dotClass =
+    tone === "green"
+      ? "bg-emerald-500"
+      : tone === "amber"
+      ? "bg-amber-500"
+      : "bg-zinc-500";
+
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-zinc-800">{label}</p>
+          <p className="mt-0.5 truncate text-[11px] text-zinc-400">
+            {subtext}
+          </p>
+        </div>
+      </div>
+
+      <p className="shrink-0 text-[16px] font-[800] tracking-[-0.04em] text-zinc-950">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function PremiumActivityItem({
+  title,
+  text,
+  warning = false,
+}: {
+  title: string;
+  text: string;
+  warning?: boolean;
+}) {
+  return (
+    <div className="relative pl-5">
+      <span
+        className={`absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full ${
+          warning ? "bg-amber-400" : "bg-[#B9476D]"
+        }`}
+      />
+
+      <p className="text-[13px] font-semibold text-zinc-950">{title}</p>
+
+      <p className="mt-1 text-[12px] leading-5 text-zinc-500">{text}</p>
     </div>
   );
 }
@@ -372,6 +576,7 @@ function SummaryItem({
   return (
     <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-4">
       <p className="text-[13px] text-zinc-500">{label}</p>
+
       <p
         className={`text-[15px] font-semibold ${
           warning ? "text-amber-600" : "text-zinc-900"
@@ -556,6 +761,7 @@ function InfoLine({
   return (
     <div className="flex items-center justify-between gap-3 text-[12px]">
       <span className="text-zinc-400">{label}</span>
+
       <span
         className={`truncate text-right font-semibold ${
           warning
@@ -567,6 +773,32 @@ function InfoLine({
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function PerformanceMini({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "amber" | "neutral";
+}) {
+  const color =
+    tone === "green"
+      ? "text-emerald-700"
+      : tone === "amber"
+      ? "text-amber-600"
+      : "text-zinc-600";
+
+  return (
+    <div className="rounded-2xl bg-zinc-50 px-3 py-2.5">
+      <p className="text-[10px] font-medium text-zinc-500">{label}</p>
+      <p className={`mt-1 text-[17px] font-[800] tracking-[-0.04em] ${color}`}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -588,6 +820,7 @@ function ActivityItem({
             warning ? "bg-amber-500" : "bg-[#B9476D]"
           }`}
         />
+
         <p className="text-[13px] font-semibold text-zinc-900">{title}</p>
       </div>
 

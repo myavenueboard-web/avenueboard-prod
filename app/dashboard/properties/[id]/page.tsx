@@ -1,6 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  Eye,
+  Download,
+  Trash2,
+} from "lucide-react";
+
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
@@ -39,12 +51,14 @@ type PropertyRecord = {
     payment_status: string | null;
     lease_tenants?: TenantRecord[];
     lease_documents?: {
-      id: string;
-      file_name: string;
-      file_url: string | null;
-      file_type: string | null;
-    }[];
-  }[];
+  id: string;
+  file_name: string;
+  file_url: string | null;
+  file_type: string | null;
+  storage_path?: string | null;
+  file_size?: number | null;
+}[];
+}[];
 };
 
 type PropertyNote = {
@@ -52,7 +66,10 @@ type PropertyNote = {
   text: string;
   type: "private" | "shared";
   created_at: string;
+  created_by_role: "landlord" | "tenant";
 };
+
+type MonthStatus = "paid" | "upcoming" | "late" | "future" | "inactive";
 
 export default function PropertyDetailPage() {
   const params = useParams();
@@ -68,6 +85,7 @@ export default function PropertyDetailPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [editForm, setEditForm] = useState({
     propertyLabel: "",
     streetAddress: "",
@@ -108,7 +126,13 @@ export default function PropertyDetailPage() {
   const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteSentSuccess, setInviteSentSuccess] = useState(false);
   const [leaseEditOpen, setLeaseEditOpen] = useState(false);
+  const [noteDeleteOpen, setNoteDeleteOpen] = useState(false);
+  const [selectedNoteDelete, setSelectedNoteDelete] = useState<PropertyNote | null>(null);
+  const [deletingNote, setDeletingNote] = useState(false);
   const [savingLease, setSavingLease] = useState(false);
+  const [documentDeleteOpen, setDocumentDeleteOpen] = useState(false);
+  const [selectedDocumentDelete, setSelectedDocumentDelete] = useState<any | null>(null);
+  const [deletingDocument, setDeletingDocument] = useState(false);
   const [leaseForm, setLeaseForm] = useState({
    startDate: "",
    endDate: "",
@@ -154,11 +178,13 @@ export default function PropertyDetailPage() {
                 invite_token
               ),
               lease_documents (
-                id,
-                file_name,
-                file_url,
-                file_type
-              )
+  id,
+  file_name,
+  file_url,
+  file_type,
+  storage_path,
+  file_size
+)
             )
           `
           )
@@ -196,16 +222,23 @@ if (!activityError) {
           zip: loadedProperty.zip || "",
         });
 
-        setNotes([
-  {
-    id: crypto.randomUUID(),
-    text: `${loadedProperty.property_label} monthly rent is $${Number(
-      lease?.monthly_rent || 0
-    ).toLocaleString()}. Lease ends on ${formatDate(lease?.end_date)}.`,
-    type: "private",
-    created_at: new Date().toISOString(),
-  },
-]);
+        const { data: noteData, error: noteError } = await supabase
+  .from("property_notes")
+  .select("*")
+  .eq("property_id", propertyId)
+  .order("created_at", { ascending: false });
+
+if (!noteError) {
+  setNotes(
+    (noteData || []).map((note: any) => ({
+      id: note.id,
+      text: note.text,
+      type: note.note_type,
+      created_at: note.created_at,
+      created_by_role: note.created_by_role || "landlord",
+    }))
+  );
+}
 
         if (searchParams.get("edit") === "true") {
           setEditOpen(true);
@@ -613,14 +646,35 @@ invite_status: "not_sent",
 
   const noteText = newNote.trim();
 
-  const newNoteRecord: PropertyNote = {
-    id: crypto.randomUUID(),
-    text: noteText,
-    type: noteType,
-    created_at: new Date().toISOString(),
-  };
+  const { data, error } = await supabase
+  .from("property_notes")
+  .insert({
+  property_id: property.id,
+  lease_id: property.leases?.[0]?.id || null,
+  profile_id: profileId,
+  note_type: noteType,
+  text: noteText,
+  created_by_role: "landlord",
+})
+  .select()
+  .single();
 
-  setNotes((prev) => [newNoteRecord, ...prev]);
+  if (error) {
+    console.error("Note save error:", error);
+    alert("Unable to save note.");
+    return;
+  }
+
+  setNotes((prev) => [
+  {
+    id: data.id,
+    text: data.text,
+    type: data.note_type,
+    created_at: data.created_at,
+    created_by_role: data.created_by_role || "landlord",
+  },
+  ...prev,
+]);
 
   await supabase.from("activity_logs").insert({
     property_id: property.id,
@@ -631,21 +685,197 @@ invite_status: "not_sent",
     description: noteText,
   });
 
-  setActivities((prev) => [
-    {
-      id: crypto.randomUUID(),
-      title: noteType === "shared" ? "Shared note added" : "Private note added",
-      description: noteText,
-      created_at: new Date().toISOString(),
-    },
-    ...prev,
-  ]);
-
   setNewNote("");
   setNoteType("private");
   setNoteOpen(false);
 }
   
+async function handleDeleteNote() {
+  if (!selectedNoteDelete) return;
+
+  setDeletingNote(true);
+
+  const { error } = await supabase
+    .from("property_notes")
+    .delete()
+    .eq("id", selectedNoteDelete.id)
+    .eq("property_id", propertyId);
+
+  if (error) {
+    console.error("Delete note error:", error);
+    alert("Unable to delete note.");
+    setDeletingNote(false);
+    return;
+  }
+
+  setNotes((prev) => prev.filter((note) => note.id !== selectedNoteDelete.id));
+  setSelectedNoteDelete(null);
+  setNoteDeleteOpen(false);
+  setDeletingNote(false);
+}
+
+async function handleDocumentUpload(
+  event: React.ChangeEvent<HTMLInputElement>
+) {
+  const file = event.target.files?.[0];
+
+  if (!file || !property || !lease) return;
+
+  setUploadingDocument(true);
+
+  try {
+    const filePath = `${property.id}/${Date.now()}-${file.name}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("lease-documents")
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: documentRecord, error: insertError } =
+      await supabase
+        .from("lease_documents")
+        .insert({
+          property_id: property.id,
+          lease_id: lease.id,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          storage_path: filePath,
+          uploaded_by_profile_id: profileId,
+        })
+        .select()
+        .single();
+
+    if (insertError) throw insertError;
+
+    setProperty({
+      ...property,
+      leases: property.leases?.map((leaseItem) =>
+        leaseItem.id === lease.id
+          ? {
+              ...leaseItem,
+              lease_documents: [
+                ...(leaseItem.lease_documents || []),
+                documentRecord,
+              ],
+            }
+          : leaseItem
+      ),
+    });
+
+    await supabase.from("activity_logs").insert({
+      property_id: property.id,
+      profile_id: profileId,
+      lease_id: lease.id,
+      activity_type: "document_uploaded",
+      title: "Document uploaded",
+      description: file.name,
+    });
+  } catch (error) {
+    console.error("Document upload error:", error);
+    alert("Unable to upload document.");
+  } finally {
+    setUploadingDocument(false);
+  }
+}
+
+async function downloadDocument(doc: any) {
+  if (!doc.storage_path) return;
+
+  const { data, error } = await supabase.storage
+    .from("lease-documents")
+    .download(doc.storage_path);
+
+  if (error || !data) {
+    console.error("Download document error:", error);
+    alert("Unable to download document.");
+    return;
+  }
+
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = doc.file_name || "document";
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+async function openDocument(doc: any) {
+  if (!doc.storage_path) return;
+
+  const { data, error } = await supabase.storage
+    .from("lease-documents")
+    .createSignedUrl(doc.storage_path, 60);
+
+  if (error || !data?.signedUrl) {
+    console.error("Open document error:", error);
+    alert("Unable to open document.");
+    return;
+  }
+
+  window.open(data.signedUrl, "_blank");
+}
+
+async function handleDeleteDocument() {
+  if (!selectedDocumentDelete || !property || !lease) return;
+
+  setDeletingDocument(true);
+
+  try {
+    if (selectedDocumentDelete.storage_path) {
+      const { error: storageError } = await supabase.storage
+        .from("lease-documents")
+        .remove([selectedDocumentDelete.storage_path]);
+
+      if (storageError) throw storageError;
+    }
+
+    const { error: dbError } = await supabase
+      .from("lease_documents")
+      .delete()
+      .eq("id", selectedDocumentDelete.id)
+      .eq("property_id", property.id);
+
+    if (dbError) throw dbError;
+
+    setProperty({
+      ...property,
+      leases: property.leases?.map((leaseItem) =>
+        leaseItem.id === lease.id
+          ? {
+              ...leaseItem,
+              lease_documents: leaseItem.lease_documents?.filter(
+                (doc) => doc.id !== selectedDocumentDelete.id
+              ),
+            }
+          : leaseItem
+      ),
+    });
+
+    await supabase.from("activity_logs").insert({
+      property_id: property.id,
+      profile_id: profileId,
+      lease_id: lease.id,
+      activity_type: "document_deleted",
+      title: "Document deleted",
+      description: `${selectedDocumentDelete.file_name} was removed.`,
+    });
+
+    setSelectedDocumentDelete(null);
+    setDocumentDeleteOpen(false);
+  } catch (error) {
+    console.error("Document delete error:", error);
+    alert("Unable to delete document.");
+  } finally {
+    setDeletingDocument(false);
+  }
+}
+
     async function handleConnectStripe() {
   try {
     const response = await fetch("/api/stripe/connect-account", {
@@ -708,7 +938,7 @@ invite_status: "not_sent",
 
   return (
     <>
-      <div className="mt-2 grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto pb-4 lg:mt-3 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-3 lg:overflow-hidden">
+      <div className="mt-2 grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto pb-4 lg:mt-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-3 lg:overflow-hidden">
         <div className="min-h-0 space-y-3 lg:overflow-y-auto lg:pr-0">
           <section className="rounded-[22px] border border-[#E8E5DE] bg-white p-4 shadow-[0_4px_18px_rgba(15,23,42,0.03)]">
             <div className="flex items-start justify-between gap-4">
@@ -724,7 +954,6 @@ invite_status: "not_sent",
                     {leaseStatus.label}
                   </span>
                 </div>
-
                 <p className="mt-3 flex items-center gap-2 text-[14px] font-medium leading-6 text-zinc-500 sm:text-[15px]">
   <svg
     width="15"
@@ -752,39 +981,48 @@ invite_status: "not_sent",
 </p>
               </div>
 
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => setActionMenuOpen(!actionMenuOpen)}
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl border border-black/5 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-                >
-                  ⋯
-                </button>
+            <div className="flex shrink-0 items-center gap-2">
+  <button
+  onClick={() =>
+    router.push(
+      leaseEndingSoon
+        ? `/dashboard/properties/${propertyId}/edit?step=3`
+        : `/dashboard/properties/${propertyId}/edit?step=1`
+    )
+  }
+  className={`rounded-2xl px-4 py-2.5 text-[13px] font-semibold transition ${
+    leaseEndingSoon
+      ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+      : "border border-black/5 bg-white text-[#B9476D] hover:bg-zinc-50"
+  }`}
+>
+  {leaseEndingSoon ? "Extend Lease" : "Edit Lease"}
+</button>
 
-                {actionMenuOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-black/5 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
-                    <button
-                      onClick={() => {
-                        setActionMenuOpen(false);
-                        setEditOpen(true);
-                      }}
-                      className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
-                    >
-                      Edit Property
-                    </button>
+  <div className="relative">
+    <button
+      onClick={() => setActionMenuOpen(!actionMenuOpen)}
+      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-black/5 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+    >
+      ⋯
+    </button>
 
-                    <button
-                      onClick={() => {
-                        setActionMenuOpen(false);
-                        setDeleteOpen(true);
-                      }}
-                      className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Delete Property
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+    {actionMenuOpen && (
+      <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-black/5 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
+        <button
+          onClick={() => {
+            setActionMenuOpen(false);
+            setDeleteOpen(true);
+          }}
+          className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
+        >
+          Delete Property
+        </button>
+      </div>
+    )}
+  </div>
+</div>
+</div>
 
             <div className="mt-5 rounded-[22px] border border-black/5 bg-[#FAFAFA] p-4 lg:hidden">
               <p className="text-[13px] text-zinc-500">Upcoming Due</p>
@@ -922,9 +1160,6 @@ onDelete={() => handleDeleteTenant(tenant)}
       <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
         Notes
       </h2>
-      <p className="mt-1 text-[12px] text-zinc-500">
-        Shared and private property notes
-      </p>
     </div>
 
     <button
@@ -936,18 +1171,50 @@ onDelete={() => handleDeleteTenant(tenant)}
   </div>
 
   <div className="grid gap-3 p-4 sm:grid-cols-2">
+    
     {notes.length === 0 ? (
-      <div className="rounded-[18px] bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500 sm:col-span-2">
-        No notes yet.
-      </div>
-    ) : (
-      notes.slice(0, 2).map((note) => (
+  <div className="rounded-[18px] bg-[#FFF8EA] px-4 py-3">
+    <span className="rounded-full bg-[#FFE8B8] px-2 py-1 text-[10px] font-semibold text-[#8A5A00]">
+      Private Note
+    </span>
+
+    <p className="mt-3 text-[13px] font-medium leading-5 text-zinc-900">
+      Save reminders, updates, and important property notes.
+    </p>
+
+    <p className="mt-3 text-[12px] text-zinc-500">
+      Getting Started • AvenueBoard
+    </p>
+  </div>
+) : (
+      notes.map((note) => (
   <div
-    key={note.id}
-    className={`rounded-[18px] px-4 py-3 ${
-      note.type === "private" ? "bg-[#FFF8EA]" : "bg-[#EFF7FF]"
-    }`}
-  >
+  key={note.id}
+  className={`group relative rounded-[18px] px-4 py-3 pr-12 ${
+    note.type === "private"
+      ? "bg-[#FFF8EA]"
+      : "bg-[#EFF7FF]"
+  }`}
+>
+    <button
+  type="button"
+  onClick={() => {
+    setSelectedNoteDelete(note);
+    setNoteDeleteOpen(true);
+  }}
+  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-zinc-400 opacity-0 transition-all duration-200 hover:bg-white hover:text-red-500 group-hover:opacity-100"
+>
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+    <path
+      d="M9 3h6M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+</button>
+
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
         note.type === "private"
@@ -963,9 +1230,19 @@ onDelete={() => handleDeleteTenant(tenant)}
     </p>
 
     <p className="mt-3 text-[12px] text-zinc-500">
-      {formatDate(note.created_at)} •{" "}
-      {note.type === "private" ? "Landlord" : "Shared with Tenant"}
-    </p>
+  {formatDate(note.created_at)} •{" "}
+  {note.created_by_role === "tenant"
+    ? "Created by tenant"
+    : "Created by landlord"}
+  {note.type === "shared" && (
+    <>
+      {" "}•{" "}
+      {note.created_by_role === "tenant"
+        ? "Shared with landlord"
+        : "Shared with tenant"}
+    </>
+  )}
+</p>
   </div>
 ))
     )}
@@ -982,40 +1259,80 @@ onDelete={() => handleDeleteTenant(tenant)}
                 </p>
               </div>
 
-              <button className="rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-semibold text-[#B9476D] transition-all duration-200 hover:bg-zinc-50">
-                Upload
-              </button>
+              <label className="cursor-pointer rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-semibold text-[#B9476D] transition-all duration-200 hover:bg-zinc-50">
+  {uploadingDocument ? "Uploading..." : "Upload"}
+  <input
+    type="file"
+    className="hidden"
+    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+    onChange={handleDocumentUpload}
+    disabled={uploadingDocument}
+  />
+</label>
             </div>
 
             <div className="space-y-2 p-4">
               {documents.length > 0 ? (
-                documents.map((doc) => (
-                  <button
-                    key={doc.id}
-                    className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-3 text-left transition-all duration-200 hover:bg-zinc-50"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-semibold text-zinc-900">
-                        {doc.file_name}
-                      </p>
+                
+            documents.map((doc) => (
+  <div
+    key={doc.id}
+    className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-3 text-left transition-all duration-200 hover:bg-zinc-50"
+  >
+    <button
+      type="button"
+      onClick={() => openDocument(doc)}
+      className="min-w-0 flex-1 text-left"
+    >
+      <p className="truncate text-[13px] font-semibold text-zinc-900">
+        {doc.file_name}
+      </p>
 
-                      <p className="mt-1 text-[12px] text-zinc-500">
-                        Uploaded document
-                      </p>
-                    </div>
+      <p className="mt-1 text-[12px] text-zinc-500">
+        Uploaded document
+      </p>
+    </button>
 
-                    <span className="text-zinc-400">›</span>
-                  </button>
-                ))
+    <div className="ml-3 flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => openDocument(doc)}
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 transition hover:text-zinc-900"
+        title="View"
+      >
+        <Eye size={15} strokeWidth={1.6} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => downloadDocument(doc)}
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 transition hover:text-zinc-900"
+        title="Download"
+      >
+        <Download size={15} strokeWidth={1.6} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedDocumentDelete(doc);
+          setDocumentDeleteOpen(true);
+        }}
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 transition hover:text-red-500"
+        title="Delete"
+      >
+        <Trash2 size={15} strokeWidth={1.6} />
+      </button>
+    </div>
+  </div>
+))
+
               ) : (
                 <div className="rounded-2xl bg-[#FAFAFA] px-4 py-8 text-center">
                   <p className="text-[14px] font-semibold text-zinc-800">
-                    No lease documents yet
+                    Store leases, renewals, notices, inspections, and important property documents.
                   </p>
 
-                  <p className="mt-2 text-[12px] leading-5 text-zinc-500">
-                    Upload lease agreements, notices, or supporting files for this property.
-                  </p>
                 </div>
               )}
             </div>
@@ -1048,57 +1365,18 @@ onDelete={() => handleDeleteTenant(tenant)}
 
 
         <aside className="hidden min-h-0 flex-col gap-3 lg:flex lg:overflow-hidden">
-          <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between gap-3">
-  <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
-    Lease Summary
-  </h2>
+          
+          <PaymentPerformanceCard
+  leaseStartDate={lease?.start_date}
+  leaseEndDate={lease?.end_date}
+  monthlyRent={lease?.monthly_rent || 0}
+  rentDueDay={lease?.rent_due_day || "—"}
+/>
 
-  <button
-    onClick={() =>
-  router.push(`/dashboard/properties/${propertyId}/edit?step=3`)
-}
-    className={`rounded-xl px-3 py-1.5 text-[12px] font-semibold transition ${
-      leaseEndingSoon
-        ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
-        : "border border-black/5 text-[#B9476D] hover:bg-zinc-50"
-    }`}
-     >
-    {leaseEndingSoon ? "Extend Lease" : "Edit"}
-    </button>
-    </div>
-
-            <div className="mt-5 grid gap-3">
-              <RightInfo
-                label="Monthly Rent"
-                value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
-              />
-              <RightInfo label="Due Day" value={lease?.rent_due_day || "—"} />
-              <RightInfo
-                label="Security Deposit"
-                value={
-                  lease?.security_deposit
-                    ? `$${Number(lease.security_deposit).toLocaleString()}`
-                    : "—"
-                }
-              />
-              <RightInfo
-                label="Lease Start"
-                value={formatDate(lease?.start_date)}
-              />
-              <RightInfo label="Lease End" value={formatDate(lease?.end_date)} />
-              <RightInfo
-                label="Status"
-                value={leaseStatus.label}
-                warning={leaseStatus.label !== "Active"}
-              />
-            </div>
-          </section>
-
-          <section className="rounded-[24px] bg-white p-5 shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
+          <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
   <div className="flex items-start justify-between gap-3">
     <div>
-      <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+      <h2 className="text-[18px] font-[850] tracking-[-0.045em] text-slate-950">
         Payment Setup
       </h2>
 
@@ -1142,12 +1420,13 @@ onDelete={() => handleDeleteTenant(tenant)}
   </div>
 
   <button
-  onClick={() => handleConnectStripe()}
-    className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white hover:bg-[#A93F64]"
+    onClick={() => handleConnectStripe()}
+    className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
   >
     Manage Payout Settings
   </button>
 </section>
+
         </aside>
       </div>
 
@@ -1256,6 +1535,7 @@ onDelete={() => handleDeleteTenant(tenant)}
   </ModalShell>
 )}
 
+
       {noteOpen && (
   <ModalShell
     title="Add Note"
@@ -1315,6 +1595,8 @@ onDelete={() => handleDeleteTenant(tenant)}
         </p>
       </div>
 
+      
+
       <ModalActions
         onCancel={() => setNoteOpen(false)}
         onSave={handleSaveNote}
@@ -1330,12 +1612,13 @@ onDelete={() => handleDeleteTenant(tenant)}
     title="Request Payment"
     subtitle="Send an additional payment due notification."
     onClose={() => {
-  setPaymentRequestOpen(false);
-  setSelectedPaymentTenant(null);
-  setAdditionalAmount("");
-  setPaymentNote("");
-}}
+      setPaymentRequestOpen(false);
+      setSelectedPaymentTenant(null);
+      setAdditionalAmount("");
+      setPaymentNote("");
+    }}
   >
+
     <div className="space-y-5">
       <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
   <p className="text-[13px] font-semibold text-amber-900">
@@ -1343,7 +1626,7 @@ onDelete={() => handleDeleteTenant(tenant)}
   </p>
 
   <p className="mt-1 text-[12px] leading-5 text-amber-800">
-    Tenants will receive rent due reminders 5 days and 3 days before the due date.
+    Tenants will receive rent due reminders 5 days and 1 day before the due date.
     Sending this will send an additional payment due notification.
   </p>
 </div>
@@ -1482,8 +1765,258 @@ onDelete={() => handleDeleteTenant(tenant)}
           onConfirm={handleDeleteProperty}
         />
       )}
+
+      {noteDeleteOpen && selectedNoteDelete && (
+  <DeleteNoteModal
+    deleting={deletingNote}
+    onClose={() => {
+      if (!deletingNote) {
+        setNoteDeleteOpen(false);
+        setSelectedNoteDelete(null);
+      }
+    }}
+    onConfirm={handleDeleteNote}
+  />
+)}
+    {documentDeleteOpen && selectedDocumentDelete && (
+  <DeleteDocumentModal
+    fileName={selectedDocumentDelete.file_name}
+    deleting={deletingDocument}
+    onClose={() => {
+      if (!deletingDocument) {
+        setDocumentDeleteOpen(false);
+        setSelectedDocumentDelete(null);
+      }
+    }}
+    onConfirm={handleDeleteDocument}
+  />
+)}
+
     </>
   );
+}
+
+function PaymentPerformanceCard({
+  leaseStartDate,
+  leaseEndDate,
+  monthlyRent,
+  rentDueDay,
+}: {
+  leaseStartDate?: string | null;
+  leaseEndDate?: string | null;
+  monthlyRent: number;
+  rentDueDay: string;
+}) {
+  const timeline = buildPaymentTimeline(leaseStartDate, leaseEndDate, rentDueDay);
+  const upcomingRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setTimeout(() => {
+      upcomingRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }, 250);
+  }, []);
+
+  const paidCount = timeline.filter((item) => item.status === "paid").length;
+  const lateCount = timeline.filter((item) => item.status === "late").length;
+  const upcomingCount = timeline.filter((item) => item.status === "upcoming").length;
+  const futureCount = timeline.filter((item) => item.status === "future").length;
+
+  const completedCount = paidCount + lateCount;
+  const onTimeRate =
+    completedCount > 0 ? Math.round((paidCount / completedCount) * 100) : 100;
+
+  return (
+    <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[18px] font-[850] leading-6 tracking-[-0.045em] text-slate-950">
+            Payout Performance
+          </h2>
+
+          <p className="mt-2 text-[12px] leading-5 text-zinc-500">
+            Rent payments for
+            <br />
+            {formatMonthYear(leaseStartDate)} – {formatMonthYear(leaseEndDate)}
+          </p>
+        </div>
+
+        <div className="rounded-[18px] bg-emerald-50 px-4 py-3 text-right">
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-[18px] text-emerald-700">↗</span>
+            <p className="text-[23px] font-[850] tracking-[-0.06em] text-emerald-700">
+              {onTimeRate}%
+            </p>
+          </div>
+          <p className="text-[11px] font-medium text-zinc-500">On-time rate</p>
+        </div>
+      </div>
+
+      <div className="mt-4 max-h-[300px] space-y-2 overflow-y-auto pr-1">
+        {timeline.map((item) => (
+          <PaymentMonthRow
+  key={item.key}
+  item={item}
+  monthlyRent={monthlyRent}
+  rowRef={item.status === "upcoming" ? upcomingRef : undefined}
+/>
+        ))}
+      </div>
+
+      <div className="mt-5 grid grid-cols-4 overflow-hidden rounded-[18px] border border-zinc-100 bg-white">
+        <PaymentStat label="Paid" value={paidCount} color="text-emerald-600" dot="bg-emerald-500" />
+        <PaymentStat label="Upcoming" value={upcomingCount} color="text-blue-600" dot="bg-blue-500" />
+        <PaymentStat label="Late" value={lateCount} color="text-amber-600" dot="bg-amber-400" />
+        <PaymentStat label="Future" value={futureCount} color="text-zinc-500" dot="bg-zinc-300" />
+      </div>
+
+      <p className="mt-4 text-[11px] leading-5 text-zinc-500">
+        Late payment is marked after 10 days from the due date.
+      </p>
+    </section>
+  );
+}
+
+function PaymentMonthRow({
+  item,
+  monthlyRent,
+  rowRef,
+}: {
+  item: {
+    key: string;
+    month: string;
+    dueText: string;
+    status: MonthStatus;
+  };
+  monthlyRent: number;
+  rowRef?: RefObject<HTMLDivElement | null>;
+}) {
+  const styles = getPaymentRowStyles(item.status);
+
+  return (
+    <div
+      ref={rowRef}
+      className="grid grid-cols-[54px_26px_1fr] items-center gap-3"
+    >
+      <p className="text-[12px] font-[750] text-slate-800">{item.month}</p>
+
+      <div className="flex flex-col items-center">
+        <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
+        <span className={`mt-1 h-8 w-[10px] rounded-full ${styles.bar}`} />
+      </div>
+
+      <div className={`rounded-[15px] px-3 py-2 ${styles.card}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${styles.icon}`}
+              >
+                {styles.symbol}
+              </span>
+
+              <p className={`text-[12px] font-[850] ${styles.text}`}>
+                {styles.label}
+              </p>
+            </div>
+          </div>
+
+          <p className="shrink-0 text-[12px] font-[850] text-slate-950">
+            ${Number(monthlyRent || 0).toLocaleString()}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentStat({
+  label,
+  value,
+  color,
+  dot,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  dot: string;
+}) {
+  return (
+    <div className="border-r border-zinc-100 px-2 py-3 text-center last:border-r-0">
+      <div className="flex items-center justify-center gap-1.5">
+        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+        <p className="text-[10px] font-semibold text-zinc-500">{label}</p>
+      </div>
+
+      <p className={`mt-1 text-[18px] font-[850] tracking-[-0.04em] ${color}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function getPaymentRowStyles(status: MonthStatus) {
+  if (status === "paid") {
+    return {
+      label: "Paid",
+      symbol: "✓",
+      card: "bg-gradient-to-r from-emerald-50 to-emerald-50/35",
+      text: "text-emerald-700",
+      dot: "bg-emerald-500",
+      bar: "bg-emerald-500",
+      icon: "bg-emerald-600 text-white",
+    };
+  }
+
+  if (status === "late") {
+    return {
+      label: "Late",
+      symbol: "!",
+      card: "bg-gradient-to-r from-amber-50 to-amber-50/35",
+      text: "text-amber-700",
+      dot: "bg-amber-400",
+      bar: "bg-amber-400",
+      icon: "bg-amber-100 text-amber-700",
+    };
+  }
+
+  if (status === "upcoming") {
+    return {
+      label: "Upcoming",
+      symbol: "□",
+      card: "bg-gradient-to-r from-blue-50 to-blue-50/35",
+      text: "text-blue-700",
+      dot: "bg-blue-500",
+      bar: "bg-blue-500",
+      icon: "bg-blue-100 text-blue-700",
+    };
+  }
+
+  return {
+    label: "Future",
+    symbol: "□",
+    card: "bg-gradient-to-r from-zinc-50 to-zinc-50/35",
+    text: "text-zinc-500",
+    dot: "bg-zinc-300",
+    bar: "bg-zinc-300",
+    icon: "bg-zinc-100 text-zinc-500",
+  };
+}
+
+
+function formatMonthYear(date?: string | null) {
+  if (!date) return "—";
+
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function extractDueDay(rentDueDay: string) {
+  return rentDueDay?.replace(" of the Month", "") || "—";
 }
 
 function MetricCard({
@@ -1712,7 +2245,7 @@ function ModalShell({
 }: {
   title: string;
   subtitle: string;
-  children: React.ReactNode;
+  children: ReactNode;
   onClose: () => void;
 }) {
   return (
@@ -1774,6 +2307,92 @@ function ModalActions({
       >
         {saving ? "Saving..." : saveLabel}
       </button>
+    </div>
+  );
+}
+
+function DeleteDocumentModal({
+  fileName,
+  deleting,
+  onClose,
+  onConfirm,
+}: {
+  fileName: string;
+  deleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
+        <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900">
+          Delete document?
+        </h2>
+
+        <p className="mt-3 text-[14px] leading-6 text-zinc-500">
+          This document will be permanently deleted from AvenueBoard and cannot be recovered.
+        </p>
+
+        <div className="mt-7 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="h-11 rounded-2xl border border-black/5 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="h-11 rounded-2xl bg-[#B9476D] px-6 text-[14px] font-semibold text-white hover:bg-[#A93F64] disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteNoteModal({
+  deleting,
+  onClose,
+  onConfirm,
+}: {
+  deleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
+        <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900">
+          Delete note?
+        </h2>
+
+        <p className="mt-3 text-[14px] leading-6 text-zinc-500">
+          This note will be permanently deleted.
+        </p>
+
+        <div className="mt-7 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="h-11 rounded-2xl border border-black/5 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="h-11 rounded-2xl bg-[#B9476D] px-6 text-[14px] font-semibold text-white hover:bg-[#A93F64] disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1866,6 +2485,109 @@ function formatDateShort(date?: string | null) {
     month: "short",
     day: "numeric",
   });
+}
+
+function buildPaymentTimeline(
+  leaseStartDate?: string | null,
+  leaseEndDate?: string | null,
+  rentDueDay?: string
+): {
+  key: string;
+  month: string;
+  dueText: string;
+  status: MonthStatus;
+}[] {
+  if (!leaseStartDate || !leaseEndDate) return [];
+
+  const start = new Date(leaseStartDate);
+  const end = new Date(leaseEndDate);
+  const today = new Date();
+
+  const dueDay = Number(String(rentDueDay || "1").match(/\d+/)?.[0] || 1);
+
+  const rows: {
+    key: string;
+    month: string;
+    dueText: string;
+    status: MonthStatus;
+  }[] = [];
+
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+
+  while (cursor <= end) {
+    const monthDate = new Date(cursor);
+    const dueDate = new Date(
+      monthDate.getFullYear(),
+      monthDate.getMonth(),
+      dueDay
+    );
+
+    const lateDate = new Date(dueDate);
+    lateDate.setDate(lateDate.getDate() + 10);
+
+    let status: MonthStatus = "future";
+
+    if (
+      monthDate.getFullYear() === today.getFullYear() &&
+      monthDate.getMonth() === today.getMonth()
+    ) {
+      status = today > lateDate ? "late" : "upcoming";
+    } else if (monthDate < today) {
+      status = "paid";
+    }
+
+    rows.push({
+      key: `${monthDate.getFullYear()}-${monthDate.getMonth()}`,
+      month: monthDate.toLocaleDateString("en-US", {
+        month: "short",
+        year: "2-digit",
+      }),
+      dueText: dueDate.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      status,
+    });
+
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return rows;
+}
+
+function getMonthStatusClass(status: MonthStatus) {
+  if (status === "paid") return "bg-emerald-50 text-emerald-700";
+  if (status === "upcoming") return "bg-blue-50 text-blue-700";
+  if (status === "late") return "bg-amber-50 text-amber-700";
+  if (status === "inactive") return "bg-zinc-50 text-zinc-300";
+  return "bg-zinc-50 text-zinc-400";
+}
+
+function SmallPaymentInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-medium text-zinc-500">{label}</p>
+      <p className="mt-1 truncate text-[13px] font-[800] text-zinc-950">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function LegendDot({
+  label,
+  className,
+}: {
+  label: string;
+  className: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-100 bg-white px-2.5 py-1 text-zinc-500">
+      <span className={`h-1.5 w-1.5 rounded-full ${className}`} />
+      {label}
+    </span>
+  );
 }
 
 function getLeaseStatus(endDate?: string | null) {
