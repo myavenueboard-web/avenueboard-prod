@@ -30,6 +30,7 @@ type TenantRecord = {
 
 type PropertyRecord = {
   id: string;
+  created_at?: string | null;
   property_label: string;
   street_address: string;
   city: string;
@@ -57,6 +58,7 @@ type PropertyRecord = {
   file_type: string | null;
   storage_path?: string | null;
   file_size?: number | null;
+  
 }[];
 }[];
 };
@@ -133,6 +135,7 @@ export default function PropertyDetailPage() {
   const [documentDeleteOpen, setDocumentDeleteOpen] = useState(false);
   const [selectedDocumentDelete, setSelectedDocumentDelete] = useState<any | null>(null);
   const [deletingDocument, setDeletingDocument] = useState(false);
+  const [payments, setPayments] = useState<any[]>([]);
   const [leaseForm, setLeaseForm] = useState({
    startDate: "",
    endDate: "",
@@ -203,6 +206,18 @@ export default function PropertyDetailPage() {
 
         setProperty(loadedProperty);
 
+if (lease?.id) {
+  const { data: paymentData, error: paymentError } = await supabase
+    .from("rent_payments")
+    .select("*")
+    .eq("lease_id", lease.id)
+    .order("created_at", { ascending: true });
+
+  if (!paymentError) {
+    setPayments(paymentData || []);
+  }
+}
+
         const { data: activityData, error: activityError } = await supabase
   .from("activity_logs")
   .select("*")
@@ -239,6 +254,7 @@ if (!noteError) {
     }))
   );
 }
+
 
         if (searchParams.get("edit") === "true") {
           setEditOpen(true);
@@ -290,7 +306,6 @@ if (!noteError) {
     setEditOpen(false);
     setSavingEdit(false);
   }
-
 
   function openTenantAdd() {
   setSelectedTenant(null);
@@ -1367,10 +1382,12 @@ onDelete={() => handleDeleteTenant(tenant)}
         <aside className="hidden min-h-0 flex-col gap-3 lg:flex lg:overflow-hidden">
           
           <PaymentPerformanceCard
+  payments={payments}
   leaseStartDate={lease?.start_date}
   leaseEndDate={lease?.end_date}
   monthlyRent={lease?.monthly_rent || 0}
-  rentDueDay={lease?.rent_due_day || "—"}
+  rentDueDay={lease?.rent_due_day || "1st of the Month"}
+  propertyCreatedAt={property.created_at}
 />
 
           <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
@@ -1797,32 +1814,63 @@ onDelete={() => handleDeleteTenant(tenant)}
 }
 
 function PaymentPerformanceCard({
+  payments,
   leaseStartDate,
   leaseEndDate,
   monthlyRent,
   rentDueDay,
+  propertyCreatedAt,
 }: {
+  payments: any[];
   leaseStartDate?: string | null;
   leaseEndDate?: string | null;
   monthlyRent: number;
   rentDueDay: string;
+  propertyCreatedAt?: string | null;
 }) {
-  const timeline = buildPaymentTimeline(leaseStartDate, leaseEndDate, rentDueDay);
   const upcomingRef = useRef<HTMLDivElement | null>(null);
 
+  const paymentMap = new Map(
+    payments.map((payment) => [
+      String(payment.period_label || "").toLowerCase(),
+      payment,
+    ])
+  );
+
+  const timeline = buildPaymentTimeline(
+  leaseStartDate,
+  leaseEndDate,
+  rentDueDay,
+  propertyCreatedAt
+).map((item) => {
+  const savedPayment = paymentMap.get(item.monthFull.toLowerCase());
+
+  return {
+    ...item,
+    id: savedPayment?.id || item.key,
+    status: savedPayment?.status || item.status,
+    amount: savedPayment?.amount || monthlyRent,
+  };
+});
+
+  const upcomingKey =
+    timeline.find((item) => item.status === "upcoming")?.id || "";
+
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       upcomingRef.current?.scrollIntoView({
         block: "center",
         behavior: "smooth",
       });
     }, 250);
-  }, []);
 
-  const paidCount = timeline.filter((item) => item.status === "paid").length;
-  const lateCount = timeline.filter((item) => item.status === "late").length;
-  const upcomingCount = timeline.filter((item) => item.status === "upcoming").length;
-  const futureCount = timeline.filter((item) => item.status === "future").length;
+    return () => clearTimeout(timer);
+  }, [upcomingKey]);
+
+  const paidCount = timeline.filter((p) => p.status === "paid").length;
+  const lateCount = timeline.filter((p) => p.status === "late").length;
+  const upcomingCount = timeline.filter((p) => p.status === "upcoming").length;
+  const futureCount = timeline.filter((p) => p.status === "future").length;
 
   const completedCount = paidCount + lateCount;
   const onTimeRate =
@@ -1835,7 +1883,6 @@ function PaymentPerformanceCard({
           <h2 className="text-[18px] font-[850] leading-6 tracking-[-0.045em] text-slate-950">
             Payout Performance
           </h2>
-
           <p className="mt-2 text-[12px] leading-5 text-zinc-500">
             Rent payments for
             <br />
@@ -1844,12 +1891,9 @@ function PaymentPerformanceCard({
         </div>
 
         <div className="rounded-[18px] bg-emerald-50 px-4 py-3 text-right">
-          <div className="flex items-center justify-end gap-2">
-            <span className="text-[18px] text-emerald-700">↗</span>
-            <p className="text-[23px] font-[850] tracking-[-0.06em] text-emerald-700">
-              {onTimeRate}%
-            </p>
-          </div>
+          <p className="text-[23px] font-[850] tracking-[-0.06em] text-emerald-700">
+            {onTimeRate}%
+          </p>
           <p className="text-[11px] font-medium text-zinc-500">On-time rate</p>
         </div>
       </div>
@@ -1857,11 +1901,16 @@ function PaymentPerformanceCard({
       <div className="mt-4 max-h-[300px] space-y-2 overflow-y-auto pr-1">
         {timeline.map((item) => (
           <PaymentMonthRow
-  key={item.key}
-  item={item}
-  monthlyRent={monthlyRent}
-  rowRef={item.status === "upcoming" ? upcomingRef : undefined}
-/>
+            key={item.id}
+            item={{
+              key: item.id,
+              month: item.month,
+              dueText: item.dueText,
+              status: item.status,
+            }}
+            monthlyRent={item.amount}
+            rowRef={item.status === "upcoming" ? upcomingRef : undefined}
+          />
         ))}
       </div>
 
@@ -1871,10 +1920,6 @@ function PaymentPerformanceCard({
         <PaymentStat label="Late" value={lateCount} color="text-amber-600" dot="bg-amber-400" />
         <PaymentStat label="Future" value={futureCount} color="text-zinc-500" dot="bg-zinc-300" />
       </div>
-
-      <p className="mt-4 text-[11px] leading-5 text-zinc-500">
-        Late payment is marked after 10 days from the due date.
-      </p>
     </section>
   );
 }
@@ -1993,6 +2038,18 @@ function getPaymentRowStyles(status: MonthStatus) {
       icon: "bg-blue-100 text-blue-700",
     };
   }
+
+  if (status === "inactive") {
+  return {
+    label: "Inactive",
+    symbol: "□",
+    card: "bg-gradient-to-r from-zinc-50 to-zinc-50/35",
+    text: "text-zinc-400",
+    dot: "bg-zinc-200",
+    bar: "bg-zinc-200",
+    icon: "bg-zinc-100 text-zinc-400",
+  };
+}
 
   return {
     label: "Future",
@@ -2490,62 +2547,79 @@ function formatDateShort(date?: string | null) {
 function buildPaymentTimeline(
   leaseStartDate?: string | null,
   leaseEndDate?: string | null,
-  rentDueDay?: string
+  rentDueDay?: string,
+  propertyCreatedAt?: string | null
 ): {
   key: string;
   month: string;
+  monthFull: string;
   dueText: string;
   status: MonthStatus;
 }[] {
   if (!leaseStartDate || !leaseEndDate) return [];
 
-  const start = new Date(leaseStartDate);
-  const end = new Date(leaseEndDate);
+  const leaseStart = new Date(leaseStartDate);
+  const leaseEnd = new Date(leaseEndDate);
   const today = new Date();
+
+  const createdDate = propertyCreatedAt ? new Date(propertyCreatedAt) : today;
+
+  const startMonth = new Date(
+    Math.max(
+      new Date(leaseStart.getFullYear(), leaseStart.getMonth(), 1).getTime(),
+      new Date(createdDate.getFullYear(), createdDate.getMonth() + 1, 1).getTime()
+    )
+  );
 
   const dueDay = Number(String(rentDueDay || "1").match(/\d+/)?.[0] || 1);
 
   const rows: {
     key: string;
     month: string;
+    monthFull: string;
     dueText: string;
     status: MonthStatus;
   }[] = [];
 
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const cursor = new Date(startMonth);
 
-  while (cursor <= end) {
+  while (cursor <= leaseEnd) {
     const monthDate = new Date(cursor);
+
     const dueDate = new Date(
       monthDate.getFullYear(),
       monthDate.getMonth(),
       dueDay
     );
 
-    const lateDate = new Date(dueDate);
-    lateDate.setDate(lateDate.getDate() + 10);
+    const lateDate = addBusinessDays(dueDate, 10);
 
     let status: MonthStatus = "future";
 
-    if (
-      monthDate.getFullYear() === today.getFullYear() &&
-      monthDate.getMonth() === today.getMonth()
-    ) {
+const firstTrackedMonth =
+  monthDate.getFullYear() === startMonth.getFullYear() &&
+  monthDate.getMonth() === startMonth.getMonth();
+
+if (firstTrackedMonth) {
+  status = "upcoming";
+
+    } else if (monthDate < new Date(today.getFullYear(), today.getMonth(), 1)) {
       status = today > lateDate ? "late" : "upcoming";
-    } else if (monthDate < today) {
-      status = "paid";
     }
 
     rows.push({
       key: `${monthDate.getFullYear()}-${monthDate.getMonth()}`,
       month: monthDate.toLocaleDateString("en-US", {
         month: "short",
-        year: "2-digit",
+        year: "numeric",
+      }),
+      monthFull: monthDate.toLocaleDateString("en-US", {
+        month: "short",
+        year: "numeric",
       }),
       dueText: dueDate.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-        year: "numeric",
       }),
       status,
     });
@@ -2554,6 +2628,22 @@ function buildPaymentTimeline(
   }
 
   return rows;
+}
+
+function addBusinessDays(date: Date, businessDays: number) {
+  const result = new Date(date);
+  let added = 0;
+
+  while (added < businessDays) {
+    result.setDate(result.getDate() + 1);
+
+    const day = result.getDay();
+    if (day !== 0 && day !== 6) {
+      added++;
+    }
+  }
+
+  return result;
 }
 
 function getMonthStatusClass(status: MonthStatus) {
