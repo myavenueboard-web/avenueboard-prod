@@ -15,6 +15,7 @@ type ProfileSettingsPanelProps = {
   setPhone: (value: string) => void;
   onSave: () => void;
   onLogout: () => void;
+  onOpenTaxDocuments: () => void;
 };
 
 export default function ProfileSettingsPanel({
@@ -27,6 +28,7 @@ export default function ProfileSettingsPanel({
   setPhone,
   onSave,
   onLogout,
+  onOpenTaxDocuments,
 }: ProfileSettingsPanelProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -149,6 +151,21 @@ export default function ProfileSettingsPanel({
 
           <div className="shrink-0 border-t border-zinc-200 bg-white px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 sm:px-7 sm:pb-7 sm:pt-7">
             <div className="grid grid-cols-1 gap-3 sm:space-y-3">
+  <button
+    onClick={onOpenTaxDocuments}
+    className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-4 text-left transition hover:bg-zinc-50"
+  >
+    <div>
+      <p className="text-[14px] font-[750] text-zinc-900">
+        Tax Documents
+      </p>
+      <p className="mt-1 text-[12px] text-zinc-500">
+        View tax forms and year-end documents
+      </p>
+    </div>
+
+    <span className="text-[20px] text-zinc-400">›</span>
+  </button>
               <button
                 onClick={onSave}
                 className="h-[50px] w-full rounded-2xl bg-[#B9476D] text-[15px] font-semibold text-white hover:bg-[#A93F64] sm:h-[52px]"

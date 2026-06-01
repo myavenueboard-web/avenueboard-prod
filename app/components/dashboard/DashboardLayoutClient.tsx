@@ -163,6 +163,8 @@ export default function DashboardLayoutClient({
   const [notifications, setNotifications] = useState<LandlordNotification[]>([]);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [hasTenantPortal, setHasTenantPortal] = useState(false);
+  const [taxDocumentsOpen, setTaxDocumentsOpen] = useState(false);
+  
   
   const visibleNotifications = notifications.filter(
   (notification) => !dismissedNotifications.includes(notification.id)
@@ -654,6 +656,18 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
     Switch to Tenant Portal
   </button>
 )}
+
+<button
+
+  onClick={() => {
+    setMenuOpen(false);
+    setTaxDocumentsOpen(true);
+  }}
+  className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+>
+  Tax Documents
+</button>
+
                       <button
                         onClick={() => {
                           setMenuOpen(false);
@@ -693,9 +707,62 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
         setPhone={setPhone}
         onSave={handleSaveProfile}
         onLogout={handleLogout}
-      />
+    />
+
+    {taxDocumentsOpen && (
+  <TaxDocumentsPanel onClose={() => setTaxDocumentsOpen(false)} />
+)}
 
       <HelpChat open={helpOpen} onClose={() => setHelpOpen(false)} />
     </main>
+  );
+}
+
+function TaxDocumentsPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/25 backdrop-blur-sm">
+      <button
+        aria-label="Close tax documents"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+
+      <aside className="absolute right-3 top-3 flex h-[calc(100dvh-24px)] w-[92%] max-w-[520px] flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_100px_rgba(15,23,42,0.24)]">
+        <div className="border-b border-zinc-100 px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-[24px] font-[850] tracking-[-0.05em] text-zinc-950">
+                Tax Documents
+              </h2>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+
+          <div className="mt-5 rounded-[30px] border border-dashed border-zinc-200 bg-white px-6 py-10 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100 text-[28px]">
+              📄
+            </div>
+
+            <h3 className="mt-5 text-[18px] font-[850] tracking-[-0.035em] text-zinc-950">
+              No tax documents yet
+            </h3>
+
+            <p className="mx-auto mt-3 max-w-[360px] text-[13px] leading-6 text-zinc-500">
+              Documents will show here only when real tax forms are available.
+              No sample or mock documents are displayed.
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
   );
 }

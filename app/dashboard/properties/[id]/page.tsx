@@ -223,7 +223,7 @@ if (lease?.id) {
   .select("*")
   .eq("property_id", propertyId)
   .order("created_at", { ascending: false })
-  .limit(10);
+  .limit(5);
 
 if (!activityError) {
   setActivities(activityData || []);
@@ -959,7 +959,7 @@ async function handleDeleteDocument() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-[30px] font-[750] tracking-[-0.045em] text-zinc-900 sm:text-[34px]">
+                  <h1 className="truncate text-[30px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[34px]">
   {property.property_label}
 </h1>
 
@@ -1124,7 +1124,7 @@ async function handleDeleteDocument() {
           <section className="relative z-20 overflow-visible rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
-                <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+                <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
                   Tenants
                 </h2>
                 <p className="mt-1 text-[12px] text-zinc-500">
@@ -1172,7 +1172,7 @@ onDelete={() => handleDeleteTenant(tenant)}
           <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
   <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
     <div>
-      <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+      <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
         Notes
       </h2>
     </div>
@@ -1266,7 +1266,7 @@ onDelete={() => handleDeleteTenant(tenant)}
                     <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
               <div>
-                <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+                <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
                   Property Documents
                 </h2>
                 <p className="mt-1 text-[12px] text-zinc-500">
@@ -1355,7 +1355,7 @@ onDelete={() => handleDeleteTenant(tenant)}
 
           <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
             <div className="border-b border-zinc-100 px-5 py-4">
-              <h2 className="text-[17px] font-[800] tracking-[-0.035em] text-slate-950">
+              <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
                 Recent Activity
               </h2>
 
@@ -1393,7 +1393,7 @@ onDelete={() => handleDeleteTenant(tenant)}
           <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
   <div className="flex items-start justify-between gap-3">
     <div>
-      <h2 className="text-[18px] font-[850] tracking-[-0.045em] text-slate-950">
+      <h2 className="text-[18px] font-semibold tracking-[-0.045em] text-slate-950">
         Payment Setup
       </h2>
 
@@ -1880,7 +1880,7 @@ function PaymentPerformanceCard({
     <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-[18px] font-[850] leading-6 tracking-[-0.045em] text-slate-950">
+          <h2 className="text-[18px] font-semibold leading-6 tracking-[-0.045em] text-slate-950">
             Payout Performance
           </h2>
           <p className="mt-2 text-[12px] leading-5 text-zinc-500">
@@ -1891,7 +1891,7 @@ function PaymentPerformanceCard({
         </div>
 
         <div className="rounded-[18px] bg-emerald-50 px-4 py-3 text-right">
-          <p className="text-[23px] font-[850] tracking-[-0.06em] text-emerald-700">
+          <p className="text-[23px] font-semibold tracking-[-0.06em] text-emerald-700">
             {onTimeRate}%
           </p>
           <p className="text-[11px] font-medium text-zinc-500">On-time rate</p>
@@ -1945,7 +1945,7 @@ function PaymentMonthRow({
       ref={rowRef}
       className="grid grid-cols-[54px_26px_1fr] items-center gap-3"
     >
-      <p className="text-[12px] font-[750] text-slate-800">{item.month}</p>
+      <p className="text-[12px] font-medium text-slate-800">{item.month}</p>
 
       <div className="flex flex-col items-center">
         <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
@@ -1957,18 +1957,18 @@ function PaymentMonthRow({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${styles.icon}`}
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${styles.icon}`}
               >
                 {styles.symbol}
               </span>
 
-              <p className={`text-[12px] font-[850] ${styles.text}`}>
+              <p className={`text-[12px] font-semibold ${styles.text}`}>
                 {styles.label}
               </p>
             </div>
           </div>
 
-          <p className="shrink-0 text-[12px] font-[850] text-slate-950">
+          <p className="shrink-0 text-[12px] font-semibold text-slate-950">
             ${Number(monthlyRent || 0).toLocaleString()}
           </p>
         </div>
@@ -1995,7 +1995,7 @@ function PaymentStat({
         <p className="text-[10px] font-semibold text-zinc-500">{label}</p>
       </div>
 
-      <p className={`mt-1 text-[18px] font-[850] tracking-[-0.04em] ${color}`}>
+      <p className={`mt-1 text-[18px] font-semibold tracking-[-0.04em] ${color}`}>
         {value}
       </p>
     </div>
@@ -2094,7 +2094,7 @@ function MetricCard({
       <p className="text-[12px] font-semibold text-slate-500">{label}</p>
 
       <p
-        className={`mt-2 truncate text-[22px] font-[800] tracking-[-0.05em] ${
+        className={`mt-2 truncate text-[22px] font-semibold tracking-[-0.035em] ${
           warning
             ? "text-amber-600"
             : success
@@ -2163,7 +2163,7 @@ useEffect(() => {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <p className="truncate text-[14px] font-[800] text-slate-950">
+          <p className="truncate text-[14px] font-semibold text-slate-950">
             {tenant.first_name} {tenant.last_name}
           </p>
 
@@ -2211,7 +2211,7 @@ useEffect(() => {
     e.stopPropagation();
     setMenuOpen(!menuOpen);
   }}
-  className="relative z-30 flex h-8 w-8 items-center justify-center text-[18px] font-bold text-zinc-700 transition hover:text-black"
+  className="relative z-30 flex h-8 w-8 items-center justify-center text-[18px] font-semibold text-zinc-700 transition hover:text-black"
 >
   ⋮
 </button>
@@ -2269,7 +2269,7 @@ function RightInfo({
     <div className="flex items-center justify-between rounded-2xl bg-[#FAFAFA] px-4 py-3">
       <p className="text-[13px] font-semibold text-slate-500">{label}</p>
 
-      <p className="text-right text-[14px] font-[800] text-slate-950">
+      <p className="text-right text-[14px] font-semibold text-slate-950">
         {value}
       </p>
     </div>
@@ -2658,7 +2658,7 @@ function SmallPaymentInfo({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[11px] font-medium text-zinc-500">{label}</p>
-      <p className="mt-1 truncate text-[13px] font-[800] text-zinc-950">
+      <p className="mt-1 truncate text-[13px] font-semibold text-zinc-950">
         {value}
       </p>
     </div>
