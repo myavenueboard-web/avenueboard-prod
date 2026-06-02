@@ -76,9 +76,6 @@ export default function SelectModePage() {
         {/* Left Side */}
         <div className="flex items-center bg-[#F7F6F3] px-10 lg:px-20">
           <div className="max-w-[650px]">
-            <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-zinc-400">
-              Hi
-            </p>
 
             <h1 className="mt-5 text-[52px] font-[650] leading-[0.98] tracking-[-0.07em] text-slate-950">
               Welcome back{" "}
@@ -109,15 +106,10 @@ opacity-60 lg:block" />
 
         {/* Right Side */}
         <div className="flex items-center px-10 lg:px-20">
-          <div className="w-full max-w-[520px]">
-            <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-zinc-400">
-              Continue
-            </p>
+          <div className="w-full max-w-[650px]">
 
             <h2 className="mt-4 text-[42px] font-[650] leading-[1.05] tracking-[-0.06em] text-slate-950">
-              How do you want
-              <br />
-              to continue?
+              How do you want to continue?
             </h2>
 
             <div className="mt-10 space-y-5">
