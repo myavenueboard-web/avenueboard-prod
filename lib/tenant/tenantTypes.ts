@@ -20,6 +20,8 @@ export type TenantAccessRow = {
   id: string;
   property_id: string;
   lease_id: string;
+  invite_status?: string | null;
+  created_at?: string | null;
 };
 
 export type TenantPropertyRow = {

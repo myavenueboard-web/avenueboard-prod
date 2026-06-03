@@ -61,6 +61,48 @@ function getTenantNotificationStorageKey(profileId: string) {
   return `avenueboard_tenant_dismissed_notifications_${profileId}`;
 }
 
+function getTenantSelectedLeaseStorageKey(profileId: string) {
+  return `avenueboard_tenant_selected_lease_${profileId}`;
+}
+
+function getLeaseAddressLabel(lease?: TenantLease) {
+  if (!lease) return "Property";
+
+  const unit = lease.unit_name ? `, Unit ${lease.unit_name}` : "";
+  const location = [lease.city, lease.state_name].filter(Boolean).join(", ");
+
+  return `${lease.street_address}${unit}${
+    location ? `, ${location}` : ""
+  }${lease.zip ? ` ${lease.zip}` : ""}`;
+}
+
+function resolveTenantSelectedLeaseId({
+  leases,
+  profileId,
+  queryLeaseId,
+}: {
+  leases: TenantLease[];
+  profileId: string;
+  queryLeaseId?: string | null;
+}) {
+  if (leases.length === 0) return "";
+
+  const isValidLeaseId = (leaseId?: string | null) =>
+    Boolean(leaseId && leases.some((lease) => lease.lease_id === leaseId));
+
+  if (isValidLeaseId(queryLeaseId)) return queryLeaseId as string;
+
+  if (typeof window !== "undefined" && profileId) {
+    const savedLeaseId = window.localStorage.getItem(
+      getTenantSelectedLeaseStorageKey(profileId)
+    );
+
+    if (isValidLeaseId(savedLeaseId)) return savedLeaseId as string;
+  }
+
+  return leases[0].lease_id;
+}
+
 function buildTenantNotifications({
   selectedLease,
   selectedPaymentMethods,
@@ -294,8 +336,10 @@ export default function TenantDashboardPage() {
 
         const { data: accessData, error: accessError } = await supabase
           .from("tenant_access")
-          .select("id, property_id, lease_id")
-          .eq("tenant_profile_id", profile.id);
+          .select("id, property_id, lease_id, invite_status, created_at")
+          .eq("tenant_profile_id", profile.id)
+          .eq("invite_status", "accepted")
+          .order("created_at", { ascending: false });
 
         if (accessError) {
           console.error("Tenant access load error:", accessError);
@@ -411,7 +455,16 @@ export default function TenantDashboardPage() {
         setPaymentMethods((paymentMethodData || []) as PaymentMethod[]);
         setRentPayments((rentPaymentData || []) as RentPayment[]);
         setPropertyContacts((contactData || []) as PropertyContact[]);
-        setSelectedLeaseId(normalizedLeases[0]?.lease_id || "");
+        setSelectedLeaseId(
+          resolveTenantSelectedLeaseId({
+            leases: normalizedLeases,
+            profileId: profile.id,
+            queryLeaseId:
+              typeof window !== "undefined"
+                ? new URLSearchParams(window.location.search).get("leaseId")
+                : null,
+          })
+        );
       } catch (error) {
         console.error("Tenant dashboard error:", error);
       } finally {
@@ -424,6 +477,33 @@ export default function TenantDashboardPage() {
 
   const selectedLease =
     leases.find((lease) => lease.lease_id === selectedLeaseId) || leases[0];
+
+  useEffect(() => {
+    if (!profileId || !selectedLease?.lease_id) return;
+
+    try {
+      window.localStorage.setItem(
+        getTenantSelectedLeaseStorageKey(profileId),
+        selectedLease.lease_id
+      );
+    } catch (error) {
+      console.error("Tenant selected lease persist error:", error);
+    }
+  }, [profileId, selectedLease?.lease_id]);
+
+  function handleLeaseSelection(leaseId: string) {
+    if (!leases.some((lease) => lease.lease_id === leaseId)) return;
+
+    setSelectedLeaseId(leaseId);
+    setNotificationOpen(false);
+    setProfileOpen(false);
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("leaseId", leaseId);
+      window.history.replaceState({}, "", `/tenant?${params.toString()}`);
+    }
+  }
 
   const selectedPropertyContact =
     propertyContacts.find(
@@ -1358,15 +1438,7 @@ export default function TenantDashboardPage() {
     </p>
     <p className="mt-0.5 max-w-[360px] truncate text-[12px] font-medium text-zinc-400">
 
-      {selectedLease
-
-        ? `${selectedLease.street_address}${
-
-            selectedLease.unit_name ? `, Unit ${selectedLease.unit_name}` : ""
-
-          }, ${selectedLease.city}, ${selectedLease.state_name} ${selectedLease.zip}`
-
-        : "Property"}
+      {getLeaseAddressLabel(selectedLease)}
 
     </p>
 
@@ -1374,6 +1446,27 @@ export default function TenantDashboardPage() {
 </div>
 
         <div className="flex items-center gap-5">
+          {leases.length > 1 && (
+            <div className="hidden min-w-[220px] sm:block">
+              <label className="sr-only" htmlFor="tenant-lease-switcher">
+                Select rental property
+              </label>
+              <select
+                id="tenant-lease-switcher"
+                value={selectedLease?.lease_id || ""}
+                onChange={(event) => handleLeaseSelection(event.target.value)}
+                className="h-10 max-w-[280px] rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-950 outline-none transition hover:bg-zinc-50 focus:border-[#B9476D] focus:ring-4 focus:ring-[#B9476D]/10"
+              >
+                {leases.map((lease) => (
+                  <option key={lease.tenant_access_id} value={lease.lease_id}>
+                    {lease.property_label}
+                    {lease.unit_name ? ` · Unit ${lease.unit_name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="relative">
             <button
               onClick={() => {

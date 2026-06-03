@@ -202,11 +202,22 @@ export default function AcceptInviteClient() {
         tenantId: verifiedInvite?.id || null,
       });
 
+      const acceptedLeaseId =
+        data?.lease_id ||
+        data?.leaseId ||
+        data?.tenant_access?.lease_id ||
+        verifiedInvite?.lease_id ||
+        "";
+
       setStatus("accepted");
       setMessage("Invitation accepted. Redirecting...");
 
       setTimeout(() => {
-        router.push("/tenant");
+        router.push(
+          acceptedLeaseId
+            ? `/tenant?leaseId=${encodeURIComponent(acceptedLeaseId)}`
+            : "/tenant"
+        );
       }, 900);
     } catch (error) {
       console.warn("Invite accept warning:", error);

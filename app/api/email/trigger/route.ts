@@ -148,7 +148,9 @@ async function getTenantForLease(tenantId?: string | null, leaseId?: string | nu
 async function getTenantAcceptedContext(
   profile: ProfileRow,
   tenantId?: string | null,
-  tenantAccessId?: string | null
+  tenantAccessId?: string | null,
+  propertyId?: string | null,
+  leaseId?: string | null
 ) {
   let accessQuery = emailSupabaseAdmin
     .from("tenant_access")
@@ -156,6 +158,8 @@ async function getTenantAcceptedContext(
     .eq("tenant_profile_id", profile.id);
 
   if (tenantAccessId) accessQuery = accessQuery.eq("id", tenantAccessId);
+  if (propertyId) accessQuery = accessQuery.eq("property_id", propertyId);
+  if (leaseId) accessQuery = accessQuery.eq("lease_id", leaseId);
 
   const { data: accessRows } = await accessQuery.limit(10);
   const access = ((accessRows || []) as TenantAccessRow[])[0] || null;
@@ -254,7 +258,9 @@ async function handleTenantInviteAccepted(profile: ProfileRow, body: TriggerRequ
   const context = await getTenantAcceptedContext(
     profile,
     body.tenantId,
-    body.tenantAccessId
+    body.tenantAccessId,
+    body.propertyId,
+    body.leaseId
   );
 
   if (!context || !profile.email) {
