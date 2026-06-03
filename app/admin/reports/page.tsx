@@ -1,270 +1,117 @@
-export const dynamic = "force-dynamic";
+import { CreditCard, DollarSign } from "lucide-react";
+
 import {
-  DollarSign,
-  Home,
-  Users,
-  FileText,
-  LifeBuoy,
-  TrendingUp,
-  CalendarDays,
-} from "lucide-react";
+  AdminPageHeader,
+  AdminTable,
+  DateCell,
+  KpiCard,
+  Section,
+  StatusBadge,
+  TableCell,
+} from "@/components/admin/AdminCommandComponents";
+import {
+  formatCurrencyCount,
+  getAdminOverviewData,
+  readable,
+} from "@/lib/admin/adminMetrics";
 
-import { supabase } from "@/lib/supabase";
+export const dynamic = "force-dynamic";
 
-const AVENUEBOARD_SETUP_FEE = 89;
+export default async function PaymentsPage() {
+  const data = await getAdminOverviewData();
 
-async function getReportsData() {
-  const [profilesResult, propertiesResult, leasesResult, supportResult] =
-    await Promise.all([
-      supabase.from("profiles").select("*"),
-      supabase.from("properties").select("*"),
-      supabase.from("leases").select("*"),
-      supabase.from("support_requests").select("*"),
-    ]);
-
-  const profiles = profilesResult.data || [];
-  const properties = propertiesResult.data || [];
-  const leases = leasesResult.data || [];
-  const support = supportResult.data || [];
-
-  const activeLeases = leases.filter(
-    (lease: any) => lease.lease_status === "active"
-  );
-
-  const monthlyRentUnderManagement = activeLeases.reduce(
-    (sum: number, lease: any) => sum + Number(lease.monthly_rent || 0),
-    0
-  );
-
-  const annualRentUnderManagement = monthlyRentUnderManagement * 12;
-  const estimatedRevenue = activeLeases.length * AVENUEBOARD_SETUP_FEE;
-
-  const resolvedSupport = support.filter(
-    (item: any) => item.status === "resolved" || item.status === "closed"
-  );
-
-  return {
-    profiles,
-    properties,
-    leases,
-    support,
-    activeLeases,
-    monthlyRentUnderManagement,
-    annualRentUnderManagement,
-    estimatedRevenue,
-    resolvedSupport,
-  };
-}
-
-export default async function ReportsPage() {
-  const data = await getReportsData();
-
-  return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <p className="text-sm font-medium text-neutral-500">Reports</p>
-
-          <h1 className="mt-3 text-[42px] font-semibold leading-none tracking-[-0.04em] text-neutral-950">
-            Growth & Revenue
-          </h1>
-
-          <p className="mt-5 max-w-3xl text-[15px] leading-7 text-neutral-500">
-            Track key metrics across users, properties, leases, rent handled,
-            support, and estimated AvenueBoard revenue.
-          </p>
-        </div>
-
-        <div className="hidden items-center gap-2 rounded-2xl border border-[#e7dfe2] bg-white px-4 py-3 text-sm text-neutral-600 shadow-sm md:flex">
-          <CalendarDays size={16} className="text-[#CA6180]" />
-          Current Snapshot
-        </div>
-      </div>
-
-      {/* MAIN REVENUE HERO */}
-      <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7 shadow-sm">
-        <div className="grid gap-8 xl:grid-cols-[0.8fr_1.2fr]">
-          <div>
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-              <DollarSign size={24} />
-            </div>
-
-            <p className="mt-6 text-sm text-neutral-500">
-              AvenueBoard Revenue
-            </p>
-
-            <h2 className="mt-3 text-[56px] font-semibold leading-none tracking-[-0.05em] text-neutral-950">
-              {formatCurrency(data.estimatedRevenue)}
-            </h2>
-
-            <p className="mt-5 text-sm text-neutral-400">
-              Estimated from active leases × ${AVENUEBOARD_SETUP_FEE}
-            </p>
-          </div>
-
-          <div className="flex min-h-[180px] items-center justify-center rounded-[28px] bg-gradient-to-br from-[#CA6180]/10 via-white to-[#CA6180]/5">
-            <div className="text-center">
-              <p className="text-sm font-medium text-[#CA6180]">
-                Revenue trend chart
-              </p>
-              <p className="mt-2 text-sm text-neutral-400">
-                Coming after reporting events are finalized
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* RENT + SNAPSHOT */}
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7 shadow-sm">
-          <div className="flex items-center justify-between border-b border-[#f0e4e8] pb-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-                <DollarSign size={20} />
-              </div>
-
-              <h2 className="text-xl font-semibold tracking-[-0.03em]">
-                Rent Handled
-              </h2>
-            </div>
-          </div>
-
-          <div className="mt-7 grid gap-6 md:grid-cols-2">
-            <LargeMetric
-              label="Monthly Rent Handled"
-              value={formatCurrency(data.monthlyRentUnderManagement)}
-            />
-
-            <LargeMetric
-              label="Annual Rent Handled"
-              value={formatCurrency(data.annualRentUnderManagement)}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7 shadow-sm">
-          <div className="flex items-center gap-3 border-b border-[#f0e4e8] pb-5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-              <TrendingUp size={20} />
-            </div>
-
-            <h2 className="text-xl font-semibold tracking-[-0.03em]">
-              Operational Snapshot
-            </h2>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            <RowMetric label="Active Leases" value={data.activeLeases.length} />
-            <RowMetric label="Support Cases" value={data.support.length} />
-            <RowMetric label="Resolved Cases" value={data.resolvedSupport.length} />
-          </div>
-        </div>
-      </div>
-
-      {/* SMALL CARDS */}
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Users} label="Total Users" value={data.profiles.length} />
-        <StatCard
-          icon={Home}
-          label="Enrolled Properties"
-          value={data.properties.length}
-        />
-        <StatCard icon={FileText} label="Total Leases" value={data.leases.length} />
-        <StatCard icon={LifeBuoy} label="Support Cases" value={data.support.length} />
-      </div>
-
-      {/* TIMELINE */}
-      <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-            <CalendarDays size={20} />
-          </div>
-
-          <div>
-            <h2 className="text-xl font-semibold tracking-[-0.03em]">
-              Reporting Timeline
-            </h2>
-
-            <p className="mt-1 text-sm text-neutral-500">
-              Charts and trends over time will be available once reporting
-              events are finalized.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-7 grid gap-4 md:grid-cols-3">
-          <ReportBox title="Daily View" />
-          <ReportBox title="Monthly View" />
-          <ReportBox title="Yearly View" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LargeMetric({ label, value }: { label: string; value: any }) {
   return (
     <div>
-      <p className="text-sm text-neutral-500">{label}</p>
+      <AdminPageHeader
+        eyebrow="Payments"
+        title="Payment Operations"
+        description="Operational payment visibility using existing rent payment and lease data only. No platform revenue is fabricated."
+      />
 
-      <h3 className="mt-4 text-[38px] font-semibold leading-none tracking-[-0.04em] text-neutral-950">
-        {value}
-      </h3>
-    </div>
-  );
-}
+      <div className="space-y-6 p-6">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <KpiCard
+            label="Rent Under Management"
+            value={formatCurrencyCount(data.rentUnderManagement)}
+            helper="Active leases"
+            tone="blue"
+          />
+          <KpiCard
+            label="Successful Payments"
+            value={data.counts.paymentsSuccessful}
+            tone="green"
+          />
+          <KpiCard
+            label="Pending Payments"
+            value={data.counts.paymentsPending}
+            tone="amber"
+          />
+          <KpiCard label="Failed Payments" value={data.counts.paymentsFailed} tone="red" />
+          <KpiCard label="Total Payments" value={data.counts.paymentsTotal} />
+        </div>
 
-function RowMetric({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl border border-[#f0e4e8] bg-[#fbf9fa] px-5 py-4">
-      <p className="text-sm text-neutral-500">{label}</p>
-      <p className="text-xl font-semibold text-neutral-950">{value}</p>
-    </div>
-  );
-}
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500">
+              <DollarSign size={17} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-950">
+                Platform revenue tracking not configured.
+              </p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                This screen shows rent payment operations only. AvenueBoard fee
+                revenue should be added after Stripe platform fee and payout
+                reporting are modeled.
+              </p>
+            </div>
+          </div>
+        </div>
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: any;
-  label: string;
-  value: any;
-}) {
-  return (
-    <div className="rounded-[28px] border border-[#e7dfe2] bg-white p-6 shadow-sm">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-        <Icon size={20} />
+        <Section
+          title="Recent Payments"
+          description="Latest rent payment rows from the existing rent_payments table."
+        >
+          <AdminTable
+            columns={["Payment", "Lease", "Period", "Status", "Paid At", "Receipt"]}
+            empty={data.recent.payments.length === 0}
+            rows={data.recent.payments.map((payment) => (
+              <tr key={String(payment.id)}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={15} className="text-zinc-400" />
+                    <span className="font-semibold">
+                      ${Number(payment.amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell muted>{String(payment.lease_id || "-").slice(0, 8)}</TableCell>
+                <TableCell muted>{readable(payment.period_label)}</TableCell>
+                <TableCell>
+                  <StatusBadge value={payment.status} />
+                </TableCell>
+                <TableCell>
+                  <DateCell value={payment.paid_at || payment.created_at} />
+                </TableCell>
+                <TableCell>
+                  {payment.receipt_url ? (
+                    <a
+                      href={String(payment.receipt_url)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-xs text-zinc-400">-</span>
+                  )}
+                </TableCell>
+              </tr>
+            ))}
+          />
+        </Section>
       </div>
-
-      <p className="mt-6 text-sm text-neutral-500">{label}</p>
-
-      <h2 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950">
-        {value}
-      </h2>
     </div>
   );
-}
-
-function ReportBox({ title }: { title: string }) {
-  return (
-    <div className="rounded-[24px] border border-dashed border-[#e7dfe2] bg-[#fbf9fa] p-8 text-center">
-      <CalendarDays size={22} className="mx-auto text-[#CA6180]" />
-
-      <p className="mt-4 font-semibold text-neutral-900">{title}</p>
-
-      <p className="mt-2 text-sm text-neutral-500">Coming soon</p>
-    </div>
-  );
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
 }

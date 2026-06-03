@@ -1,190 +1,198 @@
-import Link from "next/link";
-import { Building2, FileText, LifeBuoy, UserRound } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import {
+  Activity,
+  Building2,
+  FileText,
+  LifeBuoy,
+  Mail,
+  UserRound,
+} from "lucide-react";
 
-async function getDashboardData() {
-  const [profiles, properties, leases, support] = await Promise.all([
-    supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-    supabase.from("properties").select("*").order("created_at", { ascending: false }),
-    supabase.from("leases").select("*").order("created_at", { ascending: false }),
-    supabase.from("support_requests").select("*").order("created_at", { ascending: false }),
-  ]);
+import {
+  AdminPageHeader,
+  DateCell,
+  KpiCard,
+  RecordLink,
+  Section,
+  StatusBadge,
+  TableCell,
+  AdminTable,
+  getRecordString,
+} from "@/components/admin/AdminCommandComponents";
+import {
+  formatCurrencyCount,
+  getAdminOverviewData,
+  readable,
+} from "@/lib/admin/adminMetrics";
 
-  const activity = [
-    ...(support.data || []).map((x: any) => ({
-      type: "Support",
-      title: x.subject || "Support request opened",
-      subtitle: x.email || "No email",
-      date: x.created_at,
-      href: `/admin/support/${x.id}`,
-      icon: LifeBuoy,
-    })),
-    ...(properties.data || []).map((x: any) => ({
-      type: "Property",
-      title: x.property_label || x.street_address || "Property added",
-      subtitle: `${x.city || "-"}, ${x.state_name || "-"}`,
-      date: x.created_at,
-      href: "/admin/audience",
-      icon: Building2,
-    })),
-    ...(leases.data || []).map((x: any) => ({
-      type: "Lease",
-      title: `${capitalize(x.lease_status || "active")} lease`,
-      subtitle: `$${Number(x.monthly_rent || 0).toLocaleString()}/month`,
-      date: x.created_at,
-      href: "/admin/audience",
-      icon: FileText,
-    })),
-    ...(profiles.data || []).map((x: any) => ({
-      type: "Profile",
-      title: x.display_name || x.full_name || x.email || "Profile created",
-      subtitle: x.email || "No email",
-      date: x.created_at,
-      href: `/admin/audience/${x.id}`,
-      icon: UserRound,
-    })),
-  ]
-    .filter((x) => x.date)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 8);
-
-  return {
-    profiles: profiles.data?.length || 0,
-    properties: properties.data?.length || 0,
-    leases: leases.data?.length || 0,
-    support: support.data?.length || 0,
-    activity,
-  };
-}
+export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const data = await getDashboardData();
+  const data = await getAdminOverviewData();
+
+  const platformActivity = [
+    ...data.recent.activityLogs.map((row) => ({
+      href: "/admin/ideas",
+      icon: Activity,
+      title: getRecordString(row, ["title", "activity_type"], "Activity logged"),
+      subtitle: readable(row.description, readable(row.activity_type)),
+      date: row.created_at,
+    })),
+    ...data.recent.properties.map((row) => ({
+      href: "/admin/audience",
+      icon: Building2,
+      title: getRecordString(row, ["property_label", "street_address"], "Property created"),
+      subtitle: `${readable(row.city)} ${readable(row.state_name)}`,
+      date: row.created_at,
+    })),
+    ...data.recent.leases.map((row) => ({
+      href: "/admin/audience",
+      icon: FileText,
+      title: `${readable(row.lease_status, "lease")} lease`,
+      subtitle: `$${Number(row.monthly_rent || 0).toLocaleString()}/month`,
+      date: row.created_at,
+    })),
+    ...data.recent.profiles.map((row) => ({
+      href: `/admin/audience/${row.id}`,
+      icon: UserRound,
+      title: getRecordString(row, ["display_name", "full_name", "email"], "Profile created"),
+      subtitle: getRecordString(row, ["email", "role", "user_type"], "No email"),
+      date: row.created_at,
+    })),
+  ]
+    .filter((item) => item.date)
+    .sort(
+      (a, b) =>
+        new Date(String(b.date)).getTime() - new Date(String(a.date)).getTime()
+    )
+    .slice(0, 8);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7">
-        <div className="flex items-center justify-between gap-8">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#CA6180]">
-              AvenueBoard Operations
-            </p>
+    <div>
+      <AdminPageHeader
+        eyebrow="Operations"
+        title="Overview"
+        description="Real-time operational visibility across users, properties, leases, payments, support, communications, and system activity."
+      />
 
-            <h1 className="mt-2 text-[42px] font-semibold leading-none tracking-[-0.04em]">
-              Command Center
-            </h1>
-          </div>
-
-          <p className="max-w-2xl text-sm leading-6 text-neutral-500">
-            Internal workspace for support, landlord management, reporting, and
-            platform operations.
-          </p>
+      <div className="space-y-6 p-6">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <KpiCard label="Total Landlords" value={data.counts.landlords} />
+          <KpiCard label="Total Tenants" value={data.counts.tenants} />
+          <KpiCard label="Total Properties" value={data.counts.properties} />
+          <KpiCard label="Total Leases" value={data.counts.leases} />
+          <KpiCard
+            label="Active Tenant Access"
+            value={data.counts.activeTenantAccess}
+            tone="green"
+          />
+          <KpiCard
+            label="Rent Under Management"
+            value={formatCurrencyCount(data.rentUnderManagement)}
+            helper="Active leases"
+            tone="blue"
+          />
+          <KpiCard label="Total Payments" value={data.counts.paymentsTotal} />
+          <KpiCard
+            label="Open Support Cases"
+            value={data.counts.openSupport}
+            tone="amber"
+          />
+          <KpiCard label="Emails Sent" value={data.counts.emailsSent} tone="green" />
+          <KpiCard label="Emails Failed" value={data.counts.emailsFailed} tone="red" />
         </div>
 
-        <div className="mt-7 grid gap-4 md:grid-cols-4">
-          <Stat label="Properties" value={data.properties} />
-          <Stat label="Profiles" value={data.profiles} />
-          <Stat label="Leases" value={data.leases} />
-          <Stat label="Support Cases" value={data.support} />
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7">
-          <h2 className="text-2xl font-semibold tracking-[-0.03em]">
-            Recent Activity
-          </h2>
-
-          <p className="mt-2 text-sm text-neutral-500">
-            Latest operational events across the platform.
-          </p>
-
-          <div className="mt-6 space-y-3">
-            {data.activity.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#e7dfe2] py-14 text-center text-sm text-neutral-500">
-                No recent activity yet.
-              </div>
-            ) : (
-              data.activity.map((item: any, index: number) => {
-                const Icon = item.icon;
-
-                return (
-                  <Link
-                    key={`${item.type}-${index}`}
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <Section
+            title="Recent Platform Activity"
+            description="Latest records and activity logs across the platform."
+          >
+            <div className="space-y-2">
+              {platformActivity.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-zinc-200 py-10 text-center text-sm text-zinc-500">
+                  No platform activity found.
+                </div>
+              ) : (
+                platformActivity.map((item, index) => (
+                  <RecordLink
+                    key={`${item.title}-${index}`}
                     href={item.href}
-                    className="flex items-center justify-between rounded-2xl border border-[#f0e4e8] p-4 transition hover:bg-[#CA6180]/5"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-                        <Icon size={18} />
-                      </div>
+                    icon={item.icon}
+                    title={item.title}
+                    subtitle={`${item.subtitle} · ${new Date(
+                      String(item.date)
+                    ).toLocaleString()}`}
+                  />
+                ))
+              )}
+            </div>
+          </Section>
 
-                      <div>
-                        <p className="font-semibold text-neutral-950">
-                          {item.title}
-                        </p>
-                        <p className="mt-1 text-sm text-neutral-500">
-                          {item.subtitle}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-xs font-medium text-[#CA6180]">
-                        {item.type}
-                      </p>
-                      <p className="mt-1 text-xs text-neutral-400">
-                        {formatDate(item.date)}
-                      </p>
-                    </div>
-                  </Link>
-                );
-              })
-            )}
-          </div>
+          <Section
+            title="Recent Support Activity"
+            description="Newest support cases requiring operational awareness."
+          >
+            <AdminTable
+              columns={["Case", "Requester", "Status", "Priority"]}
+              empty={data.recent.support.length === 0}
+              rows={data.recent.support.map((row) => (
+                <tr key={String(row.id)}>
+                  <TableCell>
+                    <a
+                      href={`/admin/support/${row.id}`}
+                      className="font-semibold hover:text-blue-600"
+                    >
+                      {getRecordString(row, ["subject", "title"], "Support request")}
+                    </a>
+                  </TableCell>
+                  <TableCell muted>{getRecordString(row, ["email"], "No email")}</TableCell>
+                  <TableCell>
+                    <StatusBadge value={row.status || "open"} />
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge value={row.priority || "normal"} />
+                  </TableCell>
+                </tr>
+              ))}
+            />
+          </Section>
         </div>
 
-        <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#CA6180]">
-            Platform Health
-          </p>
-
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
-            Snapshot
-          </h2>
-
-          <div className="mt-6 space-y-4">
-            <Health label="Active Properties" value={data.properties} />
-            <Health label="Total Profiles" value={data.profiles} />
-            <Health label="Support Requests" value={data.support} />
-          </div>
-        </div>
+        <Section
+          title="Recent Email Activity"
+          description="Latest email queue events from Wave 1 communications."
+          action={
+            <a
+              href="/admin/marketing"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+            >
+              Email Tracking
+            </a>
+          }
+        >
+          <AdminTable
+            columns={["Event Type", "Recipient", "Status", "Sent", "Error"]}
+            empty={data.recent.emailEvents.length === 0}
+            rows={data.recent.emailEvents.map((row) => (
+              <tr key={String(row.id)}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Mail size={15} className="text-zinc-400" />
+                    <span className="font-medium">{readable(row.event_type)}</span>
+                  </div>
+                </TableCell>
+                <TableCell muted>{readable(row.recipient_email)}</TableCell>
+                <TableCell>
+                  <StatusBadge value={row.status} />
+                </TableCell>
+                <TableCell>
+                  <DateCell value={row.sent_at || row.failed_at || row.created_at} />
+                </TableCell>
+                <TableCell muted>{readable(row.error_message, "-")}</TableCell>
+              </tr>
+            ))}
+          />
+        </Section>
       </div>
     </div>
   );
-}
-
-function Stat({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="rounded-[24px] border border-[#eadde1] bg-[#fbf9fa] p-5">
-      <p className="text-sm text-neutral-500">{label}</p>
-      <h2 className="mt-3 text-4xl font-semibold tracking-tight">{value}</h2>
-    </div>
-  );
-}
-
-function Health({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl border border-[#f0e4e8] bg-[#fbf9fa] px-5 py-4">
-      <p className="text-sm text-neutral-500">{label}</p>
-      <p className="text-xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString();
 }

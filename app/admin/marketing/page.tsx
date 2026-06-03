@@ -1,79 +1,213 @@
-import { Megaphone, TrendingUp, Users } from "lucide-react";
+"use client";
 
-export default function MarketingAnalyticsPage() {
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Mail } from "lucide-react";
+
+import {
+  AdminPageHeader,
+  AdminTable,
+  DateCell,
+  KpiCard,
+  Section,
+  StatusBadge,
+  TableCell,
+} from "@/components/admin/AdminCommandComponents";
+import { supabase } from "@/lib/supabase";
+import { readable } from "@/lib/admin/adminMetrics";
+
+type EmailEvent = {
+  id: string;
+  event_type: string | null;
+  recipient_email: string | null;
+  related_property_id: string | null;
+  related_lease_id: string | null;
+  status: string | null;
+  sent_at: string | null;
+  failed_at: string | null;
+  provider_message_id: string | null;
+  error_message: string | null;
+  created_at: string | null;
+};
+
+type Counts = {
+  sent: number;
+  failed: number;
+  pending: number;
+  skipped: number;
+};
+
+export default function EmailTrackingPage() {
+  const [events, setEvents] = useState<EmailEvent[]>([]);
+  const [counts, setCounts] = useState<Counts>({
+    sent: 0,
+    failed: 0,
+    pending: 0,
+    skipped: 0,
+  });
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadEmailEvents() {
+      setLoading(true);
+      setError("");
+
+      const [{ data, error: eventError }, sent, failed, pending, skipped] =
+        await Promise.all([
+          supabase
+            .from("email_events")
+            .select(
+              "id, event_type, recipient_email, related_property_id, related_lease_id, status, sent_at, failed_at, provider_message_id, error_message, created_at"
+            )
+            .order("created_at", { ascending: false })
+            .limit(100),
+          countEmailStatus("sent"),
+          countEmailStatus("failed"),
+          countEmailStatus("pending"),
+          countEmailStatus("skipped"),
+        ]);
+
+      if (eventError) {
+        setError(eventError.message);
+        setEvents([]);
+      } else {
+        setEvents((data || []) as EmailEvent[]);
+      }
+
+      setCounts({ sent, failed, pending, skipped });
+      setLoading(false);
+    }
+
+    loadEmailEvents();
+  }, []);
+
+  const eventTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(events.map((event) => event.event_type).filter(Boolean))
+      ) as string[],
+    [events]
+  );
+
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => {
+      const statusMatch =
+        statusFilter === "all" || event.status === statusFilter;
+      const typeMatch = typeFilter === "all" || event.event_type === typeFilter;
+      return statusMatch && typeMatch;
+    });
+  }, [events, statusFilter, typeFilter]);
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-[32px] border border-[#e7dfe2] bg-white p-7">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#CA6180]">
-          Marketing Analytics
-        </p>
+    <div>
+      <AdminPageHeader
+        eyebrow="Communications"
+        title="Email Tracking"
+        description="Monitor Wave 1 onboarding emails, delivery status, queued reminders, provider IDs, and failures."
+      />
 
-        <h1 className="mt-2 text-[40px] font-semibold leading-none tracking-[-0.04em] text-neutral-950">
-          Campaign Performance
-        </h1>
+      <div className="space-y-6 p-6">
+        <div className="grid gap-3 md:grid-cols-4">
+          <KpiCard label="Sent" value={{ value: counts.sent }} tone="green" />
+          <KpiCard label="Failed" value={{ value: counts.failed }} tone="red" />
+          <KpiCard label="Pending" value={{ value: counts.pending }} tone="amber" />
+          <KpiCard label="Skipped" value={{ value: counts.skipped }} />
+        </div>
 
-        <p className="mt-4 max-w-3xl text-[14px] leading-6 text-neutral-500">
-          Marketing tracking and acquisition analytics will be enabled once
-          AvenueBoard begins onboarding production landlords and tenants.
-        </p>
-      </div>
+        {error ? (
+          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle size={17} />
+            email_events unavailable: {error}
+          </div>
+        ) : null}
 
-      <div className="grid gap-5 md:grid-cols-3">
-        <PlaceholderCard
-          icon={Megaphone}
-          title="Campaign Tracking"
-          description="Track ad campaigns, spend, impressions, and conversions."
-        />
+        <Section
+          title="Recent Email Events"
+          description="Showing the latest 100 email events. Use filters to isolate failures or a specific lifecycle email."
+          action={
+            <div className="flex gap-2">
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 outline-none"
+              >
+                <option value="all">All statuses</option>
+                <option value="sent">Sent</option>
+                <option value="failed">Failed</option>
+                <option value="pending">Pending</option>
+                <option value="skipped">Skipped</option>
+              </select>
 
-        <PlaceholderCard
-          icon={Users}
-          title="User Acquisition"
-          description="Analyze landlord and tenant signup growth over time."
-        />
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 outline-none"
+              >
+                <option value="all">All event types</option>
+                {eventTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {readable(type)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+        >
+          <AdminTable
+            columns={[
+              "Event Type",
+              "Recipient",
+              "Property",
+              "Lease",
+              "Status",
+              "Sent At",
+              "Provider Message ID",
+              "Error",
+            ]}
+            empty={!loading && filteredEvents.length === 0}
+            rows={filteredEvents.map((event) => (
+              <tr key={event.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Mail size={15} className="text-zinc-400" />
+                    <span className="font-medium">{readable(event.event_type)}</span>
+                  </div>
+                </TableCell>
+                <TableCell muted>{readable(event.recipient_email)}</TableCell>
+                <TableCell muted>{shortId(event.related_property_id)}</TableCell>
+                <TableCell muted>{shortId(event.related_lease_id)}</TableCell>
+                <TableCell>
+                  <StatusBadge value={event.status} />
+                </TableCell>
+                <TableCell>
+                  <DateCell value={event.sent_at || event.failed_at} />
+                </TableCell>
+                <TableCell muted>{readable(event.provider_message_id)}</TableCell>
+                <TableCell muted>{readable(event.error_message)}</TableCell>
+              </tr>
+            ))}
+          />
 
-        <PlaceholderCard
-          icon={TrendingUp}
-          title="Conversion Analytics"
-          description="Measure onboarding performance and conversion funnels."
-        />
-      </div>
-
-      <div className="rounded-[32px] border border-dashed border-[#e7dfe2] bg-[#fbf9fa] p-16 text-center">
-        <p className="text-lg font-semibold text-neutral-900">
-          Marketing analytics module coming soon
-        </p>
-
-        <p className="mt-3 text-sm text-neutral-500">
-          This section will activate after initial production rollout and
-          customer acquisition begins.
-        </p>
+          {loading ? (
+            <p className="mt-3 text-xs text-zinc-500">Loading email events...</p>
+          ) : null}
+        </Section>
       </div>
     </div>
   );
 }
 
-function PlaceholderCard({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: any;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-[28px] border border-[#e7dfe2] bg-white p-6">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#CA6180]/10 text-[#CA6180]">
-        <Icon size={22} />
-      </div>
+async function countEmailStatus(status: string) {
+  const { count } = await supabase
+    .from("email_events")
+    .select("*", { count: "exact", head: true })
+    .eq("status", status);
 
-      <h2 className="mt-6 text-xl font-semibold tracking-tight text-neutral-950">
-        {title}
-      </h2>
+  return count || 0;
+}
 
-      <p className="mt-3 text-sm leading-6 text-neutral-500">
-        {description}
-      </p>
-    </div>
-  );
+function shortId(value: string | null) {
+  return value ? value.slice(0, 8) : "-";
 }
