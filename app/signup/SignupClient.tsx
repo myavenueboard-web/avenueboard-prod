@@ -68,6 +68,9 @@ export default function SignupClient() {
         emailRedirectTo,
         data: {
           full_name: fullName.trim(),
+          account_type: redirectPath.includes("/tenant/accept-invite")
+            ? "tenant"
+            : "landlord",
         },
       },
     });

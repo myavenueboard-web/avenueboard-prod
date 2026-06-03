@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 
 export async function getOrCreateProfile() {
   const {
@@ -47,6 +48,12 @@ export async function getOrCreateProfile() {
 
   if (accountType === "landlord") {
     await ensureUserRole(newProfile.id, "landlord");
+    await triggerEmailEvent({ trigger: "landlord_signup" });
+  }
+
+  if (accountType === "tenant") {
+    await ensureUserRole(newProfile.id, "tenant");
+    await triggerEmailEvent({ trigger: "tenant_signup" });
   }
 
   return newProfile;

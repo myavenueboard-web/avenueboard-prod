@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 
 type InviteStatus =
   | "loading"
@@ -41,6 +42,9 @@ export default function AcceptInviteClient() {
   const [message, setMessage] = useState("Preparing your invitation...");
   const [token, setToken] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [verifiedInvite, setVerifiedInvite] = useState<VerifiedInvite | null>(
+    null
+  );
   const [currentEmail, setCurrentEmail] = useState("");
   const [accepting, setAccepting] = useState(false);
 
@@ -85,6 +89,7 @@ export default function AcceptInviteClient() {
         const accountExists = !!verifyData.account_exists;
 
         setInviteEmail(tenantEmail);
+        setVerifiedInvite(invite);
 
         const {
           data: { user },
@@ -189,6 +194,13 @@ export default function AcceptInviteClient() {
       if (typeof window !== "undefined") {
         localStorage.removeItem("avenueboard_tenant_invite_token");
       }
+
+      await triggerEmailEvent({
+        trigger: "tenant_invite_accepted",
+        propertyId: verifiedInvite?.property_id || null,
+        leaseId: verifiedInvite?.lease_id || null,
+        tenantId: verifiedInvite?.id || null,
+      });
 
       setStatus("accepted");
       setMessage("Invitation accepted. Redirecting...");

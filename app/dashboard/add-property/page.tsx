@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { createActivity } from "@/lib/createActivity";
+import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 
 import StepIndicator from "../../components/add-property/StepIndicator";
 import PropertyStep from "../../components/add-property/PropertyStep";
@@ -200,6 +201,11 @@ export default function AddPropertyPage() {
 
       if (propertyError) throw propertyError;
 
+      await triggerEmailEvent({
+        trigger: "property_created",
+        propertyId: property.id,
+      });
+
       const { data: lease, error: leaseError } = await supabase
         .from("leases")
         .insert({
@@ -288,16 +294,34 @@ export default function AddPropertyPage() {
           }
         });
 
-        await supabase
-          .from("lease_tenants")
-          .update({
-            invite_status: "sent",
-            invite_sent_at: new Date().toISOString(),
-          })
-          .in(
-            "id",
-            tenantInvites.map((tenant) => tenant.id)
+        const sentTenantInvites = tenantInvites.filter((_, index) => {
+          const result = inviteResults[index];
+          return result.status === "fulfilled" && !result.value.error;
+        });
+
+        if (sentTenantInvites.length > 0) {
+          await supabase
+            .from("lease_tenants")
+            .update({
+              invite_status: "sent",
+              invite_sent_at: new Date().toISOString(),
+            })
+            .in(
+              "id",
+              sentTenantInvites.map((tenant) => tenant.id)
+            );
+
+          await Promise.all(
+            sentTenantInvites.map((tenant) =>
+              triggerEmailEvent({
+                trigger: "tenant_invite_created",
+                propertyId: property.id,
+                leaseId: lease.id,
+                tenantId: tenant.id,
+              })
+            )
           );
+        }
       }
 
       if (additionalAmounts.length > 0) {

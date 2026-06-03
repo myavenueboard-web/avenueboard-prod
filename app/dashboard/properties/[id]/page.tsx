@@ -16,6 +16,7 @@ import {
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 
 type TenantRecord = {
   invite_token: string | null;
@@ -431,6 +432,13 @@ if (!tenant.invite_token) {
     activity_type: "tenant_invite_resent",
     title: "Tenant invite sent",
     description: `Invite sent to ${tenant.email}`,
+  });
+
+  await triggerEmailEvent({
+    trigger: "tenant_invite_created",
+    propertyId: property.id,
+    leaseId: property.leases?.[0]?.id || null,
+    tenantId: tenant.id,
   });
 
   return true;
