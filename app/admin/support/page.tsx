@@ -92,13 +92,21 @@ export default function SupportOperationsPage() {
         title="Support Queue"
         description="Salesforce-style case management for landlord and tenant support. Prioritize open cases, assignment, and resolution quality."
         action={
-          <Link
-            href="/admin/support/new"
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-950 px-4 text-xs font-semibold text-white hover:bg-zinc-800"
-          >
-            <Plus size={15} />
-            New Case
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/admin/support/tickets"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 px-4 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+            >
+              AI Tickets
+            </Link>
+            <Link
+              href="/admin/support/new"
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-950 px-4 text-xs font-semibold text-white hover:bg-zinc-800"
+            >
+              <Plus size={15} />
+              New Case
+            </Link>
+          </div>
         }
       />
 

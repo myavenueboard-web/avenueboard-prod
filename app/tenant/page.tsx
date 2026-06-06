@@ -38,6 +38,7 @@ import {
   ViewAllNotesModal,
   ViewMoreActivitiesModal,
 } from "@/components/tenant/TenantDashboardComponents";
+import SupportChat from "@/components/support/SupportChat";
 
 type SupabaseLikeError = {
   message?: string;
@@ -279,6 +280,7 @@ export default function TenantDashboardPage() {
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>(
     []
   );
@@ -547,6 +549,59 @@ export default function TenantDashboardPage() {
       (payment) => payment.lease_id === selectedLease.lease_id
     );
   }, [rentPayments, selectedLease]);
+
+  const latestSelectedPayment = selectedRentPayments[0] || null;
+
+  const supportChatContext = useMemo(
+    () => ({
+      userName: userInfo.name,
+      tenantName: userInfo.name,
+      role: "tenant",
+      tenantStatus: selectedLease ? "active" : "pending",
+      currentPage: "tenant_dashboard",
+      productCapabilities: {
+        shared_notes: true,
+        documents: true,
+        lease_status: true,
+        credit_building: true,
+        avenue_perks: true,
+        support_tickets: true,
+        payments: true,
+      },
+      tenantAccessId: selectedLease?.tenant_access_id || null,
+      propertyId: selectedLease?.property_id || null,
+      leaseId: selectedLease?.lease_id || null,
+      propertyLabel: selectedLease?.property_label || null,
+      leaseStatus: selectedLease ? "active" : null,
+      monthlyRent: selectedLease ? Number(selectedLease.monthly_rent || 0) : null,
+      rentAmount: selectedLease
+        ? `$${Number(selectedLease.monthly_rent || 0).toLocaleString()}`
+        : null,
+      dueDate: selectedLease?.rent_due_day
+        ? `Day ${selectedLease.rent_due_day}`
+        : null,
+      paymentStatus: latestSelectedPayment?.status || null,
+      notesEnabled: true,
+      documentsCount: selectedDocuments.length,
+      availableFeatures: [
+        "Lease documents",
+        "Payment history",
+        "Property documents",
+        "Private notes",
+        "Shared notes",
+        "Rent reminders",
+        "Avenue Perks",
+        "Tenant promotions",
+        "Eligible credit-building opportunities when enabled",
+      ],
+    }),
+    [
+      latestSelectedPayment?.status,
+      selectedDocuments.length,
+      selectedLease,
+      userInfo.name,
+    ]
+  );
 
   const selectedLocalActivities = useMemo(() => {
     if (!selectedLease) return [];
@@ -1564,31 +1619,38 @@ export default function TenantDashboardPage() {
 
           <div className="h-8 w-px bg-zinc-200" />
 
-          <button className="hidden h-10 items-center gap-2 rounded-2xl px-3 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-50 sm:flex">
+          <button
+            onClick={() => {
+              setSupportOpen(true);
+              setNotificationOpen(false);
+              setProfileOpen(false);
+            }}
+            className="hidden h-10 items-center gap-2 rounded-2xl px-3 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-50 sm:flex"
+          >
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
               <path
-                d="M4 13v-1a8 8 0 0 1 16 0v1"
+                d="M12 3l1.35 4.15L17.5 8.5l-4.15 1.35L12 14l-1.35-4.15L6.5 8.5l4.15-1.35L12 3Z"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <path
-                d="M4 13v3a2 2 0 0 0 2 2h1v-7H6a2 2 0 0 0-2 2ZM20 13v3a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2Z"
+                d="M18.5 14l.75 2.25L21.5 17l-2.25.75L18.5 20l-.75-2.25L15.5 17l2.25-.75L18.5 14Z"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <path
-                d="M16 18c0 1.1-.9 2-2 2h-2"
+                d="M5.5 14l.6 1.9L8 16.5l-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6.6-1.9Z"
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </svg>
-            Support
+            Assistant
           </button>
 
           <div className="hidden h-8 w-px bg-zinc-200 sm:block" />
@@ -1636,7 +1698,13 @@ export default function TenantDashboardPage() {
                   Profile settings
                 </button>
 
-                <button className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50">
+                <button
+                  onClick={() => {
+                    setSupportOpen(true);
+                    setProfileOpen(false);
+                  }}
+                  className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+                >
                   Support
                 </button>
 
@@ -1794,6 +1862,12 @@ export default function TenantDashboardPage() {
           onClose={() => setActivitiesModalOpen(false)}
         />
       )}
+
+      <SupportChat
+        open={supportOpen}
+        context={supportChatContext}
+        onClose={() => setSupportOpen(false)}
+      />
 
     </main>
   );
