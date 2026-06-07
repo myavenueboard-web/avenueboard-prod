@@ -9,6 +9,7 @@ import {
   ChevronDown,
   CreditCard,
   Database,
+  Eye,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
@@ -22,6 +23,7 @@ import { supabase } from "@/lib/supabase";
 const navItems = [
   { name: "Overview", href: "/admin", icon: LayoutDashboard },
   { name: "Email Tracking", href: "/admin/marketing", icon: Mail },
+  { name: "Email Preview", href: "/admin/email-preview", icon: Eye },
   { name: "Records", href: "/admin/audience", icon: Database },
   { name: "Payments", href: "/admin/reports", icon: CreditCard },
   { name: "Support", href: "/admin/support", icon: LifeBuoy },
