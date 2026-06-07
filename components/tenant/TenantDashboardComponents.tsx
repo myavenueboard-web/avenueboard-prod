@@ -467,7 +467,7 @@ export function NotesDocumentsCard({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col border-l border-zinc-100 pl-5">
+        <div className="flex min-h-0 flex-col border-l border-zinc-200 pl-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-[18px] font-semibold tracking-[-0.035em] text-zinc-950">
@@ -803,7 +803,7 @@ function LargeTenantModal({
   return (
     <div className="fixed inset-0 z-[105] flex items-center justify-center bg-black/30 px-5 py-6 backdrop-blur-sm">
       <div className="flex h-[72vh] w-[min(1120px,92vw)] min-h-[520px] flex-col overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_34px_110px_rgba(15,23,42,0.28)]">
-        <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-100 px-7 py-6">
+        <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-200 px-7 py-6">
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-[25px] font-semibold tracking-[-0.045em] text-zinc-950">
@@ -859,7 +859,7 @@ export function RecentActivityCard({
       </div>
 
       {visibleActivities.length > 0 ? (
-        <div className="mt-4 grid grid-cols-4 divide-x divide-zinc-100 rounded-2xl border border-zinc-100 bg-white">
+        <div className="mt-4 grid grid-cols-4 divide-x divide-zinc-200 rounded-2xl border border-zinc-200 bg-white">
           {visibleActivities.map((activity) => (
             <ActivityMini key={activity.id} activity={activity} />
           ))}
@@ -893,7 +893,7 @@ export function PaymentProgressCard({
   return (
     <>
     <section className="min-h-0 overflow-hidden rounded-[24px] border border-zinc-200 bg-white p-5 shadow-none">
-      <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
+      <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
         <h2 className="text-[17px] font-semibold tracking-[-0.035em]">
           Payment Progress
         </h2>
@@ -968,7 +968,7 @@ export function PaymentProgressCard({
         })}
       </div>
 
-      <div className="mt-3 grid grid-cols-4 overflow-hidden rounded-2xl border border-zinc-100 bg-white">
+      <div className="mt-3 grid grid-cols-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
         <PaymentSummaryItem label="Paid" count={summary.paid} dotClass="bg-emerald-500" countClass="text-emerald-600" />
         <PaymentSummaryItem label="Upcoming" count={summary.upcoming} dotClass="bg-blue-500" countClass="text-blue-600" />
         <PaymentSummaryItem label="Late" count={summary.late} dotClass="bg-amber-500" countClass="text-amber-600" />
@@ -1000,7 +1000,7 @@ function PaymentSummaryItem({
   countClass: string;
 }) {
   return (
-    <div className="border-r border-zinc-100 px-3 py-3 last:border-r-0">
+    <div className="border-r border-zinc-200 px-3 py-3 last:border-r-0">
       <div className="flex items-center gap-2">
         <span className={`aspect-square h-2 shrink-0 rounded-full ${dotClass}`} />
         <p className="text-[11px] font-semibold text-zinc-500">{label}</p>
@@ -1037,7 +1037,7 @@ function PaymentHistoryModal({
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
       <div className="flex h-[90vh] w-[min(1320px,96vw)] flex-col overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_34px_110px_rgba(15,23,42,0.28)]">
-        <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-100 px-7 py-6">
+        <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-200 px-7 py-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
               AvenueBoard Statement
@@ -1065,7 +1065,7 @@ function PaymentHistoryModal({
         <div className="min-h-0 flex-1 overflow-y-auto bg-[#FBFBFA] px-7 py-6">
           <div className="overflow-hidden rounded-[30px] border border-zinc-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
             <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)] gap-0">
-              <div className="border-r border-zinc-100 p-7">
+              <div className="border-r border-zinc-200 p-7">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
                   Monthly rent
                 </p>
@@ -1085,7 +1085,7 @@ function PaymentHistoryModal({
                 <PaymentStatusDistribution rows={rows} />
               </div>
 
-              <div className="grid grid-cols-2 divide-x divide-y divide-zinc-100">
+              <div className="grid grid-cols-2 divide-x divide-y divide-zinc-200">
                 <PaymentReportMetric
                   label="Next statement"
                   value={nextRow ? `${nextRow.month} ${nextRow.year}` : "—"}
@@ -1110,7 +1110,7 @@ function PaymentHistoryModal({
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-4 overflow-hidden rounded-[24px] border border-zinc-100 bg-white">
+          <div className="mt-5 grid grid-cols-4 overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
             <PaymentSummaryItem label="Paid" count={summary.paid} dotClass="bg-emerald-500" countClass="text-emerald-600" />
             <PaymentSummaryItem label="Upcoming" count={summary.upcoming} dotClass="bg-blue-500" countClass="text-blue-600" />
             <PaymentSummaryItem label="Late" count={summary.late} dotClass="bg-amber-500" countClass="text-amber-600" />
@@ -1118,7 +1118,7 @@ function PaymentHistoryModal({
           </div>
 
           <div className="mt-5 overflow-hidden rounded-[28px] border border-zinc-200 bg-white">
-            <div className="grid grid-cols-[minmax(0,1fr)_150px_160px_130px_110px] border-b border-zinc-100 bg-zinc-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+            <div className="grid grid-cols-[minmax(0,1fr)_150px_160px_130px_110px] border-b border-zinc-200 bg-zinc-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
               <span>Installment</span>
               <span>Status</span>
               <span>Due detail</span>
@@ -1145,7 +1145,7 @@ function PaymentHistoryRow({
   const detail = getPaymentProgressDetail(row);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_150px_160px_130px_110px] items-center border-b border-zinc-100 px-5 py-4 last:border-b-0">
+    <div className="grid grid-cols-[minmax(0,1fr)_150px_160px_130px_110px] items-center border-b border-zinc-200 px-5 py-4 last:border-b-0">
       <div className="flex min-w-0 items-center gap-3">
         <span
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold ${
@@ -1649,7 +1649,7 @@ export function QuickAccessCard({
         />
       </div>
 
-      <div className="mt-4 border-t border-zinc-100 pt-4">
+      <div className="mt-4 border-t border-zinc-200 pt-4">
         <p className="text-[13px] font-semibold tracking-[-0.02em] text-slate-950">
           Need help with the property?
         </p>
@@ -1691,7 +1691,7 @@ function ManagerContactRow({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-100 bg-white text-blue-600">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-blue-600">
         {icon}
       </span>
       <p

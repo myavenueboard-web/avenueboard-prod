@@ -1481,7 +1481,7 @@ export default function TenantDashboardPage() {
 
   return (
     <main className="h-screen overflow-hidden bg-white font-sans text-[#0F172A]">
-      <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-zinc-100 bg-white px-7">
+      <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-7">
         <div className="flex items-center gap-5">
   <img src="/logo.png" alt="AvenueBoard" className="h-8 w-auto" />
 
@@ -1563,7 +1563,7 @@ export default function TenantDashboardPage() {
                 />
 
                 <div className="absolute right-0 top-14 z-50 w-[360px] overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.16)]">
-                  <div className="border-b border-zinc-100 px-5 py-4">
+                  <div className="border-b border-zinc-200 px-5 py-4">
                     <p className="text-[15px] font-semibold text-zinc-900">
                       Notifications
                     </p>
@@ -1583,7 +1583,7 @@ export default function TenantDashboardPage() {
                       visibleNotifications.map((notification) => (
                         <div
                           key={notification.id}
-                          className="border-b border-zinc-100 px-5 py-4 last:border-b-0"
+                          className="border-b border-zinc-200 px-5 py-4 last:border-b-0"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -1676,7 +1676,7 @@ export default function TenantDashboardPage() {
 
             {profileOpen && (
               <div className="absolute right-0 top-[56px] z-20 w-[260px] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.14)]">
-                <div className="border-b border-zinc-100 px-4 py-4">
+                <div className="border-b border-zinc-200 px-4 py-4">
                   <p className="truncate text-[14px] font-semibold text-zinc-900">
                     {userInfo.name}
                   </p>
@@ -1713,7 +1713,7 @@ export default function TenantDashboardPage() {
                     await supabase.auth.signOut();
                     router.push("/login");
                   }}
-                  className="flex h-11 w-full items-center border-t border-zinc-100 px-4 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
+                  className="flex h-11 w-full items-center border-t border-zinc-200 px-4 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
                 >
                   Logout
                 </button>
