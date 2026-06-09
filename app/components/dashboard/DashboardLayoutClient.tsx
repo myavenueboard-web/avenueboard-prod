@@ -21,6 +21,17 @@ type SidebarProperty = {
   property_label: string;
 };
 
+function getFirstName(name?: string) {
+  return (name || "").trim().split(/\s+/)[0] || "";
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
 
 function SidebarIconShell({
   active,
@@ -33,8 +44,8 @@ function SidebarIconShell({
     <span
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition ${
         active
-          ? "border-[#F4C9D7] bg-white text-[#B9476D]"
-          : "border-zinc-200 bg-white text-slate-700"
+          ? "border-zinc-200 bg-white text-slate-950"
+          : "border-transparent bg-transparent text-slate-700"
       }`}
     >
       {children}
@@ -123,12 +134,14 @@ function SidebarHelpIcon() {
     <SidebarIconShell>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
         <path
-          d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"
+          d="M5 19V5M5 6h9.5l-1.2 3 1.2 3H5"
           stroke="currentColor"
           strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
         <path
-          d="M9.8 9a2.3 2.3 0 0 1 4.4 1c0 1.8-2.2 2-2.2 4"
+          d="M19 7.5v9M16.5 14h5"
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
@@ -268,9 +281,19 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
     router.push(path);
   }
 
+  const isPropertyDetailPage =
+    pathname.startsWith("/dashboard/properties/") && !pathname.includes("/edit");
+  const isAllPropertiesPage = pathname === "/dashboard";
+  const landlordFirstName = getFirstName(user?.name);
+  const landlordGreeting = landlordFirstName
+    ? `${getGreeting()}, ${landlordFirstName}`
+    : getGreeting();
+
   const pageTitle =
-    pathname === "/dashboard"
-      ? "Properties"
+    isPropertyDetailPage
+      ? "Property Workspace"
+      : isAllPropertiesPage
+      ? landlordGreeting
       : pathname === "/dashboard/reports"
       ? "Reports"
       : pathname === "/dashboard/expenses"
@@ -278,6 +301,19 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
       : pathname === "/dashboard/add-property"
       ? "Add Property"
       : "Property";
+
+  const pageContext =
+    isAllPropertiesPage
+      ? ""
+      : pathname === "/dashboard/reports"
+      ? "Portfolio reporting"
+      : pathname === "/dashboard/expenses"
+      ? "Expense workspace"
+      : pathname === "/dashboard/add-property"
+      ? "Create a rental property"
+      : isPropertyDetailPage
+      ? ""
+      : "Landlord workspace";
 
   const showAddPropertyButton = pathname !== "/dashboard/add-property";
 
@@ -295,18 +331,18 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
         <img
           src="/logo.png"
           alt="AvenueBoard"
-          className="h-10 w-auto max-w-[220px] object-contain"
+          className="h-8 w-auto max-w-[185px] object-contain"
         />
       </div>
 
-      <div className="mt-8 min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
-        <div className="space-y-2">
+      <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-hide">
+        <div className="space-y-1.5">
           <button
             onClick={() => goTo("/dashboard")}
-            className={`flex w-full items-center gap-3 rounded-[18px] px-4 py-3 text-left text-[15px] font-bold transition-all duration-200 ${
+            className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-left text-[14.5px] font-bold transition-all duration-200 ${
               pathname === "/dashboard"
-                ? "bg-[#FCEEF3] text-[#B9476D]"
-                : "text-slate-700 hover:bg-white hover:text-slate-950"
+                ? "bg-zinc-50 text-slate-950"
+                : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
             }`}
           >
             <SidebarHomeIcon active={pathname === "/dashboard"} />
@@ -320,14 +356,14 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
               <button
                 key={property.id}
                 onClick={() => goTo(`/dashboard/properties/${property.id}`)}
-                className={`flex w-full items-center gap-2 rounded-[18px] px-4 py-3 text-left text-[14px] font-bold transition-all duration-200 ${
+                className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left text-[13.5px] font-bold transition-all duration-200 ${
                   active
-                    ? "bg-[#FCEEF3] text-[#B9476D]"
-                    : "text-slate-700 hover:bg-white hover:text-slate-950"
+                    ? "border border-[#E7EAF0] bg-white text-slate-950 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+                    : "border border-transparent text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
                 }`}
               >
                 <SidebarBuildingIcon active={active} />
-                <span className="truncate text-[14px] font-semibold">
+                <span className="truncate text-[13.5px] font-semibold">
   {property.property_label}
 </span>
               </button>
@@ -336,13 +372,13 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
         </div>
       </div>
 
-      <div className="mt-8 shrink-0 space-y-3">
+      <div className="mt-5 shrink-0 space-y-2">
         <button
           onClick={() => goTo("/dashboard/reports")}
-          className={`flex w-full items-center gap-3 rounded-[18px] px-4 py-3 text-[15px] font-bold transition ${
+          className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
             pathname === "/dashboard/reports"
-              ? "bg-[#FCEEF3] text-[#B9476D]"
-              : "text-slate-700 hover:bg-white hover:text-slate-950"
+              ? "bg-zinc-50 text-slate-950"
+              : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
           }`}
         >
           <SidebarReportIcon active={pathname === "/dashboard/reports"} />
@@ -351,10 +387,10 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
 
         <button
           onClick={() => goTo("/dashboard/expenses")}
-          className={`flex w-full items-center gap-3 rounded-[18px] px-4 py-3 text-[15px] font-bold transition ${
+          className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
             pathname === "/dashboard/expenses"
-              ? "bg-[#FCEEF3] text-[#B9476D]"
-              : "text-slate-700 hover:bg-white hover:text-slate-950"
+              ? "bg-zinc-50 text-slate-950"
+              : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
           }`}
         >
           <SidebarExpenseIcon active={pathname === "/dashboard/expenses"} />
@@ -366,10 +402,10 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
             setMobileNavOpen(false);
             setHelpOpen(true);
           }}
-          className="flex w-full items-center gap-3 rounded-[18px] px-4 py-3 text-[15px] font-bold text-slate-700 transition hover:bg-white hover:text-slate-950"
+          className="flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold text-slate-700 transition hover:bg-zinc-100 hover:text-slate-950"
         >
           <SidebarHelpIcon />
-          Help
+          Roadmap
         </button>
       </div>
     </div>
@@ -377,8 +413,8 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
 
   return (
     <main className="h-screen overflow-hidden bg-[#F7F6F3] font-sans text-[#0F172A]">
-      <div className="flex h-full overflow-hidden rounded-[28px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)]">
-        <aside className="relative hidden h-full w-[255px] shrink-0 overflow-hidden border-r border-zinc-100 bg-[#FBFBFA] px-2 py-8 lg:block">
+      <div className="flex h-full overflow-hidden rounded-[26px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)]">
+        <aside className="relative hidden h-full w-[236px] shrink-0 overflow-hidden border-r border-[#E6E9EE] bg-[#F8FAFC] px-2.5 py-6 lg:block">
           {desktopSidebarContent}
         </aside>
 
@@ -390,7 +426,7 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
               className="absolute inset-0 bg-black/25"
             />
 
-            <aside className="absolute left-3 top-3 flex h-[calc(100dvh-24px)] w-[82%] max-w-[320px] flex-col overflow-hidden rounded-[26px] bg-[#F8F8F7] px-6 py-6 shadow-[0_24px_90px_rgba(15,23,42,0.25)]">
+            <aside className="absolute left-3 top-3 flex h-[calc(100dvh-24px)] w-[82%] max-w-[320px] flex-col overflow-hidden rounded-[26px] bg-white px-6 py-6 shadow-[0_24px_90px_rgba(15,23,42,0.25)]">
               <div className="mb-8 flex shrink-0 items-start justify-between">
                 <img
                   src="/logo.png"
@@ -411,8 +447,8 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                   onClick={() => goTo("/dashboard")}
                   className={`w-full rounded-[18px] px-3 py-3 text-left text-[15px] font-semibold transition-all duration-200 ${
                     pathname === "/dashboard"
-                      ? "bg-white text-[#0F172A] shadow-sm"
-                      : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+                      ? "bg-zinc-100 text-[#0F172A]"
+                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                   }`}
                 >
                   All Properties
@@ -432,8 +468,8 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                           }
                           className={`w-full rounded-2xl px-4 py-3 text-left text-[14px] font-medium transition ${
                             active
-                              ? "bg-[#FCEEF3] text-[#B9476D]"
-                              : "text-zinc-500 hover:bg-white hover:text-zinc-900"
+                              ? "bg-zinc-100 text-zinc-950"
+                              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                           }`}
                         >
                           {property.property_label}
@@ -448,19 +484,27 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                 <div className="space-y-3">
                   <button
                     onClick={() => goTo("/dashboard/reports")}
-                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
-                      ↗
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-100 text-slate-800">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M5 19V5M5 6h9.5l-1.2 3 1.2 3H5M19 7.5v9M16.5 14h5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
                     </span>
                     Reports
                   </button>
 
                   <button
                     onClick={() => goTo("/dashboard/expenses")}
-                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-100 text-[14px] font-semibold text-slate-800">
                       $
                     </span>
                     Expenses
@@ -471,12 +515,20 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                       setMobileNavOpen(false);
                       setHelpOpen(true);
                     }}
-                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-500 transition hover:bg-white hover:text-zinc-900"
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-[14px] font-semibold text-[#B9476D] shadow-sm">
-                      ?
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-100 text-slate-800">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M5 19V5M5 6h9.5l-1.2 3 1.2 3H5M19 7.5v9M16.5 14h5"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
                     </span>
-                    Help
+                    Roadmap
                   </button>
                 </div>
               </div>
@@ -484,28 +536,51 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
           </div>
         )}
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white px-6 py-5 lg:px-8">
-          <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white pl-3 pr-5 lg:pl-3 lg:pr-7">
+          <header
+            className={`flex shrink-0 items-center justify-between gap-3 bg-white ${
+              isPropertyDetailPage ? "h-[58px]" : "h-[76px]"
+            } ${
+              isPropertyDetailPage || isAllPropertiesPage
+                ? ""
+                : "border-b border-zinc-200"
+            }`}
+          >
             <div className="flex min-w-0 items-center gap-3">
               <button
                 onClick={() => setMobileNavOpen(true)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F8F8F7] text-xl text-zinc-700 lg:hidden"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#F8F8F7] text-lg text-zinc-700 lg:hidden"
               >
                 ☰
               </button>
 
-              <h1 className="truncate text-[22px] font-semibold tracking-[-0.05em] sm:text-[28px]">
-                {pageTitle}
-              </h1>
+              <div className="min-w-0">
+                <h1
+                  className={`truncate tracking-[-0.045em] ${
+                    isPropertyDetailPage
+                      ? "text-[18px] font-normal text-slate-600 sm:text-[19px]"
+                      : isAllPropertiesPage
+                      ? "text-[20px] font-medium text-slate-950 sm:text-[21px]"
+                      : "text-[14px] font-semibold text-zinc-950 sm:text-[15px]"
+                  }`}
+                >
+                  {pageTitle}
+                </h1>
+                {pageContext && (
+                  <p className="mt-0.5 max-w-[360px] truncate text-[12px] font-medium text-zinc-400">
+                    {pageContext}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-5">
               {showAddPropertyButton && (
                 <button
                   onClick={() => router.push("/dashboard/add-property")}
-                  className="hidden h-11 items-center gap-2 rounded-2xl border border-[#E8D7DE] bg-[#FFF7FA] px-5 text-[14px] font-semibold text-[#B9476D] transition hover:border-[#DDB6C6] hover:bg-[#FCEEF3] sm:flex lg:px-6 lg:text-[15px]"
+                  className="hidden h-[42px] items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50 sm:flex"
                 >
-                  <span className="text-[22px] leading-none">+</span>
+                  <span className="text-[19px] leading-none text-slate-500">+</span>
                   Add Property
                 </button>
               )}
@@ -513,7 +588,7 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
               {showAddPropertyButton && (
                 <button
                   onClick={() => router.push("/dashboard/add-property")}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#B9476D] text-[26px] leading-none text-white sm:hidden"
+                  className="flex h-[42px] w-[42px] items-center justify-center rounded-2xl bg-[#0F172A] text-[25px] leading-none text-white sm:hidden"
                 >
                   +
                 </button>
@@ -525,10 +600,10 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                     setNotificationOpen(!notificationOpen);
                     setMenuOpen(false);
                   }}
-                  className="relative flex h-11 w-11 items-center justify-center rounded-full text-slate-700 transition hover:bg-zinc-100 hover:text-slate-950"
+                  className="relative flex h-[42px] w-[42px] items-center justify-center rounded-full text-slate-700 transition hover:bg-zinc-50 hover:text-slate-950"
                   aria-label="Notifications"
                 >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M15 17H9m9-6a6 6 0 0 0-12 0c0 3-.8 4.5-2 6h16c-1.2-1.5-2-3-2-6Z"
                       stroke="currentColor"
@@ -560,7 +635,7 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                     />
 
                     <div className="absolute right-0 top-14 z-50 w-[360px] overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.16)]">
-                      <div className="border-b border-zinc-100 px-5 py-4">
+                      <div className="border-b border-zinc-200 px-5 py-4">
                         <p className="text-[15px] font-semibold text-zinc-900">
                           Notifications
                         </p>
@@ -580,7 +655,7 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                           visibleNotifications.map((notification) => (
                             <div
   key={notification.id}
-  className="border-b border-zinc-100 px-5 py-4"
+  className="border-b border-zinc-200 px-5 py-4 last:border-b-0"
 >
   <div className="flex items-start justify-between gap-3">
     <div className="min-w-0">
@@ -614,26 +689,64 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
                 )}
               </div>
 
+              <div className="hidden h-8 w-px bg-zinc-200 sm:block" />
+
+              <button
+                onClick={() => {
+                  setHelpOpen(true);
+                  setNotificationOpen(false);
+                  setMenuOpen(false);
+                }}
+                className="hidden h-[42px] items-center gap-2 rounded-2xl px-3 text-[13.5px] font-semibold text-zinc-950 transition hover:bg-zinc-50 sm:flex"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 3l1.35 4.15L17.5 8.5l-4.15 1.35L12 14l-1.35-4.15L6.5 8.5l4.15-1.35L12 3Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M18.5 14l.75 2.25L21.5 17l-2.25.75L18.5 20l-.75-2.25L15.5 17l2.25-.75L18.5 14Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M5.5 14l.6 1.9L8 16.5l-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6.6-1.9Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Assistant
+              </button>
+
+              <div className="hidden h-8 w-px bg-zinc-200 sm:block" />
+
               <div className="relative">
                 <button
                   onClick={() => {
                     setMenuOpen(!menuOpen);
                     setNotificationOpen(false);
                   }}
-                  className="flex items-center gap-2 rounded-2xl px-1.5 py-1 transition hover:bg-zinc-50 sm:gap-3 sm:px-2"
+                  className="flex items-center gap-3 rounded-2xl px-2 py-1.5 transition hover:bg-zinc-50"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0F172A] text-sm font-semibold text-white sm:h-11 sm:w-11">
+                  <div className="flex h-[42px] w-[42px] items-center justify-center rounded-full bg-[#0F172A] text-[14px] font-semibold text-white">
                     {user?.name?.charAt(0)?.toUpperCase() || "U"}
                   </div>
 
-                  <div className="hidden text-left lg:block">
-                    <p className="text-[14px] font-semibold">{user?.name}</p>
-                    <p className="max-w-[220px] truncate text-[12px] text-zinc-400">
-                      {user?.email}
+                  <div className="hidden text-left sm:block">
+                    <p className="max-w-[190px] truncate text-[14.5px] font-semibold text-zinc-950">
+                      {user?.name}
                     </p>
+                    <p className="text-[12.5px] text-zinc-500">Landlord</p>
                   </div>
 
-                  <span className="hidden text-zinc-400 sm:inline">⌄</span>
+                  <span className="text-zinc-400">⌄</span>
                 </button>
 
                 {menuOpen && (
@@ -691,7 +804,7 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto pt-3 scrollbar-hide lg:overflow-hidden lg:pt-0">
+          <div className="min-h-0 flex-1 overflow-y-auto pt-2 scrollbar-hide lg:overflow-hidden lg:pt-0">
             {children}
           </div>
         </section>
@@ -707,7 +820,7 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
         setPhone={setPhone}
         onSave={handleSaveProfile}
         onLogout={handleLogout}
-    />
+        />
 
     {taxDocumentsOpen && (
   <TaxDocumentsPanel onClose={() => setTaxDocumentsOpen(false)} />

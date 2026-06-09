@@ -1473,14 +1473,14 @@ export default function TenantDashboardPage() {
 
   if (loading) {
     return (
-      <main className="flex h-screen items-center justify-center bg-white text-sm text-zinc-500">
+      <main className="flex h-screen items-center justify-center bg-[#F8FAFC] text-sm text-zinc-500">
         Loading tenant portal...
       </main>
     );
   }
 
   return (
-    <main className="h-screen overflow-hidden bg-white font-sans text-[#0F172A]">
+    <main className="h-screen overflow-hidden bg-[#F8FAFC] font-sans text-[#0F172A]">
       <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-7">
         <div className="flex items-center gap-5">
   <img src="/logo.png" alt="AvenueBoard" className="h-8 w-auto" />
@@ -1488,7 +1488,7 @@ export default function TenantDashboardPage() {
   <div className="h-9 w-px bg-zinc-200" />
 
   <div>
-    <p className="text-[14px] font-semibold tracking-[-0.03em] text-zinc-950">
+    <p className="text-[18px] font-normal tracking-[-0.045em] text-slate-600 sm:text-[19px]">
       Tenant Portal
     </p>
     <p className="mt-0.5 max-w-[360px] truncate text-[12px] font-medium text-zinc-400">
@@ -1726,10 +1726,10 @@ export default function TenantDashboardPage() {
       {leases.length === 0 ? (
         <div className="flex h-[calc(100vh-76px)] items-center justify-center px-6 text-center">
           <div>
-            <h1 className="text-[30px] font-semibold tracking-[-0.05em]">
+            <h1 className="text-[30px] font-medium tracking-[-0.05em]">
               No active lease access
             </h1>
-            <p className="mt-3 max-w-[460px] text-[15px] leading-7 text-zinc-500">
+            <p className="mt-3 max-w-[460px] text-[15px] font-medium leading-7 text-zinc-500">
               Your landlord invitation has not been connected yet. Open your
               invite email and accept the invitation to access your tenant
               portal.
@@ -1738,7 +1738,7 @@ export default function TenantDashboardPage() {
         </div>
       ) : (
         
-        <div className="grid h-[calc(100vh-76px)] grid-cols-[minmax(0,1fr)_405px] gap-4 overflow-hidden bg-white px-4 py-4">
+        <div className="grid h-[calc(100vh-76px)] grid-cols-[minmax(0,1fr)_405px] gap-4 overflow-hidden bg-[#F8FAFC] px-4 py-4">
         <div className="grid min-h-0 grid-rows-[390px_285px_minmax(0,1fr)] gap-4 overflow-hidden">
             <PaymentHero
             lease={selectedLease}

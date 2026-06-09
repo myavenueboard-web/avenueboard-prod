@@ -1,18 +1,25 @@
 "use client";
 
 import {
-  Eye,
-  Download,
-  Trash2,
-} from "lucide-react";
-
-import {
   type ReactNode,
   type RefObject,
   useEffect,
   useRef,
   useState,
 } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  CircleDot,
+  DollarSign,
+  FileText,
+  Home,
+  LifeBuoy,
+  StickyNote,
+  Trash2,
+  User,
+  UserCheck,
+} from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
@@ -27,6 +34,33 @@ type TenantRecord = {
   phone: string | null;
   tenant_role: string;
   invite_status: string | null;
+};
+
+type ActivityLog = {
+  id: string;
+  activity_type: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+};
+
+type LeaseDocumentRecord = {
+  id: string;
+  created_at?: string | null;
+  file_name: string;
+  file_url: string | null;
+  file_type: string | null;
+  storage_path?: string | null;
+  file_size?: number | null;
+};
+
+type RentPaymentRecord = {
+  id: string;
+  period_label?: string | null;
+  status?: string | null;
+  amount?: number | null;
+  paid_at?: string | null;
+  created_at?: string | null;
 };
 
 type PropertyRecord = {
@@ -52,15 +86,7 @@ type PropertyRecord = {
     lease_status: string | null;
     payment_status: string | null;
     lease_tenants?: TenantRecord[];
-    lease_documents?: {
-  id: string;
-  file_name: string;
-  file_url: string | null;
-  file_type: string | null;
-  storage_path?: string | null;
-  file_size?: number | null;
-  
-}[];
+    lease_documents?: LeaseDocumentRecord[];
 }[];
 };
 
@@ -112,7 +138,7 @@ export default function PropertyDetailPage() {
   const [notes, setNotes] = useState<PropertyNote[]>([]);
   const [newNote, setNewNote] = useState("");
   const [noteType, setNoteType] = useState<"private" | "shared">("private");
-  const [activities, setActivities] = useState<any[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -134,9 +160,19 @@ export default function PropertyDetailPage() {
   const [deletingNote, setDeletingNote] = useState(false);
   const [savingLease, setSavingLease] = useState(false);
   const [documentDeleteOpen, setDocumentDeleteOpen] = useState(false);
-  const [selectedDocumentDelete, setSelectedDocumentDelete] = useState<any | null>(null);
+  const [selectedDocumentDelete, setSelectedDocumentDelete] =
+    useState<LeaseDocumentRecord | null>(null);
   const [deletingDocument, setDeletingDocument] = useState(false);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [notesViewOpen, setNotesViewOpen] = useState(false);
+  const [documentsViewOpen, setDocumentsViewOpen] = useState(false);
+  const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false);
+  const [activityHistoryOpen, setActivityHistoryOpen] = useState(false);
+  const [tenantsExpanded, setTenantsExpanded] = useState(false);
+  const [tenantDeleteTarget, setTenantDeleteTarget] =
+    useState<TenantRecord | null>(null);
+  const [deletingTenant, setDeletingTenant] = useState(false);
+  const tenantPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [payments, setPayments] = useState<RentPaymentRecord[]>([]);
   const [leaseForm, setLeaseForm] = useState({
    startDate: "",
    endDate: "",
@@ -183,6 +219,7 @@ export default function PropertyDetailPage() {
               ),
               lease_documents (
   id,
+  created_at,
   file_name,
   file_url,
   file_type,
@@ -224,7 +261,7 @@ if (lease?.id) {
   .select("*")
   .eq("property_id", propertyId)
   .order("created_at", { ascending: false })
-  .limit(5);
+  .limit(50);
 
 if (!activityError) {
   setActivities(activityData || []);
@@ -246,7 +283,7 @@ if (!activityError) {
 
 if (!noteError) {
   setNotes(
-    (noteData || []).map((note: any) => ({
+    (noteData || []).map((note) => ({
       id: note.id,
       text: note.text,
       type: note.note_type,
@@ -270,6 +307,33 @@ if (!noteError) {
 
     if (propertyId) loadPropertyDashboard();
   }, [propertyId, router, searchParams]);
+
+  useEffect(() => {
+    if (!tenantsExpanded) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        tenantPopoverRef.current &&
+        !tenantPopoverRef.current.contains(event.target as Node)
+      ) {
+        setTenantsExpanded(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setTenantsExpanded(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [tenantsExpanded]);
 
   async function handleSavePropertyEdit() {
     if (!property) return;
@@ -376,11 +440,9 @@ function openTenantManageEdit(tenant: TenantRecord) {
 }
 
 async function handleDeleteTenant(tenant: TenantRecord) {
-  const confirmDelete = confirm(
-    `Delete ${tenant.first_name} ${tenant.last_name}?`
-  );
+  if (!property || deletingTenant) return;
 
-  if (!confirmDelete || !property) return;
+  setDeletingTenant(true);
 
   const { error } = await supabase
     .from("lease_tenants")
@@ -389,6 +451,7 @@ async function handleDeleteTenant(tenant: TenantRecord) {
 
   if (error) {
     console.error("Delete tenant error:", error);
+    setDeletingTenant(false);
     alert("Unable to delete tenant.");
     return;
   }
@@ -400,6 +463,8 @@ async function handleDeleteTenant(tenant: TenantRecord) {
       lease_tenants: lease.lease_tenants?.filter((t) => t.id !== tenant.id),
     })),
   });
+  setTenantDeleteTarget(null);
+  setDeletingTenant(false);
 }
 
 async function sendTenantInvite(tenant: TenantRecord, showSuccess = true) {
@@ -703,9 +768,12 @@ invite_status: "not_sent",
     property_id: property.id,
     profile_id: profileId,
     lease_id: property.leases?.[0]?.id || null,
-    activity_type: "note_added",
+    activity_type: noteType === "shared" ? "shared_note_added" : "private_note_added",
     title: noteType === "shared" ? "Shared note added" : "Private note added",
-    description: noteText,
+    description:
+      noteType === "shared"
+        ? "A shared note was added for this property."
+        : "A private note was added to this property.",
   });
 
   setNewNote("");
@@ -717,11 +785,12 @@ async function handleDeleteNote() {
   if (!selectedNoteDelete) return;
 
   setDeletingNote(true);
+  const noteToDelete = selectedNoteDelete;
 
   const { error } = await supabase
     .from("property_notes")
     .delete()
-    .eq("id", selectedNoteDelete.id)
+    .eq("id", noteToDelete.id)
     .eq("property_id", propertyId);
 
   if (error) {
@@ -731,7 +800,27 @@ async function handleDeleteNote() {
     return;
   }
 
-  setNotes((prev) => prev.filter((note) => note.id !== selectedNoteDelete.id));
+  if (property) {
+    await supabase.from("activity_logs").insert({
+      property_id: property.id,
+      profile_id: profileId,
+      lease_id: property.leases?.[0]?.id || null,
+      activity_type:
+        noteToDelete.type === "shared"
+          ? "shared_note_deleted"
+          : "private_note_deleted",
+      title:
+        noteToDelete.type === "shared"
+          ? "Shared note deleted"
+          : "Private note deleted",
+      description:
+        noteToDelete.type === "shared"
+          ? "A shared note was removed from this property."
+          : "A private note was removed from this property.",
+    });
+  }
+
+  setNotes((prev) => prev.filter((note) => note.id !== noteToDelete.id));
   setSelectedNoteDelete(null);
   setNoteDeleteOpen(false);
   setDeletingNote(false);
@@ -747,7 +836,7 @@ async function handleDocumentUpload(
   setUploadingDocument(true);
 
   try {
-    const filePath = `${property.id}/${Date.now()}-${file.name}`;
+    const filePath = `${property.id}/${crypto.randomUUID()}-${file.name}`;
 
     const { error: uploadError } = await supabase.storage
       .from("lease-documents")
@@ -803,7 +892,7 @@ async function handleDocumentUpload(
   }
 }
 
-async function downloadDocument(doc: any) {
+async function downloadDocument(doc: LeaseDocumentRecord) {
   if (!doc.storage_path) return;
 
   const { data, error } = await supabase.storage
@@ -828,7 +917,7 @@ async function downloadDocument(doc: any) {
   URL.revokeObjectURL(url);
 }
 
-async function openDocument(doc: any) {
+async function openDocument(doc: LeaseDocumentRecord) {
   if (!doc.storage_path) return;
 
   const { data, error } = await supabase.storage
@@ -948,7 +1037,7 @@ async function handleDeleteDocument() {
   : false;
   const leaseStatus = getLeaseStatus(lease?.end_date);
   const bankConnected = property.bank_status === "connected";
-  const tenants = (lease?.lease_tenants || []).sort((a, b) => {
+  const tenants = [...(lease?.lease_tenants || [])].sort((a, b) => {
   const aPrimary = a.tenant_role?.toLowerCase() === "primary";
   const bPrimary = b.tenant_role?.toLowerCase() === "primary";
 
@@ -957,27 +1046,35 @@ async function handleDeleteDocument() {
 
   return 0;
 });
+  const primaryTenant = tenants.find(
+    (tenant) => tenant.tenant_role?.toLowerCase() === "primary"
+  ) || tenants[0];
+  const secondaryTenants = tenants.slice(1);
   const documents = lease?.lease_documents || [];
+  const visibleNotes = notes.slice(0, 2);
+  const visibleDocuments = documents.slice(0, 2);
+  const visibleActivities = activities.slice(0, 4);
+  const emptyActivitySlots = Math.max(0, 4 - visibleActivities.length);
 
   return (
     <>
-      <div className="mt-2 grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto pb-4 lg:mt-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-3 lg:overflow-hidden">
-        <div className="min-h-0 space-y-3 lg:overflow-y-auto lg:pr-0">
-          <section className="rounded-[22px] border border-[#E8E5DE] bg-white p-4 shadow-[0_4px_18px_rgba(15,23,42,0.03)]">
+      <div className="mt-1 grid h-full min-h-0 grid-cols-1 gap-2.5 overflow-y-auto pb-3 lg:mt-1.5 lg:grid-cols-[minmax(0,1fr)_312px] lg:gap-2.5 lg:overflow-hidden">
+        <div className="min-h-0 space-y-2.5 lg:overflow-y-auto lg:pr-0">
+          <section className="overflow-visible rounded-[26px] border border-zinc-200 bg-white p-4 shadow-none">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-[30px] font-semibold tracking-[-0.04em] text-zinc-900 sm:text-[34px]">
+                  <h1 className="truncate text-[28px] font-semibold tracking-[-0.055em] text-slate-950 sm:text-[31px]">
   {property.property_label}
 </h1>
 
                   <span
-                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${leaseStatus.badgeClass}`}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11.5px] font-semibold ${leaseStatus.badgeClass}`}
                   >
                     {leaseStatus.label}
                   </span>
                 </div>
-                <p className="mt-3 flex items-center gap-2 text-[14px] font-medium leading-6 text-zinc-500 sm:text-[15px]">
+                <p className="mt-1.5 flex items-center gap-2 text-[13.5px] font-medium leading-5 text-zinc-500">
   <svg
     width="15"
     height="15"
@@ -1013,10 +1110,10 @@ async function handleDeleteDocument() {
         : `/dashboard/properties/${propertyId}/edit?step=1`
     )
   }
-  className={`rounded-2xl px-4 py-2.5 text-[13px] font-semibold transition ${
+  className={`rounded-2xl px-4 py-2.5 text-[13.5px] font-semibold transition ${
     leaseEndingSoon
       ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-      : "border border-black/5 bg-white text-[#B9476D] hover:bg-zinc-50"
+      : "border border-zinc-200 bg-white text-slate-950 hover:bg-zinc-50"
   }`}
 >
   {leaseEndingSoon ? "Extend Lease" : "Edit Lease"}
@@ -1025,13 +1122,13 @@ async function handleDeleteDocument() {
   <div className="relative">
     <button
       onClick={() => setActionMenuOpen(!actionMenuOpen)}
-      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-black/5 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
     >
       ⋯
     </button>
 
     {actionMenuOpen && (
-      <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-black/5 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
+      <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
         <button
           onClick={() => {
             setActionMenuOpen(false);
@@ -1047,398 +1144,480 @@ async function handleDeleteDocument() {
 </div>
 </div>
 
-            <div className="mt-5 rounded-[22px] border border-black/5 bg-[#FAFAFA] p-4 lg:hidden">
-              <p className="text-[13px] text-zinc-500">Upcoming Due</p>
-
-              <div className="mt-2 flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-[32px] font-semibold tracking-[-0.06em] text-zinc-900">
-                    ${Number(lease?.monthly_rent || 0).toLocaleString()}
-                  </p>
-
-                  <p className="mt-1 text-[13px] text-zinc-500">
-                    Due {lease?.rent_due_day || "—"}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p
-                    className={`text-[13px] font-semibold ${
-                      bankConnected ? "text-emerald-600" : "text-amber-600"
-                    }`}
-                  >
-                    {bankConnected ? "Bank verified" : "Bank pending"}
-                  </p>
-
-                  <p className="mt-1 text-[12px] text-zinc-400">
-                    Lease ends {formatDateShort(lease?.end_date)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 hidden gap-3 lg:grid xl:grid-cols-4">
-              <MetricCard
-                label="Monthly Rent"
-                value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
-                subtext="Per month"
-                success
-              />
-
-              <MetricCard
+            <div className="mt-3.5 grid overflow-hidden rounded-[22px] border border-zinc-200 bg-white md:grid-cols-3">
+              <PropertyTopMetric
+                icon="dollar"
                 label="Due This Month"
                 value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
-                subtext={lease?.rent_due_day || "—"}
+                subtext={`Due on ${lease?.rent_due_day || "—"}`}
+                tone="emerald"
               />
 
-              <MetricCard
+              <PropertyTopMetric
+                icon="shield"
                 label="Bank Status"
                 value={bankConnected ? "Verified" : "Pending"}
                 subtext={bankConnected ? "Ready" : "Action needed"}
-                warning={!bankConnected}
-                success={bankConnected}
+                tone={bankConnected ? "emerald" : "amber"}
               />
 
-              <MetricCard
-                label="Lease Ends"
+              <PropertyTopMetric
+                icon="calendar"
+                label="Lease Details"
                 value={formatDate(lease?.end_date)}
-                subtext={leaseStatus.label}
-                warning={leaseStatus.label !== "Active"}
+                subtext={`Lease ends · ${leaseStatus.label}`}
+                tone="blue"
               />
             </div>
 
-            {!bankConnected && (
-              <div className="mt-4 rounded-[22px] border border-amber-100 bg-amber-50 p-4 lg:mt-5 lg:flex lg:items-center lg:justify-between lg:gap-5">
-                <div>
-                  <p className="text-[14px] font-semibold text-amber-900">
-                    Connect bank account
-                  </p>
-                  <p className="mt-1 text-[12px] leading-5 text-amber-800">
-                    Activate rent collection and allow tenants to complete
-                    payment setup.
-                  </p>
-                </div>
+            <div
+              className={`mt-3.5 rounded-[20px] border p-3.5 lg:flex lg:items-center lg:justify-between lg:gap-4 ${
+                bankConnected
+                  ? "border-emerald-100 bg-emerald-50/70"
+                  : "border-amber-200 bg-amber-50/80"
+              }`}
+            >
+              {bankConnected ? (
+                <>
+                  <div>
+                    <p className="text-[14px] font-semibold text-emerald-900">
+                      Workspace Ready
+                    </p>
+                    <p className="mt-1 text-[12px] leading-5 text-emerald-800">
+                      Your property workspace is fully configured and ready for
+                      rent collection.
+                    </p>
+                  </div>
 
-                <button
-                  onClick={() => handleConnectStripe()}
-                  className="mt-4 h-11 w-full rounded-2xl bg-[#B9476D] px-5 text-[13px] font-semibold text-white hover:bg-[#A93F64] lg:mt-0 lg:w-auto lg:shrink-0"
-                >
-                  Connect Bank
-                </button>
-              </div>
-            )}
-          </section>
+                  <div className="mt-3 flex flex-wrap gap-2 lg:mt-0 lg:justify-end">
+                    {[
+                      "Bank account connected",
+                      "Tenant setup complete",
+                      "Lease active",
+                    ].map((label) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-white/70 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-700"
+                      >
+                        <span className="text-[12px]">✓</span>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-[14px] font-semibold text-amber-950">
+                      Connect Bank Account
+                    </p>
+                    <p className="mt-1 text-[12px] leading-5 text-amber-800">
+                      Activate rent collection and allow tenants to complete
+                      payment setup.
+                    </p>
+                  </div>
 
-          <section className="relative z-20 overflow-visible rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
-              <div>
-                <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
-                  Tenants
-                </h2>
-                <p className="mt-1 text-[12px] text-zinc-500">
-                  {tenants.length} tenant record
-                  {tenants.length === 1 ? "" : "s"}
-                </p>
-              </div>
-
-              {tenants.length > 0 && (
-                <button
-                  onClick={() => router.push(`/dashboard/properties/${propertyId}/edit?step=2`)}
-                  className="rounded-xl border border-black/5 px-4 py-2 text-[13px] font-semibold text-[#B9476D] hover:bg-zinc-50"
-                >
-                  Add / Modify
-                </button>
+                  <button
+                    onClick={() => handleConnectStripe()}
+                    className="mt-4 h-10 w-full rounded-2xl bg-[#33435F] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2A3850] lg:mt-0 lg:w-auto lg:shrink-0"
+                  >
+                    Connect Bank
+                  </button>
+                </>
               )}
             </div>
 
-            <div className="space-y-3 overflow-visible p-4">
-              {tenants.length > 0 ? (
-                tenants.map((tenant) => (
+            <div ref={tenantPopoverRef} className="relative mt-3 pt-2">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-[19px] font-medium tracking-[-0.04em] text-slate-950">
+                    Tenant
+                  </h2>
+                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12.5px] font-semibold text-zinc-500">
+                    {tenants.length}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {tenants.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setTenantsExpanded((current) => !current)}
+                      className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50"
+                    >
+                      {tenantsExpanded ? "Hide" : "View all"}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => router.push(`/dashboard/properties/${propertyId}/edit?step=2`)}
+                    className="inline-flex h-8 items-center text-[13px] font-semibold leading-none text-slate-700 transition hover:text-slate-950"
+                  >
+                    Manage Tenant →
+                  </button>
+                </div>
+              </div>
+
+              {primaryTenant ? (
+                <div className="overflow-visible">
                   <TenantCard
-                    key={tenant.id}
-                    tenant={tenant}
+                    tenant={primaryTenant}
                     onEdit={() =>
-  router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
-}
-                    onResendInvite={() => handleResendTenantInvite(tenant)}
+                      router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
+                    }
+                    onResendInvite={() => handleResendTenantInvite(primaryTenant)}
                     onRequestPayment={() => {
-                    setSelectedPaymentTenant(tenant);
-                    setPaymentRequestOpen(true);
-                }}
-onDelete={() => handleDeleteTenant(tenant)}
-                />
-                ))
+                      setSelectedPaymentTenant(primaryTenant);
+                      setPaymentRequestOpen(true);
+                    }}
+                    onDelete={() => setTenantDeleteTarget(primaryTenant)}
+                  />
+                </div>
               ) : (
-                <div className="rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500 sm:col-span-2">
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-5 text-[13px] text-zinc-500">
                   No tenant added.
                 </div>
               )}
+
+              {tenantsExpanded && secondaryTenants.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-[70] mt-2 rounded-[22px] border border-zinc-200 bg-white p-2.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
+                  <div
+                    className={`space-y-2.5 ${
+                      secondaryTenants.length > 3
+                        ? "max-h-[252px] overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#D4D4D8_transparent]"
+                        : "overflow-visible"
+                    }`}
+                  >
+                    {secondaryTenants.map((tenant) => (
+                      <TenantCard
+                        key={tenant.id}
+                        tenant={tenant}
+                        onEdit={() =>
+                          router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
+                        }
+                        onResendInvite={() => handleResendTenantInvite(tenant)}
+                        onRequestPayment={() => {
+                          setSelectedPaymentTenant(tenant);
+                          setPaymentRequestOpen(true);
+                        }}
+                        onDelete={() => setTenantDeleteTarget(tenant)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
+          <section className="relative grid h-[236px] overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-none lg:grid-cols-[minmax(0,1.45fr)_minmax(310px,1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col p-3.5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
+                    Notes
+                  </h2>
+                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12.5px] font-semibold text-zinc-500">
+                    {notes.length}
+                  </span>
+                </div>
 
-          <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
-  <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
-    <div>
-      <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
-        Notes
-      </h2>
-    </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setNoteOpen(true)}
+                    className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50"
+                  >
+                    + Add
+                  </button>
 
-    <button
-      onClick={() => setNoteOpen(true)}
-      className="rounded-xl border border-black/5 px-4 py-2 text-[13px] font-semibold text-[#B9476D] transition-all duration-200 hover:bg-zinc-50"
-    >
-      Add Note
-    </button>
-  </div>
-
-  <div className="grid gap-3 p-4 sm:grid-cols-2">
-    
-    {notes.length === 0 ? (
-  <div className="rounded-[18px] bg-[#FFF8EA] px-4 py-3">
-    <span className="rounded-full bg-[#FFE8B8] px-2 py-1 text-[10px] font-semibold text-[#8A5A00]">
-      Private Note
-    </span>
-
-    <p className="mt-3 text-[13px] font-medium leading-5 text-zinc-900">
-      Save reminders, updates, and important property notes.
-    </p>
-
-    <p className="mt-3 text-[12px] text-zinc-500">
-      Getting Started • AvenueBoard
-    </p>
-  </div>
-) : (
-      notes.map((note) => (
-  <div
-  key={note.id}
-  className={`group relative rounded-[18px] px-4 py-3 pr-12 ${
-    note.type === "private"
-      ? "bg-[#FFF8EA]"
-      : "bg-[#EFF7FF]"
-  }`}
->
-    <button
-  type="button"
-  onClick={() => {
-    setSelectedNoteDelete(note);
-    setNoteDeleteOpen(true);
-  }}
-  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 text-zinc-400 opacity-0 transition-all duration-200 hover:bg-white hover:text-red-500 group-hover:opacity-100"
->
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M9 3h6M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-</button>
-
-    <span
-      className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
-        note.type === "private"
-          ? "bg-[#FFE8B8] text-[#8A5A00]"
-          : "bg-[#DCEEFF] text-[#1D5F9F]"
-      }`}
-    >
-      {note.type === "private" ? "Private Note" : "Shared Note"}
-    </span>
-
-    <p className="mt-3 text-[13px] font-medium leading-5 text-zinc-900">
-      {note.text}
-    </p>
-
-    <p className="mt-3 text-[12px] text-zinc-500">
-  {formatDate(note.created_at)} •{" "}
-  {note.created_by_role === "tenant"
-    ? "Created by tenant"
-    : "Created by landlord"}
-  {note.type === "shared" && (
-    <>
-      {" "}•{" "}
-      {note.created_by_role === "tenant"
-        ? "Shared with landlord"
-        : "Shared with tenant"}
-    </>
-  )}
-</p>
-  </div>
-))
-    )}
-  </div>
-</section>
-                    <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-5">
-              <div>
-                <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
-                  Property Documents
-                </h2>
-                <p className="mt-1 text-[12px] text-zinc-500">
-                  Lease agreements and uploads
-                </p>
+                  <button
+                    type="button"
+                    onClick={() => setNotesViewOpen(true)}
+                    className="text-[12.5px] font-semibold text-slate-700 transition hover:text-slate-950"
+                  >
+                    All notes →
+                  </button>
+                </div>
               </div>
 
-              <label className="cursor-pointer rounded-xl border border-dashed border-zinc-300 px-4 py-2 text-[13px] font-semibold text-[#B9476D] transition-all duration-200 hover:bg-zinc-50">
-  {uploadingDocument ? "Uploading..." : "Upload"}
-  <input
-    type="file"
-    className="hidden"
-    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-    onChange={handleDocumentUpload}
-    disabled={uploadingDocument}
-  />
-</label>
+              <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
+                {notes.length === 0 ? (
+                  <div className="rounded-[18px] border border-amber-200 bg-[#FFF8EA] px-3.5 py-2.5">
+                    <span className="rounded-full bg-[#FFE8B8] px-2.5 py-1 text-[10.5px] font-semibold text-[#8A5A00]">
+                      Private Note
+                    </span>
+
+                    <p className="mt-2.5 text-[14px] font-medium leading-5 text-zinc-900">
+                      Save reminders, updates, and important property notes.
+                    </p>
+
+                    <p className="mt-2.5 text-[12.5px] text-zinc-500">
+                      Getting Started • AvenueBoard
+                    </p>
+                  </div>
+                ) : (
+                  notes.map((note) => (
+                    <div
+                      key={note.id}
+                      className={`group relative rounded-[18px] border px-3.5 py-2 pr-11 ${
+                        note.type === "private"
+                          ? "border-amber-200 bg-[#FFF8EA]"
+                          : "border-blue-200 bg-[#EFF7FF]"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedNoteDelete(note);
+                          setNoteDeleteOpen(true);
+                        }}
+                        className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-zinc-400 opacity-0 transition-all duration-200 hover:bg-white hover:text-red-500 group-hover:opacity-100"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                          <path
+                            d="M9 3h6M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+
+                      <p className="text-[14px] font-semibold leading-5 text-slate-950">
+                        {note.text}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                        <p className="min-w-0 text-[12.5px] text-zinc-500">
+                          {formatDate(note.created_at)} •{" "}
+                          {note.created_by_role === "tenant"
+                            ? "Created by tenant"
+                            : "Created by landlord"}
+                          {note.type === "shared" && (
+                            <>
+                              {" "}•{" "}
+                              {note.created_by_role === "tenant"
+                                ? "Shared with landlord"
+                                : "Shared with tenant"}
+                            </>
+                          )}
+                        </p>
+
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
+                            note.type === "private"
+                              ? "bg-[#FFE8B8] text-[#8A5A00]"
+                              : "bg-[#DCEEFF] text-[#1D5F9F]"
+                          }`}
+                        >
+                          {note.type === "private" ? "Private Note" : "Shared Note"}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
             </div>
 
-            <div className="space-y-2 p-4">
-              {documents.length > 0 ? (
-                
-            documents.map((doc) => (
-  <div
-    key={doc.id}
-    className="flex w-full items-center justify-between rounded-2xl border border-black/5 bg-[#FAFAFA] px-4 py-3 text-left transition-all duration-200 hover:bg-zinc-50"
-  >
-    <button
-      type="button"
-      onClick={() => openDocument(doc)}
-      className="min-w-0 flex-1 text-left"
-    >
-      <p className="truncate text-[13px] font-semibold text-zinc-900">
-        {doc.file_name}
-      </p>
+            <div className="pointer-events-none absolute bottom-4 top-4 hidden w-px bg-zinc-200 lg:block" style={{ left: "59.2%" }} />
 
-      <p className="mt-1 text-[12px] text-zinc-500">
-        Uploaded document
-      </p>
-    </button>
-
-    <div className="ml-3 flex items-center gap-1">
-      <button
-        type="button"
-        onClick={() => openDocument(doc)}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 transition hover:text-zinc-900"
-        title="View"
-      >
-        <Eye size={15} strokeWidth={1.6} />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => downloadDocument(doc)}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 transition hover:text-zinc-900"
-        title="Download"
-      >
-        <Download size={15} strokeWidth={1.6} />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          setSelectedDocumentDelete(doc);
-          setDocumentDeleteOpen(true);
-        }}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 transition hover:text-red-500"
-        title="Delete"
-      >
-        <Trash2 size={15} strokeWidth={1.6} />
-      </button>
-    </div>
-  </div>
-))
-
-              ) : (
-                <div className="rounded-2xl bg-[#FAFAFA] px-4 py-8 text-center">
-                  <p className="text-[14px] font-semibold text-zinc-800">
-                    Store leases, renewals, notices, inspections, and important property documents.
-                  </p>
-
+            <div className="flex min-h-0 min-w-0 flex-col border-t border-zinc-200 p-3.5 lg:border-t-0">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
+                    Property Documents
+                  </h2>
+                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12.5px] font-semibold text-zinc-500">
+                    {documents.length}
+                  </span>
                 </div>
-              )}
+
+                <div className="flex items-center gap-3">
+                  <label className="cursor-pointer rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50">
+                    {uploadingDocument ? "Uploading" : "Upload"}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                      onChange={handleDocumentUpload}
+                      disabled={uploadingDocument}
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setDocumentsViewOpen(true)}
+                    className="text-[12.5px] font-semibold text-slate-700 transition hover:text-slate-950"
+                  >
+                    View all →
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
+                {documents.length > 0 ? (
+                  visibleDocuments.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-3.5 py-2.5 text-left transition hover:border-zinc-300 hover:bg-zinc-50/80"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openDocument(doc)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.02em] text-zinc-600">
+                          {getDocumentFileLabel(doc.file_name, doc.file_type)}
+                        </span>
+
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13.5px] font-semibold text-slate-950">
+                            {doc.file_name}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[12.5px] text-zinc-500">
+                            Uploaded document
+                            {doc.file_size ? ` · ${formatFileSize(doc.file_size)}` : ""}
+                          </span>
+                        </span>
+                      </button>
+
+                      <div className="ml-3 flex shrink-0 items-center gap-2 text-[12.5px] font-semibold text-slate-600">
+                        <button
+                          type="button"
+                          onClick={() => openDocument(doc)}
+                          className="transition hover:text-slate-950"
+                        >
+                          View
+                        </button>
+                        <span className="text-zinc-300">/</span>
+                        <button
+                          type="button"
+                          onClick={() => downloadDocument(doc)}
+                          className="transition hover:text-slate-950"
+                        >
+                          Download
+                        </button>
+                        <span className="text-zinc-300">/</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDocumentDelete(doc);
+                            setDocumentDeleteOpen(true);
+                          }}
+                          className="transition hover:text-red-500"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-8 text-center">
+                    <p className="text-[14px] font-semibold text-zinc-800">
+                      Store leases, renewals, notices, inspections, and important property documents.
+                    </p>
+                  </div>
+                )}
+              </div>
+
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[24px] border border-[#E8E5DE] bg-white shadow-[0_4px_18px_rgba(15,23,42,0.025)]">
-            <div className="border-b border-zinc-100 px-5 py-4">
-              <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
-                Recent Activity
-              </h2>
+          <section className="min-h-0 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-none">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+              <div>
+                <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
+                  Recent Activity
+                </h2>
+              </div>
 
-              <p className="mt-1 text-[12px] text-zinc-500">
-                Latest property updates
-              </p>
+              <button
+                type="button"
+                onClick={() => setActivityHistoryOpen(true)}
+                className="text-[12.5px] font-semibold leading-5 text-slate-950 transition hover:text-slate-700 active:scale-[0.96]"
+              >
+                View more activity →
+              </button>
             </div>
 
-            <div className="space-y-3 p-4">
-              {activities.length > 0 ? (
-                activities.map((activity) => (
+            {visibleActivities.length > 0 ? (
+              <div className="grid grid-cols-4 divide-x divide-zinc-200 px-3 py-1">
+                {visibleActivities.map((activity) => (
                   <ActivityItem key={activity.id} activity={activity} />
-                ))
-              ) : (
-                <div className="rounded-2xl bg-[#FAFAFA] px-4 py-5 text-[13px] text-zinc-500">
-                  No activity yet.
+                ))}
+                {Array.from({ length: emptyActivitySlots }).map((_, index) => (
+                  <div key={`empty-landlord-activity-${index}`} className="min-h-[78px]" />
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-4">
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/60 px-4 py-5">
+                  <p className="text-[13.5px] font-semibold text-slate-950">
+                    No recent activity
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-5 text-zinc-500">
+                    Property, tenant, document, payment, and note updates will appear here.
+                  </p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </section>
         </div>
 
 
-        <aside className="hidden min-h-0 flex-col gap-3 lg:flex lg:overflow-hidden">
-          
+        <aside className="hidden min-h-0 flex-col gap-2.5 lg:flex lg:overflow-hidden">
           <PaymentPerformanceCard
-  payments={payments}
-  leaseStartDate={lease?.start_date}
-  leaseEndDate={lease?.end_date}
-  monthlyRent={lease?.monthly_rent || 0}
-  rentDueDay={lease?.rent_due_day || "1st of the Month"}
-  propertyCreatedAt={property.created_at}
-/>
+            payments={payments}
+            leaseStartDate={lease?.start_date}
+            leaseEndDate={lease?.end_date}
+            monthlyRent={lease?.monthly_rent || 0}
+            rentDueDay={lease?.rent_due_day || "1st of the Month"}
+            propertyCreatedAt={property.created_at}
+            onViewHistory={() => setPaymentHistoryOpen(true)}
+          />
 
-          <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
+          <section className="rounded-[24px] border border-zinc-200 bg-white p-[18px] shadow-none">
   <div className="flex items-start justify-between gap-3">
     <div>
-      <h2 className="text-[18px] font-semibold tracking-[-0.045em] text-slate-950">
+      <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
         Payment Setup
       </h2>
 
-      <p className="mt-1 text-[12px] text-zinc-500">
+      <p className="mt-1 text-[13px] leading-5 text-zinc-500">
         Powered by <span className="font-semibold text-[#635BFF]">stripe</span>
       </p>
     </div>
 
     <span
-      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+      className={`rounded-full border px-3 py-1 text-[11.5px] font-semibold ${
         bankConnected
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-amber-50 text-amber-700"
+          ? "border-emerald-100 bg-emerald-50/80 text-emerald-700"
+          : "border-amber-100 bg-amber-50/80 text-amber-700"
       }`}
     >
       {bankConnected ? "Active" : "Needs Action"}
     </span>
   </div>
 
-  <div className="mt-5 space-y-4">
-    <div className="flex items-center justify-between">
-      <p className="text-[13px] text-zinc-500">Payout Method</p>
-      <p className="text-[13px] font-semibold text-zinc-900">
+  <div className="mt-4 space-y-2">
+    <div className="flex items-center justify-between rounded-2xl border border-zinc-100 bg-zinc-50/70 px-3.5 py-2.5">
+      <p className="text-[12.5px] font-medium leading-5 text-zinc-500">Payout Method</p>
+      <p className="text-[13.5px] font-semibold leading-5 text-slate-950">
         {bankConnected ? "Direct Deposit" : "Not connected"}
       </p>
     </div>
 
-    <div className="flex items-center justify-between">
-      <p className="text-[13px] text-zinc-500">Next Payout</p>
-      <p className="text-[13px] font-semibold text-zinc-900">
+    <div className="flex items-center justify-between rounded-2xl border border-zinc-100 bg-zinc-50/70 px-3.5 py-2.5">
+      <p className="text-[12.5px] font-medium leading-5 text-zinc-500">Next Payout</p>
+      <p className="text-[13.5px] font-semibold leading-5 text-slate-950">
         {bankConnected ? "Available after setup" : "Pending setup"}
       </p>
     </div>
 
-    <div className="flex items-center justify-between">
-      <p className="text-[13px] text-zinc-500">Tenant Payments</p>
-      <p className="text-[13px] font-semibold text-zinc-900">
+    <div className="flex items-center justify-between rounded-2xl border border-zinc-100 bg-zinc-50/70 px-3.5 py-2.5">
+      <p className="text-[12.5px] font-medium leading-5 text-zinc-500">Tenant Payments</p>
+      <p className="text-[13.5px] font-semibold leading-5 text-slate-950">
         {bankConnected ? "Enabled" : "Paused"}
       </p>
     </div>
@@ -1446,7 +1625,7 @@ onDelete={() => handleDeleteTenant(tenant)}
 
   <button
     onClick={() => handleConnectStripe()}
-    className="mt-5 h-11 w-full rounded-2xl bg-[#B9476D] text-[14px] font-semibold text-white transition hover:bg-[#A93F64]"
+    className="mt-4 h-9 w-full rounded-2xl bg-[#33435F] text-[13px] font-semibold text-white transition hover:bg-[#2A3850]"
   >
     Manage Payout Settings
   </button>
@@ -1737,7 +1916,7 @@ onDelete={() => handleDeleteTenant(tenant)}
   </ModalShell>
 )}
 
-{leaseEditOpen && (
+      {leaseEditOpen && (
   <ModalShell
     title={leaseEndingSoon ? "Extend Lease" : "Edit Lease"}
     subtitle="Update lease dates, rent amount, and rent due day."
@@ -1779,7 +1958,58 @@ onDelete={() => handleDeleteTenant(tenant)}
     />
   </ModalShell>
 )}
-   
+
+      {notesViewOpen && (
+        <PropertyNotesFullView
+          notes={notes}
+          onClose={() => setNotesViewOpen(false)}
+          onAddNote={() => {
+            setNotesViewOpen(false);
+            setNoteOpen(true);
+          }}
+          onDeleteNote={(note) => {
+            setSelectedNoteDelete(note);
+            setNoteDeleteOpen(true);
+          }}
+        />
+      )}
+
+      {documentsViewOpen && (
+        <PropertyDocumentsFullView
+          documents={documents}
+          uploadingDocument={uploadingDocument}
+          onClose={() => setDocumentsViewOpen(false)}
+          onUpload={handleDocumentUpload}
+          onOpenDocument={openDocument}
+          onDownloadDocument={downloadDocument}
+          onDeleteDocument={(doc) => {
+            setSelectedDocumentDelete(doc);
+            setDocumentDeleteOpen(true);
+          }}
+        />
+      )}
+
+      {paymentHistoryOpen && (
+        <PaymentHistoryFullView
+          payments={payments}
+          leaseStartDate={lease?.start_date}
+          leaseEndDate={lease?.end_date}
+          monthlyRent={lease?.monthly_rent || 0}
+          rentDueDay={lease?.rent_due_day || "1st of the Month"}
+          propertyCreatedAt={property.created_at}
+          propertyName={property.property_label}
+          onClose={() => setPaymentHistoryOpen(false)}
+        />
+      )}
+
+      {activityHistoryOpen && (
+        <ActivityHistoryFullView
+          activities={activities}
+          propertyName={property.property_label}
+          onClose={() => setActivityHistoryOpen(false)}
+        />
+      )}
+
       {deleteOpen && (
         <DeletePropertyModal
           propertyName={property.property_label}
@@ -1817,6 +2047,17 @@ onDelete={() => handleDeleteTenant(tenant)}
   />
 )}
 
+      {tenantDeleteTarget && (
+        <DeleteTenantModal
+          tenant={tenantDeleteTarget}
+          deleting={deletingTenant}
+          onClose={() => {
+            if (!deletingTenant) setTenantDeleteTarget(null);
+          }}
+          onConfirm={() => handleDeleteTenant(tenantDeleteTarget)}
+        />
+      )}
+
     </>
   );
 }
@@ -1828,13 +2069,15 @@ function PaymentPerformanceCard({
   monthlyRent,
   rentDueDay,
   propertyCreatedAt,
+  onViewHistory,
 }: {
-  payments: any[];
+  payments: RentPaymentRecord[];
   leaseStartDate?: string | null;
   leaseEndDate?: string | null;
   monthlyRent: number;
   rentDueDay: string;
   propertyCreatedAt?: string | null;
+  onViewHistory: () => void;
 }) {
   const upcomingRef = useRef<HTMLDivElement | null>(null);
 
@@ -1856,7 +2099,7 @@ function PaymentPerformanceCard({
   return {
     ...item,
     id: savedPayment?.id || item.key,
-    status: savedPayment?.status || item.status,
+    status: normalizePaymentStatus(savedPayment?.status || item.status),
     amount: savedPayment?.amount || monthlyRent,
   };
 });
@@ -1880,33 +2123,32 @@ function PaymentPerformanceCard({
   const upcomingCount = timeline.filter((p) => p.status === "upcoming").length;
   const futureCount = timeline.filter((p) => p.status === "future").length;
 
-  const completedCount = paidCount + lateCount;
-  const onTimeRate =
-    completedCount > 0 ? Math.round((paidCount / completedCount) * 100) : 100;
-
   return (
-    <section className="rounded-[24px] border border-[#E8E5DE] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.035)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-[18px] font-semibold leading-6 tracking-[-0.045em] text-slate-950">
+    <section className="rounded-[24px] border border-zinc-200 bg-white p-[18px] shadow-none">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[20px] font-medium leading-6 tracking-[-0.045em] text-slate-950">
             Payout Performance
           </h2>
-          <p className="mt-2 text-[12px] leading-5 text-zinc-500">
-            Rent payments for
-            <br />
-            {formatMonthYear(leaseStartDate)} – {formatMonthYear(leaseEndDate)}
-          </p>
-        </div>
-
-        <div className="rounded-[18px] bg-emerald-50 px-4 py-3 text-right">
-          <p className="text-[23px] font-semibold tracking-[-0.06em] text-emerald-700">
-            {onTimeRate}%
-          </p>
-          <p className="text-[11px] font-medium text-zinc-500">On-time rate</p>
+          <div className="mt-1 text-[12.5px] leading-5">
+            <p className="whitespace-nowrap text-zinc-500">
+              <span>
+                Rent payments for {formatMonthYear(leaseStartDate)} –{" "}
+                {formatMonthYear(leaseEndDate)}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={onViewHistory}
+              className="mt-0.5 block w-full text-right text-[12.5px] font-semibold text-slate-950 transition hover:text-slate-700"
+            >
+              All history →
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-4 max-h-[300px] space-y-2 overflow-y-auto pr-1">
+      <div className="mt-3 max-h-[286px] space-y-1.5 overflow-y-auto scroll-smooth pr-1 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
         {timeline.map((item) => (
           <PaymentMonthRow
             key={item.id}
@@ -1922,7 +2164,7 @@ function PaymentPerformanceCard({
         ))}
       </div>
 
-      <div className="mt-5 grid grid-cols-4 overflow-hidden rounded-[18px] border border-zinc-100 bg-white">
+      <div className="mt-3.5 grid grid-cols-4 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
         <PaymentStat label="Paid" value={paidCount} color="text-emerald-600" dot="bg-emerald-500" />
         <PaymentStat label="Upcoming" value={upcomingCount} color="text-blue-600" dot="bg-blue-500" />
         <PaymentStat label="Late" value={lateCount} color="text-amber-600" dot="bg-amber-400" />
@@ -1951,36 +2193,22 @@ function PaymentMonthRow({
   return (
     <div
       ref={rowRef}
-      className="grid grid-cols-[54px_26px_1fr] items-center gap-3"
+      className="grid grid-cols-[minmax(72px,1fr)_auto_minmax(64px,auto)] items-center gap-2 rounded-2xl border border-zinc-100 bg-zinc-50/70 px-3 py-2"
     >
-      <p className="text-[12px] font-medium text-slate-800">{item.month}</p>
+      <p className="truncate text-[12.5px] font-semibold tracking-[-0.01em] text-slate-800">
+        {item.month}
+      </p>
 
-      <div className="flex flex-col items-center">
-        <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
-        <span className={`mt-1 h-8 w-[10px] rounded-full ${styles.bar}`} />
-      </div>
+      <span
+        className={`inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles.pill}`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+        {styles.label}
+      </span>
 
-      <div className={`rounded-[15px] px-3 py-2 ${styles.card}`}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${styles.icon}`}
-              >
-                {styles.symbol}
-              </span>
-
-              <p className={`text-[12px] font-semibold ${styles.text}`}>
-                {styles.label}
-              </p>
-            </div>
-          </div>
-
-          <p className="shrink-0 text-[12px] font-semibold text-slate-950">
-            ${Number(monthlyRent || 0).toLocaleString()}
-          </p>
-        </div>
-      </div>
+      <p className="shrink-0 text-right text-[12.5px] font-semibold tabular-nums text-slate-950">
+        ${Number(monthlyRent || 0).toLocaleString()}
+      </p>
     </div>
   );
 }
@@ -1997,15 +2225,416 @@ function PaymentStat({
   dot: string;
 }) {
   return (
-    <div className="border-r border-zinc-100 px-2 py-3 text-center last:border-r-0">
+    <div className="border-r border-zinc-200 px-2 py-2.5 text-center last:border-r-0">
       <div className="flex items-center justify-center gap-1.5">
         <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-        <p className="text-[10px] font-semibold text-zinc-500">{label}</p>
+        <p className="text-[11px] font-semibold text-zinc-500">{label}</p>
       </div>
 
-      <p className={`mt-1 text-[18px] font-semibold tracking-[-0.04em] ${color}`}>
+      <p className={`mt-1 text-[19px] font-semibold tracking-[-0.04em] ${color}`}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function PropertyNotesFullView({
+  notes,
+  onClose,
+  onAddNote,
+  onDeleteNote,
+}: {
+  notes: PropertyNote[];
+  onClose: () => void;
+  onAddNote: () => void;
+  onDeleteNote: (note: PropertyNote) => void;
+}) {
+  return (
+    <LargePropertyModal
+      title="All Notes"
+      subtitle="Review private and shared notes for this property."
+      count={notes.length}
+      onClose={onClose}
+      action={
+        <button
+          type="button"
+          onClick={onAddNote}
+          className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50"
+        >
+          + Add
+        </button>
+      }
+    >
+      {notes.length === 0 ? (
+        <EmptyFullView
+          title="No notes yet"
+          subtitle="Add private reminders or shared tenant updates for this property."
+        />
+      ) : (
+        <div className="grid gap-3">
+          {notes.map((note) => (
+            <div
+              key={note.id}
+              className={`group relative rounded-[20px] border px-4 py-3.5 pr-12 ${
+                note.type === "private"
+                  ? "border-amber-200 bg-[#FFF8EA]"
+                  : "border-blue-200 bg-[#EFF7FF]"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onDeleteNote(note)}
+                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-zinc-400 opacity-0 transition-all duration-200 hover:bg-white hover:text-red-500 group-hover:opacity-100"
+                aria-label="Delete note"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M9 3h6M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="min-w-0 flex-1 text-[14px] font-semibold leading-6 text-slate-950">
+                  {note.text}
+                </p>
+
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
+                    note.type === "private"
+                      ? "bg-[#FFE8B8] text-[#8A5A00]"
+                      : "bg-[#DCEEFF] text-[#1D5F9F]"
+                  }`}
+                >
+                  {note.type === "private" ? "Private Note" : "Shared Note"}
+                </span>
+              </div>
+
+              <p className="mt-2 text-[12.5px] leading-5 text-zinc-500">
+                {formatDate(note.created_at)} •{" "}
+                {note.created_by_role === "tenant"
+                  ? "Created by tenant"
+                  : "Created by landlord"}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </LargePropertyModal>
+  );
+}
+
+function PropertyDocumentsFullView({
+  documents,
+  uploadingDocument,
+  onClose,
+  onUpload,
+  onOpenDocument,
+  onDownloadDocument,
+  onDeleteDocument,
+}: {
+  documents: LeaseDocumentRecord[];
+  uploadingDocument: boolean;
+  onClose: () => void;
+  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onOpenDocument: (doc: LeaseDocumentRecord) => void;
+  onDownloadDocument: (doc: LeaseDocumentRecord) => void;
+  onDeleteDocument: (doc: LeaseDocumentRecord) => void;
+}) {
+  return (
+    <LargePropertyModal
+      title="Property Documents"
+      subtitle="View, download, upload, or remove documents for this property."
+      count={documents.length}
+      onClose={onClose}
+      action={
+        <label className="cursor-pointer rounded-xl border border-zinc-200 bg-white px-4 py-2 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50">
+          {uploadingDocument ? "Uploading" : "Upload"}
+          <input
+            type="file"
+            className="hidden"
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            onChange={onUpload}
+            disabled={uploadingDocument}
+          />
+        </label>
+      }
+    >
+      {documents.length === 0 ? (
+        <EmptyFullView
+          title="No documents yet"
+          subtitle="Upload lease documents, renewals, notices, inspections, and records."
+        />
+      ) : (
+        <div className="overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
+          {documents.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex items-center justify-between gap-4 border-b border-zinc-200 px-4 py-4 last:border-b-0"
+            >
+              <button
+                type="button"
+                onClick={() => onOpenDocument(doc)}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.02em] text-zinc-600">
+                  {getDocumentFileLabel(doc.file_name, doc.file_type)}
+                </span>
+
+                <span className="min-w-0">
+                  <span className="block truncate text-[14px] font-semibold text-slate-950">
+                    {doc.file_name}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12.5px] text-zinc-500">
+                    {formatDate(doc.created_at)} ·{" "}
+                    {doc.file_type || "Document"}
+                    {doc.file_size ? ` · ${formatFileSize(doc.file_size)}` : ""}
+                  </span>
+                </span>
+              </button>
+
+              <div className="flex shrink-0 items-center gap-2 text-[12.5px] font-semibold text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => onOpenDocument(doc)}
+                  className="transition hover:text-slate-950"
+                >
+                  View
+                </button>
+                <span className="text-zinc-300">/</span>
+                <button
+                  type="button"
+                  onClick={() => onDownloadDocument(doc)}
+                  className="transition hover:text-slate-950"
+                >
+                  Download
+                </button>
+                <span className="text-zinc-300">/</span>
+                <button
+                  type="button"
+                  onClick={() => onDeleteDocument(doc)}
+                  className="transition hover:text-red-500"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </LargePropertyModal>
+  );
+}
+
+function PaymentHistoryFullView({
+  payments,
+  leaseStartDate,
+  leaseEndDate,
+  monthlyRent,
+  rentDueDay,
+  propertyCreatedAt,
+  propertyName,
+  onClose,
+}: {
+  payments: RentPaymentRecord[];
+  leaseStartDate?: string | null;
+  leaseEndDate?: string | null;
+  monthlyRent: number;
+  rentDueDay: string;
+  propertyCreatedAt?: string | null;
+  propertyName: string;
+  onClose: () => void;
+}) {
+  const paymentMap = new Map(
+    payments.map((payment) => [
+      String(payment.period_label || "").toLowerCase(),
+      payment,
+    ])
+  );
+  const timeline = buildPaymentTimeline(
+    leaseStartDate,
+    leaseEndDate,
+    rentDueDay,
+    propertyCreatedAt
+  ).map((item) => {
+    const savedPayment = paymentMap.get(item.monthFull.toLowerCase());
+    const status = normalizePaymentStatus(savedPayment?.status || item.status);
+
+    return {
+      ...item,
+      id: savedPayment?.id || item.key,
+      amount: savedPayment?.amount || monthlyRent,
+      status,
+      paidAt: savedPayment?.paid_at || null,
+      createdAt: savedPayment?.created_at || null,
+    };
+  });
+
+  const paidCount = timeline.filter((item) => item.status === "paid").length;
+  const lateCount = timeline.filter((item) => item.status === "late").length;
+  const upcomingCount = timeline.filter(
+    (item) => item.status === "upcoming"
+  ).length;
+  const futureCount = timeline.filter((item) => item.status === "future").length;
+
+  return (
+    <LargePropertyModal
+      title="Payment History"
+      subtitle={`${propertyName} rent payment timeline`}
+      count={timeline.length}
+      onClose={onClose}
+    >
+      <div className="grid grid-cols-4 overflow-hidden rounded-[22px] border border-zinc-200 bg-white">
+        <PaymentStat label="Paid" value={paidCount} color="text-emerald-600" dot="bg-emerald-500" />
+        <PaymentStat label="Upcoming" value={upcomingCount} color="text-blue-600" dot="bg-blue-500" />
+        <PaymentStat label="Late" value={lateCount} color="text-amber-600" dot="bg-amber-400" />
+        <PaymentStat label="Future" value={futureCount} color="text-zinc-500" dot="bg-zinc-300" />
+      </div>
+
+      <div className="mt-5 overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
+        {timeline.map((item) => {
+          const styles = getPaymentRowStyles(item.status);
+          const dateText =
+            item.status === "paid" && item.paidAt
+              ? `Paid on ${formatDate(item.paidAt)}`
+              : item.status === "paid" && item.createdAt
+              ? `Recorded on ${formatDate(item.createdAt)}`
+              : item.dueText;
+
+          return (
+            <div
+              key={item.id}
+              className="grid grid-cols-[minmax(160px,1fr)_auto_auto] items-center gap-4 border-b border-zinc-200 px-4 py-4 last:border-b-0"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-semibold text-slate-950">
+                  {item.monthFull}
+                </p>
+                <p className="mt-0.5 truncate text-[12.5px] text-zinc-500">
+                  {dateText}
+                </p>
+              </div>
+
+              <span
+                className={`inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles.pill}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
+                {styles.label}
+              </span>
+
+              <p className="text-right text-[14px] font-semibold tabular-nums text-slate-950">
+                ${Number(item.amount || 0).toLocaleString()}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </LargePropertyModal>
+  );
+}
+
+function ActivityHistoryFullView({
+  activities,
+  propertyName,
+  onClose,
+}: {
+  activities: ActivityLog[];
+  propertyName: string;
+  onClose: () => void;
+}) {
+  return (
+    <LargePropertyModal
+      title="Activity History"
+      subtitle={`${propertyName} activity log`}
+      count={activities.length}
+      onClose={onClose}
+    >
+      {activities.length === 0 ? (
+        <EmptyFullView
+          title="No activity yet"
+          subtitle="Property, tenant, document, payment, and note updates will appear here."
+        />
+      ) : (
+        <div className="space-y-3">
+          {activities.map((activity) => (
+            <ActivityHistoryRow key={activity.id} activity={activity} />
+          ))}
+        </div>
+      )}
+    </LargePropertyModal>
+  );
+}
+
+function EmptyFullView({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="rounded-[24px] border border-dashed border-zinc-200 bg-zinc-50/70 px-5 py-10 text-center">
+      <p className="text-[14px] font-semibold text-slate-950">{title}</p>
+      <p className="mt-1 text-[12.5px] leading-5 text-zinc-500">{subtitle}</p>
+    </div>
+  );
+}
+
+function LargePropertyModal({
+  title,
+  subtitle,
+  count,
+  action,
+  children,
+  onClose,
+}: {
+  title: string;
+  subtitle: string;
+  count: number;
+  action?: ReactNode;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/30 backdrop-blur-sm">
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+        <div className="flex h-[76vh] min-h-[520px] w-full max-w-[1120px] flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_40px_120px_rgba(15,23,42,0.22)]">
+          <div className="flex shrink-0 items-start justify-between gap-5 border-b border-zinc-200 px-6 py-5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <h2 className="text-[24px] font-medium tracking-[-0.045em] text-slate-950">
+                  {title}
+                </h2>
+                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12px] font-semibold text-zinc-500">
+                  {count}
+                </span>
+              </div>
+              <p className="mt-1 text-[13px] leading-5 text-zinc-500">
+                {subtitle}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3">
+              {action}
+              <button
+                onClick={onClose}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-[20px] text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-900"
+                aria-label={`Close ${title}`}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
+            {children}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2016,6 +2645,7 @@ function getPaymentRowStyles(status: MonthStatus) {
       label: "Paid",
       symbol: "✓",
       card: "bg-gradient-to-r from-emerald-50 to-emerald-50/35",
+      pill: "bg-emerald-50 text-emerald-700",
       text: "text-emerald-700",
       dot: "bg-emerald-500",
       bar: "bg-emerald-500",
@@ -2028,6 +2658,7 @@ function getPaymentRowStyles(status: MonthStatus) {
       label: "Late",
       symbol: "!",
       card: "bg-gradient-to-r from-amber-50 to-amber-50/35",
+      pill: "bg-amber-50 text-amber-700",
       text: "text-amber-700",
       dot: "bg-amber-400",
       bar: "bg-amber-400",
@@ -2040,6 +2671,7 @@ function getPaymentRowStyles(status: MonthStatus) {
       label: "Upcoming",
       symbol: "□",
       card: "bg-gradient-to-r from-blue-50 to-blue-50/35",
+      pill: "bg-blue-50 text-blue-700",
       text: "text-blue-700",
       dot: "bg-blue-500",
       bar: "bg-blue-500",
@@ -2052,6 +2684,7 @@ function getPaymentRowStyles(status: MonthStatus) {
     label: "Inactive",
     symbol: "□",
     card: "bg-gradient-to-r from-zinc-50 to-zinc-50/35",
+    pill: "bg-zinc-100 text-zinc-400",
     text: "text-zinc-400",
     dot: "bg-zinc-200",
     bar: "bg-zinc-200",
@@ -2063,6 +2696,7 @@ function getPaymentRowStyles(status: MonthStatus) {
     label: "Future",
     symbol: "□",
     card: "bg-gradient-to-r from-zinc-50 to-zinc-50/35",
+    pill: "bg-zinc-100 text-zinc-500",
     text: "text-zinc-500",
     dot: "bg-zinc-300",
     bar: "bg-zinc-300",
@@ -2084,6 +2718,86 @@ function extractDueDay(rentDueDay: string) {
   return rentDueDay?.replace(" of the Month", "") || "—";
 }
 
+function PropertyTopMetric({
+  icon,
+  label,
+  value,
+  subtext,
+  tone,
+}: {
+  icon: "dollar" | "shield" | "calendar";
+  label: string;
+  value: string;
+  subtext: string;
+  tone: "emerald" | "amber" | "blue";
+}) {
+  const toneClass =
+    tone === "emerald"
+      ? "border-emerald-100 bg-emerald-50/80 text-emerald-700"
+      : tone === "amber"
+      ? "border-amber-100 bg-amber-50/80 text-amber-700"
+      : "border-blue-100 bg-blue-50/80 text-blue-700";
+
+  return (
+    <div className="flex items-center gap-4 border-b border-zinc-200 px-[18px] py-3.5 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
+      <span
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ${toneClass}`}
+      >
+        {icon === "dollar" && (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 3v18M16.5 7.5c-.8-.9-2-1.4-3.6-1.4-2.2 0-3.6 1-3.6 2.6 0 1.7 1.4 2.3 3.7 2.9 2.4.6 3.8 1.3 3.8 3.1 0 1.8-1.5 3-4.1 3-1.9 0-3.4-.6-4.4-1.8"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+        )}
+
+        {icon === "shield" && (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 3.8 18.5 6v5.1c0 4-2.5 7.3-6.5 8.8-4-1.5-6.5-4.8-6.5-8.8V6L12 3.8Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path
+              d="m8.7 12.1 2.1 2.1 4.6-4.8"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+
+        {icon === "calendar" && (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M7 3.5v3M17 3.5v3M4.5 9h15M6 5.5h12a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </span>
+
+      <div className="min-w-0">
+        <p className="text-[12.5px] font-semibold leading-4 text-slate-500">{label}</p>
+        <p className="mt-1 truncate text-[22px] font-semibold tracking-[-0.055em] text-slate-950">
+          {value}
+        </p>
+        <p className="mt-0.5 truncate text-[13px] font-medium leading-5 text-slate-500">
+          {subtext}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function MetricCard({
   label,
   value,
@@ -2099,7 +2813,7 @@ function MetricCard({
 }) {
   return (
     <div className="rounded-[18px] border border-[#E4E1DA] bg-white px-4 py-4 shadow-[0_6px_18px_rgba(15,23,42,0.04)]">
-      <p className="text-[12px] font-semibold text-slate-500">{label}</p>
+      <p className="text-[12.5px] font-semibold text-slate-500">{label}</p>
 
       <p
         className={`mt-2 truncate text-[22px] font-semibold tracking-[-0.035em] ${
@@ -2113,7 +2827,7 @@ function MetricCard({
         {value}
       </p>
 
-      <p className="mt-1 truncate text-[12px] font-medium text-slate-500">
+      <p className="mt-1 truncate text-[12.5px] font-medium text-slate-500">
         {subtext}
       </p>
     </div>
@@ -2153,48 +2867,55 @@ useEffect(() => {
   };
 }, []);
 
-  const initials = `${tenant.first_name?.charAt(0) || ""}${
-    tenant.last_name?.charAt(0) || ""
-  }`;
-
   const inviteAccepted = tenant.invite_status === "accepted";
-  const isPrimaryTenant = tenant.tenant_role === "primary";
+  const isPrimaryTenant = tenant.tenant_role?.toLowerCase() === "primary";
+  const roleLabel = getTenantRoleLabel(tenant.tenant_role);
 
   return (
     <div
   ref={menuRef}
-  className="relative overflow-visible flex items-center gap-4 rounded-[18px] border border-black/5 bg-[#FAFAFA] px-4 py-3 transition-all duration-200 hover:bg-white hover:shadow-sm"
+  className="group relative flex items-center gap-3.5 overflow-visible rounded-[18px] border border-zinc-200 bg-white px-4 py-3.5 transition hover:bg-zinc-50"
 >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#B9476D] text-[13px] font-semibold text-white">
-        {initials || "T"}
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[14px] font-semibold text-white">
+        {getTenantInitials(tenant)}
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-[14px] font-semibold text-slate-950">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-[14.5px] font-semibold text-slate-950">
             {tenant.first_name} {tenant.last_name}
           </p>
 
-          {tenant.tenant_role === "primary" && (
-            <span className="rounded-full bg-[#FFF1F5] px-2 py-[3px] text-[9px] font-semibold text-[#B9476D]">
-              Primary
+          {tenant.tenant_role && (
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold ${
+                isPrimaryTenant
+                  ? "border-blue-100 bg-blue-50/80 text-blue-700"
+                  : "border-zinc-200 bg-zinc-100 text-zinc-600"
+              }`}
+            >
+              {roleLabel}
             </span>
           )}
 
-          {tenant.tenant_role === "primary" && (
-  <span
-    className={`rounded-full px-2 py-[3px] text-[9px] font-semibold ${
-      inviteAccepted
-        ? "bg-emerald-50 text-emerald-700"
-        : "bg-amber-50 text-amber-700"
-    }`}
-  >
-    {inviteAccepted ? "Invite accepted · Dashboard enabled" : "Invite sent"}
-  </span>
-)}
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold ${
+              inviteAccepted
+                ? "border-emerald-100 bg-emerald-50/80 text-emerald-700"
+                : "border-amber-100 bg-amber-50/80 text-amber-700"
+            }`}
+          >
+            {inviteAccepted ? "Invite accepted" : "Invite sent"}
+          </span>
+
+          {inviteAccepted && (
+            <span className="rounded-full border border-emerald-100 bg-emerald-50/80 px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+              Dashboard enabled
+            </span>
+          )}
         </div>
 
-        <p className="mt-1 truncate text-[12px] text-zinc-500">
+        <p className="mt-1 truncate text-[12.5px] text-zinc-500">
           {tenant.email || "No email"}
         </p>
       </div>
@@ -2205,9 +2926,14 @@ useEffect(() => {
     type="button"
     onClick={(e) => {
       e.stopPropagation();
-      inviteAccepted ? onRequestPayment() : onResendInvite();
+      if (inviteAccepted) {
+        onRequestPayment();
+        return;
+      }
+
+      onResendInvite();
     }}
-    className="relative z-30 rounded-xl border border-black/5 bg-white px-3 py-2 text-[12px] font-semibold text-[#B9476D] transition hover:bg-zinc-50"
+    className="relative z-30 rounded-xl bg-[#33435F] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[#2A3850]"
   >
     {inviteAccepted ? "Request Payment" : "Resend Invite"}
   </button>
@@ -2219,16 +2945,20 @@ useEffect(() => {
     e.stopPropagation();
     setMenuOpen(!menuOpen);
   }}
-  className="relative z-30 flex h-8 w-8 items-center justify-center text-[18px] font-semibold text-zinc-700 transition hover:text-black"
+  data-open={menuOpen}
+  className="relative z-30 flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-[18px] font-semibold text-zinc-700 transition hover:bg-zinc-50 hover:text-black"
 >
   ⋮
 </button>
 </div>
 
       {menuOpen && (
-        <div className="absolute right-0 top-12 z-[80] w-[190px] rounded-2xl border border-black/5 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
+        <div className="absolute right-0 top-14 z-[80] w-[190px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
           <button
-            onClick={onEdit}
+            onClick={() => {
+              setMenuOpen(false);
+              onEdit();
+            }}
             className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-slate-700 hover:bg-zinc-50"
           >
             Edit tenant
@@ -2236,7 +2966,10 @@ useEffect(() => {
 
 
           <button
-            onClick={onDelete}
+            onClick={() => {
+              setMenuOpen(false);
+              onDelete();
+            }}
             className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-red-600 hover:bg-red-50"
           >
             Delete tenant
@@ -2284,21 +3017,334 @@ function RightInfo({
   );
 }
 
-function ActivityItem({ activity }: { activity: any }) {
+function ActivityItem({ activity }: { activity: ActivityLog }) {
+  const tone = getActivityTone(activity);
+  const display = getActivityDisplay(activity);
+
   return (
-    <div className="rounded-2xl border border-black/5 bg-white px-4 py-4">
-      <p className="text-[13px] font-semibold text-zinc-900">
-        {activity.title}
-      </p>
+    <div className="group min-h-[78px] px-3 py-3.5 transition hover:bg-zinc-50/60">
+      <div className="flex items-start gap-3">
+        <ActivityIcon type={tone.type} iconClass={tone.iconClass} size="sm" />
 
-      <p className="mt-1 text-[12px] text-zinc-500">
-        {activity.description}
-      </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <p className="truncate text-[13.5px] font-semibold leading-5 text-slate-950">
+              {display.title}
+            </p>
+            {tone.badge && (
+              <span className={tone.badgeClass}>{tone.badge}</span>
+            )}
+          </div>
 
-      <p className="mt-2 text-[11px] text-zinc-400">
-        {formatDate(activity.created_at)}
-      </p>
+          <p className="mt-0.5 line-clamp-1 text-[12.5px] leading-5 text-zinc-500">
+            {display.description}
+          </p>
+
+          {activity.created_at && (
+            <p className="mt-1 truncate text-[11.5px] font-medium leading-4 text-zinc-400">
+              {formatDate(activity.created_at)}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ActivityHistoryRow({ activity }: { activity: ActivityLog }) {
+  const tone = getActivityTone(activity);
+  const display = getActivityDisplay(activity);
+
+  return (
+    <div className="flex items-center justify-between gap-5 rounded-2xl border border-zinc-200 bg-white px-4 py-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <ActivityIcon type={tone.type} iconClass={tone.iconClass} size="md" />
+
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-[13px] font-semibold leading-5 text-zinc-950">
+              {display.title}
+            </p>
+            {tone.badge && (
+              <span className={tone.badgeClass}>{tone.badge}</span>
+            )}
+          </div>
+          <p className="mt-1 truncate text-[12px] font-medium leading-5 text-zinc-500">
+            {display.description}
+          </p>
+        </div>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className="text-[11px] font-medium leading-4 text-zinc-500">
+          {formatDateTime(activity.created_at)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function getActivityDisplay(activity: ActivityLog) {
+  const type = String(activity.activity_type || "").toLowerCase();
+  const title = activity.title || "Property updated";
+  const description = activity.description || "Property workspace updated";
+  const genericPropertyTitle = title.toLowerCase() === "property updated";
+
+  if (type.includes("private_note_added") || title.toLowerCase() === "private note added") {
+    return {
+      title: "Private note added",
+      description: "A private note was added to this property.",
+    };
+  }
+
+  if (type.includes("shared_note_added") || title.toLowerCase() === "shared note added") {
+    return {
+      title: "Shared note added",
+      description: "A shared note was added for this property.",
+    };
+  }
+
+  if (
+    type.includes("private_note_deleted") ||
+    type.includes("private_note_removed") ||
+    title.toLowerCase() === "private note deleted"
+  ) {
+    return {
+      title: "Private note deleted",
+      description: "A private note was removed from this property.",
+    };
+  }
+
+  if (
+    type.includes("shared_note_deleted") ||
+    type.includes("shared_note_removed") ||
+    title.toLowerCase() === "shared note deleted"
+  ) {
+    return {
+      title: "Shared note deleted",
+      description: "A shared note was removed from this property.",
+    };
+  }
+
+  if (type.includes("note_added") && genericPropertyTitle) {
+    return {
+      title: "Note added",
+      description: "A note was added to this property.",
+    };
+  }
+
+  if ((type.includes("note_deleted") || type.includes("note_removed")) && genericPropertyTitle) {
+    return {
+      title: "Note deleted",
+      description: "A note was removed from this property.",
+    };
+  }
+
+  return { title, description };
+}
+
+function getActivityTone(activity: ActivityLog) {
+  const display = getActivityDisplay(activity);
+  const activityType = String(activity.activity_type || "").toLowerCase();
+  const activityTitle = display.title.toLowerCase();
+  const text = `${activityType} ${activityTitle} ${
+    display.description
+  }`.toLowerCase();
+  const isDelete = text.includes("delete") || text.includes("removed");
+  const isNote = activityType.includes("note") || activityTitle.includes("note");
+  const isDocument =
+    activityType.includes("document") || activityTitle.includes("document");
+  const isTenant =
+    activityType.includes("tenant") ||
+    activityTitle.includes("tenant") ||
+    activityTitle.includes("dashboard enabled");
+  const isTenantSuccess =
+    isTenant &&
+    (text.includes("accepted") ||
+      text.includes("enabled") ||
+      text.includes("complete"));
+  const isPayment =
+    activityType.includes("payment") ||
+    activityTitle.includes("payment") ||
+    text.includes("rent");
+  const isPaymentSuccess =
+    isPayment &&
+    (text.includes("paid") ||
+      text.includes("received") ||
+      text.includes("success") ||
+      text.includes("confirmed"));
+  const isPaymentAlert =
+    isPayment &&
+    (text.includes("late") ||
+      text.includes("failed") ||
+      text.includes("declined") ||
+      text.includes("past due"));
+  const isSupport =
+    activityType.includes("support") ||
+    activityTitle.includes("support case") ||
+    activityTitle.includes("case created");
+  const isProperty =
+    activityType.includes("property") ||
+    activityTitle.includes("property updated") ||
+    activityTitle.includes("details updated");
+
+  if (isNote && isDelete) {
+    return {
+      type: "delete" as const,
+      iconClass: "bg-[#FFF1F2] text-[#B9476D] ring-1 ring-[#F8D7DF]",
+      badge: text.includes("tenant") ? "Tenant" : "",
+      badgeClass:
+        "shrink-0 rounded-full bg-[#FFF1F2] px-2 py-0.5 text-[10px] font-semibold leading-4 text-[#B9476D]",
+    };
+  }
+
+  if (isNote) {
+    return {
+      type: "note" as const,
+      iconClass: "bg-[#DCEEFF] text-[#1D5F9F] ring-1 ring-[#BFE0FF]",
+      badge: text.includes("landlord") ? "Landlord" : "",
+      badgeClass:
+        "shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold leading-4 text-zinc-600",
+    };
+  }
+
+  if (isDocument && isDelete) {
+    return {
+      type: "delete" as const,
+      iconClass: "bg-[#FFF1F2] text-[#B9476D] ring-1 ring-[#F8D7DF]",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  if (isDocument) {
+    return {
+      type: "document" as const,
+      iconClass: "bg-[#F4F4F5] text-zinc-700 ring-1 ring-zinc-200",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  if (isTenant) {
+    return {
+      type: isTenantSuccess ? ("user-check" as const) : ("user" as const),
+      iconClass: isTenantSuccess
+        ? "bg-slate-950 text-white ring-1 ring-slate-950/10"
+        : "bg-white text-slate-950 ring-1 ring-slate-950/15",
+      badge: "Tenant",
+      badgeClass: "",
+    };
+  }
+
+  if (isPaymentSuccess) {
+    return {
+      type: "payment-success" as const,
+      iconClass: "bg-slate-950 text-white ring-1 ring-slate-950/10",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  if (isPaymentAlert) {
+    return {
+      type: "payment-alert" as const,
+      iconClass: "bg-[#FFF1F2] text-[#B9476D] ring-1 ring-[#F8D7DF]",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  if (isPayment) {
+    return {
+      type: "payment" as const,
+      iconClass: "bg-white text-slate-950 ring-1 ring-slate-950/15",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  if (isSupport) {
+    return {
+      type: "support" as const,
+      iconClass: "bg-white text-slate-950 ring-1 ring-slate-950/15",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  if (isProperty) {
+    return {
+      type: "property" as const,
+      iconClass: "bg-[#F4F4F5] text-zinc-700 ring-1 ring-zinc-200",
+      badge: "",
+      badgeClass: "",
+    };
+  }
+
+  return {
+    type: "note" as const,
+    iconClass: "bg-[#DCEEFF] text-[#1D5F9F] ring-1 ring-[#BFE0FF]",
+    badge: "",
+    badgeClass: "",
+  };
+}
+
+function ActivityIcon({
+  type,
+  iconClass,
+  size,
+}: {
+  type:
+    | "delete"
+    | "document"
+    | "note"
+    | "payment"
+    | "payment-alert"
+    | "payment-pending"
+    | "payment-success"
+    | "property"
+    | "support"
+    | "user"
+    | "user-check";
+  iconClass: string;
+  size: "sm" | "md";
+}) {
+  const Icon =
+    type === "payment-success"
+      ? CheckCircle2
+      : type === "payment-alert"
+      ? AlertCircle
+      : type === "payment-pending"
+      ? CircleDot
+      : type === "payment"
+      ? DollarSign
+      : type === "document"
+      ? FileText
+      : type === "delete"
+      ? Trash2
+      : type === "property"
+      ? Home
+      : type === "support"
+      ? LifeBuoy
+      : type === "user"
+      ? User
+      : type === "user-check"
+      ? UserCheck
+      : StickyNote;
+
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center border transition ${
+        size === "sm" ? "h-9 w-9 rounded-2xl" : "h-10 w-10 rounded-full"
+      } ${iconClass}`}
+    >
+      <Icon
+        size={17}
+        strokeWidth={size === "sm" ? 1.8 : 2.15}
+        aria-hidden="true"
+      />
+    </span>
   );
 }
 
@@ -2462,6 +3508,55 @@ function DeleteNoteModal({
   );
 }
 
+function DeleteTenantModal({
+  tenant,
+  deleting,
+  onClose,
+  onConfirm,
+}: {
+  tenant: TenantRecord;
+  deleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const tenantName = getTenantFullName(tenant);
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-[460px] rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
+        <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900">
+          Remove tenant?
+        </h2>
+
+        <p className="mt-3 text-[14px] leading-6 text-zinc-500">
+          <span className="font-semibold text-zinc-900">{tenantName}</span>
+          {tenant.email ? ` (${tenant.email})` : ""} will be removed from this
+          property and lease access. They will no longer be connected to this
+          property workspace.
+        </p>
+
+        <div className="mt-7 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="h-11 rounded-2xl border border-black/5 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="h-11 rounded-2xl bg-red-600 px-6 text-[14px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? "Removing..." : "Remove Tenant"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DeletePropertyModal({
   propertyName,
   deleting,
@@ -2533,6 +3628,31 @@ function InputField({
   );
 }
 
+function getDocumentFileLabel(fileName?: string | null, fileType?: string | null) {
+  const extension = fileName?.split(".").pop()?.trim();
+
+  if (extension) {
+    return extension.slice(0, 4).toUpperCase();
+  }
+
+  if (fileType?.includes("pdf")) return "PDF";
+  if (fileType?.includes("png")) return "PNG";
+  if (fileType?.includes("jpeg") || fileType?.includes("jpg")) return "JPG";
+  if (fileType?.includes("word")) return "DOC";
+
+  return "DOC";
+}
+
+function formatFileSize(size?: number | null) {
+  if (!size) return "";
+
+  if (size < 1024 * 1024) {
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function formatDate(date?: string | null) {
   if (!date) return "—";
 
@@ -2543,6 +3663,46 @@ function formatDate(date?: string | null) {
   });
 }
 
+function formatDateTime(date?: string | null) {
+  if (!date) return "—";
+
+  return new Date(date).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getTenantFullName(tenant: TenantRecord) {
+  return `${tenant.first_name || ""} ${tenant.last_name || ""}`.trim() || "Tenant";
+}
+
+function getTenantInitials(tenant: TenantRecord) {
+  const initials = `${tenant.first_name?.charAt(0) || ""}${
+    tenant.last_name?.charAt(0) || ""
+  }`;
+
+  return initials || "T";
+}
+
+function getTenantRoleLabel(role?: string | null) {
+  const normalized = String(role || "").toLowerCase();
+
+  if (normalized === "primary") return "Primary";
+  if (normalized === "secondary") return "Secondary";
+  if (normalized === "co-tenant" || normalized === "cotenant") return "Co-tenant";
+
+  return role
+    ? role
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ")
+    : "Tenant";
+}
+
 function formatDateShort(date?: string | null) {
   if (!date) return "—";
 
@@ -2550,6 +3710,27 @@ function formatDateShort(date?: string | null) {
     month: "short",
     day: "numeric",
   });
+}
+
+function normalizePaymentStatus(status?: string | null): MonthStatus {
+  const normalized = String(status || "").toLowerCase();
+
+  if (["paid", "succeeded", "complete", "completed"].includes(normalized)) {
+    return "paid";
+  }
+
+  if (["late", "failed", "declined", "past_due"].includes(normalized)) {
+    return "late";
+  }
+
+  if (["upcoming", "pending"].includes(normalized)) {
+    return "upcoming";
+  }
+
+  if (normalized === "inactive") return "inactive";
+  if (normalized === "future") return "future";
+
+  return "future";
 }
 
 function buildPaymentTimeline(

@@ -64,11 +64,11 @@ export function PaymentHero({
       <div className="grid h-full grid-rows-[150px_minmax(0,1fr)] gap-4">
         <div className="grid grid-cols-[minmax(0,1fr)_310px] items-center gap-6">
           <div className="translate-x-5">
-            <p className="text-[18px] font-medium tracking-[-0.03em] text-slate-800">
+            <p className="text-[18px] font-medium tracking-[-0.04em] text-slate-800">
               {greeting}, {firstName}
             </p>
 
-            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+            <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.12em] leading-4 text-zinc-500">
               Total Due
             </p>
 
@@ -81,14 +81,14 @@ export function PaymentHero({
                 <div className="h-12 w-px bg-zinc-200" />
 
                 <div>
-                  <p className="flex items-center gap-1.5 text-[12px] font-medium text-zinc-500">
+                  <p className="flex items-center gap-1.5 text-[12px] font-medium leading-5 text-zinc-500">
                     ⓘ{" "}
                     {defaultMethod
                       ? `${formatBrand(defaultMethod.brand)} •••• ${defaultMethod.last4}`
                       : "Auto-pay not enrolled"}
                   </p>
 
-                  <p className="mt-1 text-[14px] font-semibold text-zinc-900">
+                  <p className="mt-1 text-[14px] font-semibold leading-5 text-zinc-900">
                     Due on {formatDueDate(lease?.rent_due_day)}
                   </p>
                 </div>
@@ -135,10 +135,10 @@ function AvenuePerksCard() {
           <IconBox>✦</IconBox>
 
           <div>
-            <h3 className="text-[15px] font-semibold tracking-[-0.03em]">
+            <h3 className="text-[15px] font-medium tracking-[-0.04em]">
               Avenue Perks
             </h3>
-            <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+            <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
               Exclusive benefits for residents.
             </p>
           </div>
@@ -147,7 +147,7 @@ function AvenuePerksCard() {
         <div className="mt-auto">
           <div className="flex items-end gap-2">
             <p className="text-[30px] font-semibold tracking-[-0.06em]">3</p>
-            <p className="pb-1 text-[12px] text-zinc-500">
+            <p className="pb-1 text-[12px] leading-5 text-zinc-500">
               benefits available
             </p>
           </div>
@@ -188,10 +188,10 @@ function CreditBuildingCard() {
             </div>
 
             <div>
-              <h3 className="text-[15px] font-semibold tracking-[-0.03em]">
+              <h3 className="text-[15px] font-medium tracking-[-0.04em]">
                 Credit Building
               </h3>
-              <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+              <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
                 Build credit with on-time rent.
               </p>
             </div>
@@ -203,7 +203,7 @@ function CreditBuildingCard() {
         </div>
 
         <div className="mt-auto">
-          <p className="text-[12px] text-zinc-500">Reporting to 3 bureaus</p>
+          <p className="text-[12px] font-medium leading-5 text-zinc-500">Reporting to 3 bureaus</p>
 
           <div className="mt-4 flex items-center justify-between text-[11px] font-bold">
             <span className="text-indigo-700">Experian</span>
@@ -239,18 +239,18 @@ function LeaseStatusCard({
           </div>
 
           <div>
-            <h3 className="text-[15px] font-semibold tracking-[-0.03em]">
+            <h3 className="text-[15px] font-medium tracking-[-0.04em]">
               Lease Status
             </h3>
-            <p className="mt-1 text-[12px] text-zinc-500">Active lease</p>
+            <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">Active lease</p>
           </div>
         </div>
 
         <div className="text-right">
-          <p className="text-[12px] font-semibold text-zinc-900">
+          <p className="text-[12px] font-semibold leading-5 text-zinc-900">
             Unit {lease?.unit_name || "—"}
           </p>
-          <p className="mt-0.5 max-w-[120px] truncate text-[11px] text-zinc-500">
+          <p className="mt-0.5 max-w-[120px] truncate text-[11px] leading-4 text-zinc-500">
             {lease?.property_label || "Property"}
           </p>
         </div>
@@ -260,7 +260,7 @@ function LeaseStatusCard({
         <p className="text-[30px] font-semibold tracking-[-0.06em]">
           {monthsRemaining}
         </p>
-        <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+        <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
           months remaining
         </p>
       </div>
@@ -294,13 +294,13 @@ function LeaseStatusModal({
         <div className="rounded-3xl border border-zinc-200 bg-white p-5">
           <div className="flex items-start justify-between gap-5">
             <div>
-              <p className="text-[13px] font-semibold text-zinc-500">
+              <p className="text-[13px] font-medium leading-5 text-zinc-500">
                 Active lease
               </p>
-              <h3 className="mt-2 text-[28px] font-semibold tracking-[-0.05em] text-zinc-950">
+              <h3 className="mt-2 text-[28px] font-medium tracking-[-0.05em] text-zinc-950">
                 {lease?.property_label || "Property"}
               </h3>
-              <p className="mt-2 max-w-[620px] text-[13px] leading-6 text-zinc-500">
+              <p className="mt-2 max-w-[620px] text-[13px] font-medium leading-6 text-zinc-500">
                 {lease
                   ? `${lease.street_address}${
                       lease.unit_name ? `, Unit ${lease.unit_name}` : ""
@@ -404,11 +404,11 @@ export function NotesDocumentsCard({
         <div className="flex min-h-0 flex-col pr-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-[18px] font-semibold tracking-[-0.035em] text-zinc-950">
+              <h2 className="text-[18px] font-medium tracking-[-0.045em] text-zinc-950">
                 Notes
               </h2>
 
-              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[12px] font-semibold text-zinc-500">
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[12px] font-semibold leading-5 text-zinc-500">
                 {notes.length}
               </span>
 
@@ -422,7 +422,7 @@ export function NotesDocumentsCard({
 
             <button
               onClick={onViewAllNotes}
-              className="text-[13px] font-semibold text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
+              className="text-[13px] font-semibold leading-5 text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
             >
               View all notes →
             </button>
@@ -470,11 +470,11 @@ export function NotesDocumentsCard({
         <div className="flex min-h-0 flex-col border-l border-zinc-200 pl-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-[18px] font-semibold tracking-[-0.035em] text-zinc-950">
+              <h2 className="text-[18px] font-medium tracking-[-0.045em] text-zinc-950">
                 Property Documents
               </h2>
 
-              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[12px] font-semibold text-zinc-500">
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[12px] font-semibold leading-5 text-zinc-500">
                 {documents.length}
               </span>
 
@@ -496,7 +496,7 @@ export function NotesDocumentsCard({
 
             <button
               onClick={onViewAllDocuments}
-              className="text-[13px] font-semibold text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
+              className="text-[13px] font-semibold leading-5 text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
             >
               View all →
             </button>
@@ -595,12 +595,12 @@ function NotePreview({
         )}
       </div>
 
-      <p className="min-w-0 pr-40 text-[13px] font-medium leading-5 text-zinc-900">
+      <p className="min-w-0 pr-40 text-[13px] font-medium leading-5 tracking-[-0.01em] text-zinc-900">
         {text}
       </p>
 
       <div className="mt-3">
-        <p className="min-w-0 text-[12px] leading-5 text-zinc-500">
+        <p className="min-w-0 text-[12px] font-medium leading-5 text-zinc-500">
           {formatDate(createdAt)} •{" "}
           {author === "landlord" ? "Created by landlord" : "Created by tenant"}
           {variant === "shared" && (
@@ -624,7 +624,7 @@ function SectionState({
 }) {
   return (
     <div className="rounded-2xl border border-dashed border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] px-4 py-5">
-      <p className="text-[13px] font-medium text-zinc-950">{title}</p>
+      <p className="text-[13px] font-medium leading-5 text-zinc-950">{title}</p>
       <p className="mt-1 text-[12px] leading-5 text-zinc-500">{subtitle}</p>
     </div>
   );
@@ -806,14 +806,14 @@ function LargeTenantModal({
         <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-200 px-7 py-6">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-[25px] font-semibold tracking-[-0.045em] text-zinc-950">
+              <h2 className="text-[25px] font-medium tracking-[-0.045em] text-zinc-950">
                 {title}
               </h2>
-              <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12px] font-semibold text-zinc-500">
+              <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12px] font-semibold leading-5 text-zinc-500">
                 {count}
               </span>
             </div>
-            <p className="mt-1 text-[13px] leading-6 text-zinc-500">{eyebrow}</p>
+            <p className="mt-1 text-[13px] font-medium leading-6 text-zinc-500">{eyebrow}</p>
           </div>
 
           <button
@@ -842,24 +842,24 @@ export function RecentActivityCard({
   const emptySlots = Math.max(0, 4 - visibleActivities.length);
 
   return (
-    <section className="min-h-0 overflow-hidden rounded-[24px] border border-zinc-200 bg-white p-5 shadow-none">
-      <div className="flex items-start justify-between">
+    <section className="min-h-0 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
         <div>
-          <h2 className="text-[16px] font-semibold tracking-[-0.035em]">
+          <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
             Recent Activity
           </h2>
         </div>
 
         <button
           onClick={onViewMore}
-          className="text-[13px] font-semibold text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
+          className="text-[12.5px] font-semibold leading-5 text-slate-950 transition hover:text-slate-700 active:scale-[0.96]"
         >
           View more activity →
         </button>
       </div>
 
       {visibleActivities.length > 0 ? (
-        <div className="mt-4 grid grid-cols-4 divide-x divide-zinc-200 rounded-2xl border border-zinc-200 bg-white">
+        <div className="grid grid-cols-4 divide-x divide-zinc-200 px-3 py-1">
           {visibleActivities.map((activity) => (
             <ActivityMini key={activity.id} activity={activity} />
           ))}
@@ -868,7 +868,7 @@ export function RecentActivityCard({
           ))}
         </div>
       ) : (
-        <div className="mt-4">
+        <div className="px-4 py-4">
           <SectionState
             title="No recent activity"
             subtitle="Payments, notes, and document updates will appear here."
@@ -894,13 +894,13 @@ export function PaymentProgressCard({
     <>
     <section className="min-h-0 overflow-hidden rounded-[24px] border border-zinc-200 bg-white p-5 shadow-none">
       <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.035em]">
+        <h2 className="text-[18px] font-medium tracking-[-0.045em] text-zinc-950">
           Payment Progress
         </h2>
 
         <button
           onClick={() => setHistoryOpen(true)}
-          className="flex items-center gap-2 text-[13px] font-semibold text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
+          className="flex items-center gap-2 text-[13px] font-semibold leading-5 text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
         >
           All history <span>→</span>
         </button>
@@ -931,29 +931,29 @@ export function PaymentProgressCard({
 
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-[13px] font-semibold text-zinc-950">
+                <p className="text-[13px] font-semibold leading-5 text-zinc-950">
                   {item.month}
                 </p>
 
                 {item.status === "upcoming" && (
-                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-600">
+                  <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold leading-4 text-zinc-600">
                     Upcoming
                   </span>
                 )}
                 {item.status === "late" && (
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold leading-4 text-amber-700">
                     Late
                   </span>
                 )}
               </div>
 
-              <p className="mt-1 text-[12px] text-zinc-500">{item.subtext}</p>
+              <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">{item.subtext}</p>
             </div>
 
             <div className="h-px min-w-0 bg-zinc-100" />
 
             <p
-              className={`text-[13px] font-semibold ${
+              className={`text-[13px] font-semibold leading-5 tabular-nums ${
                 item.status === "paid"
                   ? "text-emerald-600"
                   : item.status === "late"
@@ -1003,7 +1003,7 @@ function PaymentSummaryItem({
     <div className="border-r border-zinc-200 px-3 py-3 last:border-r-0">
       <div className="flex items-center gap-2">
         <span className={`aspect-square h-2 shrink-0 rounded-full ${dotClass}`} />
-        <p className="text-[11px] font-semibold text-zinc-500">{label}</p>
+        <p className="text-[11px] font-semibold leading-4 text-zinc-500">{label}</p>
       </div>
       <p className={`mt-2 text-[25px] font-semibold leading-none tracking-[-0.05em] ${countClass}`}>
         {count}
@@ -1042,7 +1042,7 @@ function PaymentHistoryModal({
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
               AvenueBoard Statement
             </p>
-            <h2 className="mt-1 text-[27px] font-semibold tracking-[-0.055em] text-zinc-950">
+            <h2 className="mt-1 text-[27px] font-medium tracking-[-0.055em] text-zinc-950">
               Payment History Report
             </h2>
             <p className="mt-1 text-[13px] leading-6 text-zinc-500">
@@ -1618,7 +1618,7 @@ export function QuickAccessCard({
 
   return (
     <section className="rounded-[24px] border border-zinc-200 bg-white p-5 shadow-none">
-      <h2 className="text-[17px] font-semibold tracking-[-0.035em] text-slate-950">
+      <h2 className="text-[18px] font-medium tracking-[-0.045em] text-slate-950">
         Property Contact
       </h2>
 
@@ -1633,10 +1633,10 @@ export function QuickAccessCard({
         </div>
 
         <div className="min-w-0">
-          <p className="truncate text-[16px] font-semibold tracking-[-0.035em] text-slate-950">
+          <p className="truncate text-[16px] font-semibold tracking-[-0.04em] text-slate-950">
             {contactName}
           </p>
-          <p className="mt-1 truncate text-[12px] text-zinc-500">
+          <p className="mt-1 truncate text-[12px] font-medium leading-5 text-zinc-500">
             {contactRoleLabel}
           </p>
         </div>
@@ -1650,10 +1650,10 @@ export function QuickAccessCard({
       </div>
 
       <div className="mt-4 border-t border-zinc-200 pt-4">
-        <p className="text-[13px] font-semibold tracking-[-0.02em] text-slate-950">
+        <p className="text-[13px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
           Need help with the property?
         </p>
-        <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+        <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
           Email your landlord directly and they can follow up with you.
         </p>
 
@@ -1695,7 +1695,7 @@ function ManagerContactRow({
         {icon}
       </span>
       <p
-        className={`min-w-0 truncate text-[12px] ${
+        className={`min-w-0 truncate text-[12px] leading-5 ${
           muted ? "text-zinc-500" : "font-medium text-zinc-900"
         }`}
       >
@@ -1763,10 +1763,10 @@ function DocumentTile({
         </div>
 
         <div className="min-w-0">
-          <p className="truncate text-[12px] font-semibold text-zinc-950">
+          <p className="truncate text-[12px] font-semibold leading-5 text-zinc-950">
             {doc.file_name}
           </p>
-          <p className="mt-1 truncate text-[11px] text-zinc-500">
+          <p className="mt-1 truncate text-[11px] leading-4 text-zinc-500">
             {formatDate(doc.created_at)}
             {doc.file_size ? ` · ${formatFileSize(doc.file_size)}` : ""}
           </p>
@@ -1827,13 +1827,13 @@ function ActivityIcon({
 
   return (
     <span
-      className={`flex shrink-0 items-center justify-center rounded-full ${
-        size === "sm" ? "h-8 w-8" : "h-10 w-10"
+      className={`flex shrink-0 items-center justify-center border transition ${
+        size === "sm" ? "h-9 w-9 rounded-2xl" : "h-10 w-10 rounded-full"
       } ${activity.iconClass}`}
     >
       <Icon
-        size={size === "sm" ? 15 : 17}
-        strokeWidth={2.15}
+        size={size === "sm" ? 17 : 17}
+        strokeWidth={size === "sm" ? 1.8 : 2.15}
         aria-hidden="true"
       />
     </span>
@@ -1842,18 +1842,18 @@ function ActivityIcon({
 
 function ActivityMini({ activity }: { activity: TenantActivity }) {
   return (
-    <div className="min-h-[78px] px-5 py-4">
+    <div className="group min-h-[78px] px-3 py-3.5 transition hover:bg-zinc-50/60">
       <div className="flex items-start gap-3">
         <ActivityIcon activity={activity} size="sm" />
 
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-[12px] font-semibold text-zinc-950">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <p className="truncate text-[13.5px] font-semibold leading-5 text-slate-950">
               {activity.title}
             </p>
             {activity.badge && (
               <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 ${
                   activity.badgeClass || "bg-zinc-100 text-zinc-600"
                 }`}
               >
@@ -1861,20 +1861,13 @@ function ActivityMini({ activity }: { activity: TenantActivity }) {
               </span>
             )}
           </div>
-          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">
+          <p className="mt-0.5 line-clamp-1 text-[12.5px] leading-5 text-zinc-500">
             {activity.subtitle}
           </p>
 
-          {activity.amount && (
-            <p
-              className={`mt-1 text-[11px] font-semibold ${
-                activity.amountClass || "text-zinc-600"
-              }`}
-            >
-              {activity.amount}
-            </p>
-          )}
-
+          <p className="mt-1 truncate text-[11.5px] font-medium leading-4 text-zinc-400">
+            {formatDate(activity.timestamp)}
+          </p>
         </div>
       </div>
     </div>
@@ -1889,12 +1882,12 @@ function ActivityRow({ activity }: { activity: TenantActivity }) {
 
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-[13px] font-semibold text-zinc-950">
+            <p className="truncate text-[13px] font-semibold leading-5 text-zinc-950">
               {activity.title}
             </p>
             {activity.badge && (
               <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold leading-4 ${
                   activity.badgeClass || "bg-zinc-100 text-zinc-600"
                 }`}
               >
@@ -1902,7 +1895,7 @@ function ActivityRow({ activity }: { activity: TenantActivity }) {
               </span>
             )}
           </div>
-          <p className="mt-1 truncate text-[12px] text-zinc-500">
+          <p className="mt-1 truncate text-[12px] font-medium leading-5 text-zinc-500">
             {activity.subtitle}
           </p>
         </div>
@@ -1911,14 +1904,14 @@ function ActivityRow({ activity }: { activity: TenantActivity }) {
       <div className="shrink-0 text-right">
         {activity.amount && (
           <p
-            className={`text-[12px] font-semibold ${
+            className={`text-[12px] font-semibold leading-5 tabular-nums ${
               activity.amountClass || "text-zinc-700"
             }`}
           >
             {activity.amount}
           </p>
         )}
-        <p className="mt-1 text-[11px] text-zinc-500">
+        <p className="mt-1 text-[11px] font-medium leading-4 text-zinc-500">
           {formatDate(activity.timestamp)}
         </p>
       </div>
@@ -2079,10 +2072,10 @@ export function ConfirmDeleteModal({
       <div className="w-full max-w-[440px] rounded-[28px] bg-white p-6 shadow-[0_30px_100px_rgba(15,23,42,0.25)]">
         <div className="flex items-start justify-between gap-5">
           <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.04em]">
+            <h2 className="text-[22px] font-medium tracking-[-0.04em]">
               {title}
             </h2>
-            <p className="mt-2 text-[13px] leading-6 text-zinc-500">{body}</p>
+            <p className="mt-2 text-[13px] font-medium leading-6 text-zinc-500">{body}</p>
           </div>
 
           <button
@@ -2140,10 +2133,10 @@ export function AddNoteModal({
       <div className="w-full max-w-[560px] rounded-[28px] bg-white p-6 shadow-[0_30px_100px_rgba(15,23,42,0.25)]">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.04em]">
+            <h2 className="text-[22px] font-medium tracking-[-0.04em]">
               Add Note
             </h2>
-            <p className="mt-1 text-[13px] text-zinc-500">
+            <p className="mt-1 text-[13px] font-medium leading-5 text-zinc-500">
               Save a private note or share an update with your landlord.
             </p>
           </div>

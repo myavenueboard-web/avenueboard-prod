@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [properties, setProperties] = useState<DashboardProperty[]>([]);
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteProperty, setDeleteProperty] =
@@ -62,6 +62,14 @@ const pendingPaymentCount = properties.filter((property) => {
 
 const collectionRate =
   properties.length > 0 ? Math.round((paidCount / properties.length) * 100) : 0;
+
+const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
+  Array.from({ length: 12 }, (_, index) => {
+    if (index === 9 && lateCount > 0) return "late";
+    if (index === 10 && pendingPaymentCount > 0) return "upcoming";
+    if (index === 11 && paidCount > 0) return "paid";
+    return "future";
+  });
 
   useEffect(() => {
     async function loadDashboard() {
@@ -143,10 +151,6 @@ const collectionRate =
     return sum + Number(lease?.monthly_rent || 0);
   }, 0);
 
-  const hasBankPending = properties.some(
-    (property) => property.bank_status !== "connected"
-  );
-
   const nextDueText =
     properties[0]?.leases?.[0]?.rent_due_day?.replace(" of the Month", "") ||
     "—";
@@ -158,6 +162,23 @@ const collectionRate =
   const pendingBankCount = properties.filter(
     (property) => property.bank_status !== "connected"
   ).length;
+
+  const actionNeededCount = properties.filter((property) => {
+    const lease = property.leases?.[0];
+    const paymentStatus = String(lease?.payment_status || "").toLowerCase();
+    const bankPending = property.bank_status !== "connected";
+    const tenantSetupIncomplete =
+      !lease?.lease_tenants || lease.lease_tenants.length === 0;
+    const leaseEndingSoon = getLeaseStatus(lease?.end_date).label === "Ending Soon";
+    const paymentIssue = ["late", "failed", "declined"].includes(paymentStatus);
+
+    return bankPending || tenantSetupIncomplete || leaseEndingSoon || paymentIssue;
+  }).length;
+
+  const bankStatusValue =
+    pendingBankCount === 0
+      ? "Ready"
+      : `${pendingBankCount} not connected`;
 
   const averageRent =
     properties.length > 0 ? Math.round(totalMonthlyRent / properties.length) : 0;
@@ -230,9 +251,9 @@ const collectionRate =
           <EmptyDashboard onAdd={() => router.push("/dashboard/add-property")} />
         </div>
       ) : (
-        <div className="mt-4 grid min-h-0 gap-5 overflow-visible lg:h-[calc(100%-16px)] lg:grid-cols-[1fr_340px] lg:gap-6 lg:overflow-hidden">
+        <div className="mt-3 grid min-h-0 gap-4 overflow-visible lg:h-[calc(100%-12px)] lg:grid-cols-[1fr_326px] lg:gap-5 lg:overflow-hidden">
           <div className="min-h-0 overflow-visible lg:overflow-y-auto lg:pr-2">
-            <div className="grid grid-cols-1 gap-4 pb-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3.5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
               {properties.map((property) => (
                 <PropertyCard
                   key={property.id}
@@ -282,8 +303,8 @@ const collectionRate =
             </div>
           </div>
 
-          <aside className="grid gap-3 pb-6 lg:flex lg:max-h-[calc(100vh-150px)] lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:pr-1">
-  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+          <aside className="grid gap-2.5 pb-5 lg:flex lg:max-h-[calc(100vh-136px)] lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:pr-1">
+  <section className="rounded-[20px] border border-zinc-200 bg-white p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
     <div className="flex items-center justify-between">
       <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
         Overview
@@ -294,10 +315,10 @@ const collectionRate =
       </span>
     </div>
 
-    <div className="mt-4 grid grid-cols-2 gap-4">
+    <div className="mt-3.5 grid grid-cols-2 gap-3">
       <div>
         <p className="text-[11px] font-medium text-zinc-500">Monthly Rent</p>
-        <p className="mt-1 text-[25px] font-[800] tracking-[-0.06em] text-zinc-950">
+        <p className="mt-1 text-[23px] font-[800] tracking-[-0.06em] text-zinc-950">
           ${totalMonthlyRent.toLocaleString()}
         </p>
         <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
@@ -307,7 +328,7 @@ const collectionRate =
 
       <div className="border-l border-zinc-100 pl-4">
         <p className="text-[11px] font-medium text-zinc-500">Properties</p>
-        <p className="mt-1 text-[25px] font-[800] tracking-[-0.06em] text-zinc-950">
+        <p className="mt-1 text-[23px] font-[800] tracking-[-0.06em] text-zinc-950">
           {properties.length}
         </p>
         <p className="mt-2 text-[11px] font-medium text-zinc-500">
@@ -318,7 +339,7 @@ const collectionRate =
     </div>
   </section>
 
-  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+  <section className="rounded-[20px] border border-zinc-200 bg-white p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
   <div className="flex items-center justify-between">
     <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
       Payout Performance
@@ -329,13 +350,13 @@ const collectionRate =
     </span>
   </div>
 
-  <div className="mt-4 rounded-[18px] bg-[#FAFAFA] px-3.5 py-4">
+  <div className="mt-3.5 rounded-[18px] bg-[#FAFAFA] px-3.5 py-3.5">
     <div className="flex items-end justify-between">
       <div>
         <p className="text-[11px] font-medium text-zinc-500">
           Collection Rate
         </p>
-        <p className="mt-1 text-[25px] font-[800] tracking-[-0.06em] text-zinc-950">
+        <p className="mt-1 text-[23px] font-[800] tracking-[-0.06em] text-zinc-950">
           {collectionRate}%
         </p>
       </div>
@@ -347,23 +368,20 @@ const collectionRate =
       </p>
     </div>
 
-    <div className="mt-4 flex h-[52px] items-end gap-1.5">
-      {[0, 0, 0, 0, 0, 0, 0, 0, 0, lateCount, pendingPaymentCount, paidCount].map(
-        (value, index) => {
-          const isLate = index === 9 && lateCount > 0;
-          const isPending = index === 10 && pendingPaymentCount > 0;
+    <div className="mt-3.5 flex h-[48px] items-end gap-1.5">
+      {payoutBarStatuses.map(
+        (status, index) => {
+          const barClass =
+            status === "paid"
+              ? "bg-emerald-400"
+              : status === "late"
+              ? "bg-amber-400"
+              : "bg-zinc-300";
 
           return (
             <span
               key={index}
-              className={`flex-1 rounded-full ${
-                isLate
-                  ? "bg-amber-400"
-                  : isPending
-                  ? "bg-zinc-300"
-                  : "bg-emerald-400"
-              }`}
-              style={{ height: `${index < 8 ? 42 : index === 8 ? 58 : 72}%` }}
+              className={`h-full flex-1 rounded-full ${barClass}`}
             />
           );
         }
@@ -383,14 +401,14 @@ const collectionRate =
   </div>
 </section>
 
-  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+  <section className="rounded-[20px] border border-zinc-200 bg-white p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
   <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
     Quick Summary
   </h3>
 
-  <div className="mt-4 divide-y divide-zinc-100 rounded-[18px] border border-zinc-100 bg-[#FAFAFA]">
+  <div className="mt-3.5 space-y-2">
     <CompactSummaryRow
-      label="Properties"
+      label="Total Properties"
       value={`${properties.length}`}
       subtext="Total active portfolio"
       tone="green"
@@ -398,16 +416,16 @@ const collectionRate =
 
     <CompactSummaryRow
       label="Action Needed"
-      value={`${pendingBankCount}`}
-      subtext="Pending bank setup"
-      tone="amber"
+      value={`${actionNeededCount}`}
+      subtext="Setup, lease, or payment review"
+      tone={actionNeededCount > 0 ? "amber" : "green"}
     />
 
     <CompactSummaryRow
       label="Bank Status"
-      value={hasBankPending ? "Pending" : "Ready"}
-      subtext={hasBankPending ? `${pendingBankCount} pending` : "All connected"}
-      tone={hasBankPending ? "amber" : "green"}
+      value={bankStatusValue}
+      subtext={pendingBankCount > 0 ? "Connection needed" : "All connected"}
+      tone={pendingBankCount > 0 ? "amber" : "green"}
     />
 
     <CompactSummaryRow
@@ -419,33 +437,6 @@ const collectionRate =
   </div>
 </section>
 
-  <section className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
-    <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
-      Recent Activity
-    </h3>
-
-    <div className="mt-4 space-y-4">
-      {activities.length === 0 ? (
-        <div className="rounded-2xl bg-zinc-50 p-4">
-          <p className="text-[13px] font-semibold text-zinc-900">
-            No activity yet
-          </p>
-          <p className="mt-1 text-[12px] leading-5 text-zinc-500">
-            Updates will appear here after property, tenant, lease, document, or payment activity.
-          </p>
-        </div>
-      ) : (
-        activities.slice(0, 6).map((activity) => (
-          <PremiumActivityItem
-            key={activity.id}
-            title={activity.title}
-            text={activity.description || ""}
-            warning={activity.activity_type === "bank_pending"}
-          />
-        ))
-      )}
-    </div>
-  </section>
 </aside>
 
         </div>
@@ -521,7 +512,7 @@ function CompactSummaryRow({
       : "bg-zinc-500";
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-2xl bg-zinc-50/70 px-3.5 py-3">
       <div className="flex min-w-0 items-center gap-3">
         <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
 
@@ -536,30 +527,6 @@ function CompactSummaryRow({
       <p className="shrink-0 text-[16px] font-[800] tracking-[-0.04em] text-zinc-950">
         {value}
       </p>
-    </div>
-  );
-}
-
-function PremiumActivityItem({
-  title,
-  text,
-  warning = false,
-}: {
-  title: string;
-  text: string;
-  warning?: boolean;
-}) {
-  return (
-    <div className="relative pl-5">
-      <span
-        className={`absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full ${
-          warning ? "bg-amber-400" : "bg-[#B9476D]"
-        }`}
-      />
-
-      <p className="text-[13px] font-semibold text-zinc-950">{title}</p>
-
-      <p className="mt-1 text-[12px] leading-5 text-zinc-500">{text}</p>
     </div>
   );
 }
@@ -636,11 +603,11 @@ function PropertyCard({
   return (
     <div
       onClick={onOpen}
-      className={`group relative cursor-pointer rounded-[22px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)] sm:p-3.5`}
+      className={`group relative cursor-pointer rounded-[20px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)]`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-[17px] font-semibold tracking-[-0.035em] text-zinc-900">
+          <h3 className="truncate text-[16px] font-semibold tracking-[-0.035em] text-zinc-900">
             {property.property_label}
           </h3>
 
@@ -686,7 +653,7 @@ function PropertyCard({
 
       <div className="mt-3">
         <p
-          className={`text-[24px] font-semibold tracking-[-0.045em] sm:text-[22px] ${rentColor}`}
+          className={`text-[22px] font-semibold tracking-[-0.045em] ${rentColor}`}
         >
           ${rent.toLocaleString()}
           <span className="ml-1 text-[13px] font-medium text-zinc-400">
@@ -695,7 +662,7 @@ function PropertyCard({
         </p>
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-2.5 space-y-1.5">
         <InfoLine label="Tenant" value={tenantName} />
         <InfoLine label="Due" value={lease?.rent_due_day || "—"} />
         <InfoLine
@@ -706,7 +673,7 @@ function PropertyCard({
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <span
           className={`rounded-full px-3 py-1 text-[11px] font-semibold ${leaseStatus.badgeClass}`}
         >
@@ -720,13 +687,13 @@ function PropertyCard({
         )}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-2.5 flex items-center gap-2">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onOpen();
           }}
-          className="h-[40px] flex-1 rounded-2xl border border-zinc-200 bg-white text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50 sm:h-[38px]"
+          className="h-[36px] flex-1 rounded-2xl border border-zinc-200 bg-white text-[12px] font-semibold text-zinc-700 transition hover:bg-zinc-50"
         >
           View
         </button>
@@ -737,7 +704,7 @@ function PropertyCard({
               e.stopPropagation();
               onConnectBank();
             }}
-            className="h-[40px] flex-1 rounded-2xl bg-[#B9476D] text-[13px] font-semibold text-white transition hover:bg-[#A93F64] sm:h-[38px]"
+            className="h-[36px] flex-1 rounded-2xl bg-[#B9476D] text-[12px] font-semibold text-white transition hover:bg-[#A93F64]"
           >
             Connect
           </button>
