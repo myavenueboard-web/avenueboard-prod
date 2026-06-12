@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { LandlordMobileHome } from "@/components/mobile/landlord/LandlordMobileDashboard";
 
 type ActivityLog = {
   id: string;
@@ -41,7 +42,8 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [properties, setProperties] = useState<DashboardProperty[]>([]);
-  const [, setActivities] = useState<ActivityLog[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [landlordName, setLandlordName] = useState("");
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteProperty, setDeleteProperty] =
@@ -82,6 +84,9 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
         }
 
         const profile = await getOrCreateProfile();
+        setLandlordName(
+          profile.display_name || profile.email?.split("@")[0] || "Landlord"
+        );
 
         await supabase.from("user_roles").upsert(
           {
@@ -236,6 +241,32 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
     }
   }
 
+  async function handleConnectBank(propertyId: string) {
+    try {
+      const response = await fetch("/api/stripe/connect-account", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          propertyId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        alert(data.error || "Unable to start Stripe setup. Please try again.");
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      console.error("Stripe connect error:", error);
+      alert("Unable to start Stripe setup. Please try again.");
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-zinc-500">
@@ -246,12 +277,27 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
 
   return (
     <>
+      <LandlordMobileHome
+        landlordName={landlordName}
+        properties={properties}
+        activities={activities}
+        totalMonthlyRent={totalMonthlyRent}
+        activeProperties={activeProperties}
+        pendingBankCount={pendingBankCount}
+        actionNeededCount={actionNeededCount}
+        onAddProperty={() => router.push("/dashboard/add-property")}
+        onOpenProperty={(propertyId) =>
+          router.push(`/dashboard/properties/${propertyId}`)
+        }
+        onConnectBank={handleConnectBank}
+      />
+
       {properties.length === 0 ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="hidden min-h-0 flex-1 overflow-y-auto lg:block">
           <EmptyDashboard onAdd={() => router.push("/dashboard/add-property")} />
         </div>
       ) : (
-        <div className="mt-3 grid min-h-0 gap-4 overflow-visible lg:h-[calc(100%-12px)] lg:grid-cols-[1fr_326px] lg:gap-5 lg:overflow-hidden">
+        <div className="mt-3 hidden min-h-0 gap-4 overflow-visible lg:grid lg:h-[calc(100%-12px)] lg:grid-cols-[1fr_326px] lg:gap-5 lg:overflow-hidden">
           <div className="min-h-0 overflow-visible lg:overflow-y-auto lg:pr-2">
             <div className="grid grid-cols-1 gap-3.5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
               {properties.map((property) => (
@@ -270,34 +316,7 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
                     setOpenMenuId(null);
                     setDeleteProperty(property);
                   }}
-                  onConnectBank={async () => {
-                    try {
-                      const response = await fetch("/api/stripe/connect-account", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                          propertyId: property.id,
-                        }),
-                      });
-
-                      const data = await response.json();
-
-                      if (!response.ok || !data.url) {
-                        alert(
-                          data.error ||
-                            "Unable to start Stripe setup. Please try again."
-                        );
-                        return;
-                      }
-
-                      window.location.href = data.url;
-                    } catch (error) {
-                      console.error("Stripe connect error:", error);
-                      alert("Unable to start Stripe setup. Please try again.");
-                    }
-                  }}
+                  onConnectBank={() => handleConnectBank(property.id)}
                 />
               ))}
             </div>

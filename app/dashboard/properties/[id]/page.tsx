@@ -24,6 +24,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
+import { LandlordMobilePropertyDetail } from "@/components/mobile/landlord/LandlordMobileDashboard";
 
 type TenantRecord = {
   invite_token: string | null;
@@ -1055,10 +1056,61 @@ async function handleDeleteDocument() {
   const visibleDocuments = documents.slice(0, 2);
   const visibleActivities = activities.slice(0, 4);
   const emptyActivitySlots = Math.max(0, 4 - visibleActivities.length);
+  const mobilePaymentMap = new Map(
+    payments.map((payment) => [
+      String(payment.period_label || "").toLowerCase(),
+      payment,
+    ])
+  );
+  const mobilePaymentsPreview = buildPaymentTimeline(
+    lease?.start_date,
+    lease?.end_date,
+    lease?.rent_due_day || "1st of the Month",
+    property.created_at
+  )
+    .map((item) => {
+      const savedPayment = mobilePaymentMap.get(item.monthFull.toLowerCase());
+      const status = normalizePaymentStatus(savedPayment?.status || item.status);
+
+      return {
+        id: savedPayment?.id || item.key,
+        month: item.month,
+        status: getPaymentRowStyles(status).label,
+        amount: savedPayment?.amount || lease?.monthly_rent || 0,
+      };
+    })
+    .slice(0, 6);
 
   return (
     <>
-      <div className="mt-1 grid h-full min-h-0 grid-cols-1 gap-2.5 overflow-y-auto pb-3 lg:mt-1.5 lg:grid-cols-[minmax(0,1fr)_312px] lg:gap-2.5 lg:overflow-hidden">
+      <LandlordMobilePropertyDetail
+        property={property}
+        lease={lease}
+        tenants={tenants}
+        notes={notes}
+        documents={documents}
+        activities={activities}
+        paymentsPreview={mobilePaymentsPreview}
+        uploadingDocument={uploadingDocument}
+        onConnectBank={handleConnectStripe}
+        onManageTenant={() =>
+          router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
+        }
+        onRequestPayment={() => {
+          if (primaryTenant) {
+            setSelectedPaymentTenant(primaryTenant);
+            setPaymentRequestOpen(true);
+          }
+        }}
+        onAddNote={() => setNoteOpen(true)}
+        onUploadDocument={handleDocumentUpload}
+        onViewDocuments={() => setDocumentsViewOpen(true)}
+        onViewNotes={() => setNotesViewOpen(true)}
+        onViewActivity={() => setActivityHistoryOpen(true)}
+        onViewPayments={() => setPaymentHistoryOpen(true)}
+      />
+
+      <div className="mt-1 hidden h-full min-h-0 grid-cols-1 gap-2.5 overflow-y-auto pb-3 lg:mt-1.5 lg:grid lg:grid-cols-[minmax(0,1fr)_312px] lg:gap-2.5 lg:overflow-hidden">
         <div className="min-h-0 space-y-2.5 lg:overflow-y-auto lg:pr-0">
           <section className="overflow-visible rounded-[26px] border border-zinc-200 bg-white p-4 shadow-none">
             <div className="flex items-start justify-between gap-4">

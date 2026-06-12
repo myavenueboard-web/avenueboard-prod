@@ -243,6 +243,35 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
     loadShell();
   }, [router, pathname]);
 
+  useEffect(() => {
+    function openAssistant() {
+      setHelpOpen(true);
+      setNotificationOpen(false);
+      setMenuOpen(false);
+    }
+
+    function openProfile() {
+      setProfileOpen(true);
+      setNotificationOpen(false);
+      setMenuOpen(false);
+    }
+
+    async function logoutFromMobile() {
+      await supabase.auth.signOut();
+      router.push("/login");
+    }
+
+    window.addEventListener("avenueboard:open-assistant", openAssistant);
+    window.addEventListener("avenueboard:open-profile", openProfile);
+    window.addEventListener("avenueboard:logout", logoutFromMobile);
+
+    return () => {
+      window.removeEventListener("avenueboard:open-assistant", openAssistant);
+      window.removeEventListener("avenueboard:open-profile", openProfile);
+      window.removeEventListener("avenueboard:logout", logoutFromMobile);
+    };
+  }, [router]);
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -413,7 +442,9 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
 
   return (
     <main className="h-screen overflow-hidden bg-[#F7F6F3] font-sans text-[#0F172A]">
-      <div className="flex h-full overflow-hidden rounded-[26px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)]">
+      <div className="h-full overflow-y-auto lg:hidden">{children}</div>
+
+      <div className="hidden h-full overflow-hidden rounded-[26px] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.05)] lg:flex">
         <aside className="relative hidden h-full w-[236px] shrink-0 overflow-hidden border-r border-[#E6E9EE] bg-[#F8FAFC] px-2.5 py-6 lg:block">
           {desktopSidebarContent}
         </aside>
