@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 import type {
   ActivityLog,
   DeleteTarget,
@@ -281,6 +282,9 @@ export default function TenantDashboardPage() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [createLandlordOpen, setCreateLandlordOpen] = useState(false);
+  const [creatingLandlordPortal, setCreatingLandlordPortal] = useState(false);
+  const [createLandlordError, setCreateLandlordError] = useState("");
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>(
     []
   );
@@ -1262,6 +1266,64 @@ export default function TenantDashboardPage() {
     }
   }
 
+  async function handleCreateLandlordPortal() {
+    setCreateLandlordError("");
+    setCreatingLandlordPortal(true);
+
+    try {
+      const profile = profileId ? { id: profileId } : await getOrCreateProfile();
+      const activeProfileId = profile.id;
+
+      const { data: existingRole, error: roleCheckError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("profile_id", activeProfileId)
+        .eq("role", "landlord")
+        .maybeSingle();
+
+      if (roleCheckError) {
+        throw roleCheckError;
+      }
+
+      if (!existingRole) {
+        const { error: roleCreateError } = await supabase.from("user_roles").upsert(
+          {
+            profile_id: activeProfileId,
+            role: "landlord",
+          },
+          {
+            onConflict: "profile_id,role",
+          }
+        );
+
+        if (roleCreateError) {
+          throw roleCreateError;
+        }
+
+        await triggerEmailEvent({ trigger: "landlord_signup" });
+      }
+
+      await supabase.auth.updateUser({
+        data: {
+          account_type: "landlord",
+          landlord_portal_removed: false,
+        },
+      });
+
+      setHasLandlordRole(true);
+      setCreateLandlordOpen(false);
+      setProfileOpen(false);
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Create landlord portal error:", error);
+      setCreateLandlordError(
+        "Unable to create your landlord portal right now. You can try again or use mode selection."
+      );
+    } finally {
+      setCreatingLandlordPortal(false);
+    }
+  }
+
   async function handleDeleteDocument(doc: LeaseDocument) {
     if (
       !selectedLease ||
@@ -1685,12 +1747,26 @@ export default function TenantDashboardPage() {
                   </p>
                 </div>
 
-                {hasLandlordRole && (
+                {hasLandlordRole ? (
                   <button
-                    onClick={() => router.push("/select-mode")}
+                    onClick={() => {
+                      setProfileOpen(false);
+                      router.push(hasLandlordRole ? "/dashboard" : "/select-mode");
+                    }}
                     className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
                   >
-                    Switch mode
+                    Switch to landlord dashboard
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setProfileOpen(false);
+                      setCreateLandlordOpen(true);
+                      setCreateLandlordError("");
+                    }}
+                    className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    Create landlord portal
                   </button>
                 )}
 
@@ -1826,6 +1902,52 @@ export default function TenantDashboardPage() {
             handleDeleteDocument(deleteTarget.item);
           }}
         />
+      )}
+
+      {createLandlordOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[430px] rounded-[28px] border border-zinc-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.20)]">
+            <h2 className="text-[24px] font-medium tracking-[-0.05em] text-slate-950">
+              Create landlord portal?
+            </h2>
+            <p className="mt-3 text-[14px] font-medium leading-6 text-zinc-600">
+              A landlord portal is only needed if you manage or rent out a
+              property. You’ll be able to create properties, invite tenants,
+              manage documents, and prepare rent collection from your
+              AvenueBoard landlord workspace.
+            </p>
+
+            {createLandlordError && (
+              <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-medium leading-5 text-red-600">
+                {createLandlordError}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!creatingLandlordPortal) {
+                    setCreateLandlordOpen(false);
+                    setCreateLandlordError("");
+                  }
+                }}
+                disabled={creatingLandlordPortal}
+                className="h-11 rounded-2xl border border-zinc-200 bg-white px-5 text-[13px] font-semibold text-slate-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateLandlordPortal}
+                disabled={creatingLandlordPortal}
+                className="h-11 rounded-2xl bg-[#0F172A] px-5 text-[13px] font-semibold text-white transition hover:bg-[#182338] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creatingLandlordPortal ? "Creating..." : "Create landlord portal"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {notesModalOpen && (

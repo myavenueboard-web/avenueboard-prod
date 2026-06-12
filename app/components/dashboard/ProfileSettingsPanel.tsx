@@ -15,6 +15,12 @@ type ProfileSettingsPanelProps = {
   setPhone: (value: string) => void;
   onSave: () => void;
   onLogout: () => void;
+  hasTenantPortal: boolean;
+  hasLandlordRole: boolean;
+  removingLandlordPortal: boolean;
+  removeLandlordError: string;
+  onClearRemoveLandlordError: () => void;
+  onRemoveLandlordPortal: () => Promise<boolean>;
 };
 
 export default function ProfileSettingsPanel({
@@ -27,8 +33,16 @@ export default function ProfileSettingsPanel({
   setPhone,
   onSave,
   onLogout,
+  hasTenantPortal,
+  hasLandlordRole,
+  removingLandlordPortal,
+  removeLandlordError,
+  onClearRemoveLandlordError,
+  onRemoveLandlordPortal,
 }: ProfileSettingsPanelProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [removeLandlordConfirmOpen, setRemoveLandlordConfirmOpen] =
+    useState(false);
 
   if (!open) return null;
 
@@ -145,6 +159,72 @@ export default function ProfileSettingsPanel({
                 />
               </div>
             </div>
+
+            <div className="mt-6 rounded-[22px] border border-zinc-200 bg-white p-4 sm:mt-8">
+              <div>
+                <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-zinc-950">
+                  Portals
+                </h3>
+                <p className="mt-1 text-[12.5px] leading-5 text-zinc-500">
+                  Manage the AvenueBoard workspaces connected to this account.
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
+                  <span className="text-[13.5px] font-semibold text-slate-800">
+                    Tenant Portal
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
+                      hasTenantPortal
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-zinc-100 text-zinc-500"
+                    }`}
+                  >
+                    {hasTenantPortal ? "Active" : "Inactive"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
+                  <span className="text-[13.5px] font-semibold text-slate-800">
+                    Landlord Portal
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
+                      hasLandlordRole
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-zinc-100 text-zinc-500"
+                    }`}
+                  >
+                    {hasLandlordRole ? "Active" : "Inactive"}
+                  </span>
+                </div>
+              </div>
+
+              {removeLandlordError && (
+                <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-medium leading-5 text-red-600">
+                  {removeLandlordError}
+                </p>
+              )}
+
+              {hasTenantPortal && hasLandlordRole ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearRemoveLandlordError();
+                    setRemoveLandlordConfirmOpen(true);
+                  }}
+                  className="mt-4 h-11 w-full rounded-2xl border border-red-100 bg-red-50 text-[13px] font-semibold text-red-600 transition hover:bg-red-100"
+                >
+                  Remove landlord portal
+                </button>
+              ) : hasLandlordRole ? (
+                <p className="mt-4 text-[12.5px] font-medium leading-5 text-zinc-500">
+                  You need another active portal before removing landlord access.
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div className="shrink-0 border-t border-zinc-200 bg-white px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4 sm:px-7 sm:pb-7 sm:pt-7">
@@ -166,6 +246,51 @@ export default function ProfileSettingsPanel({
           </div>
         </div>
       </aside>
+
+      {removeLandlordConfirmOpen && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[460px] rounded-[28px] border border-zinc-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.20)]">
+            <h2 className="text-[24px] font-medium tracking-[-0.05em] text-slate-950">
+              Remove landlord portal?
+            </h2>
+            <p className="mt-3 text-[14px] font-medium leading-6 text-zinc-600">
+              You’ll no longer have access to the landlord dashboard. Your
+              tenant portal will remain active, and you can create a landlord
+              portal again later if you need to manage or rent out a property.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!removingLandlordPortal) {
+                    setRemoveLandlordConfirmOpen(false);
+                  }
+                }}
+                disabled={removingLandlordPortal}
+                className="h-11 rounded-2xl border border-zinc-200 bg-white px-5 text-[13px] font-semibold text-slate-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const removed = await onRemoveLandlordPortal();
+                  if (removed) {
+                    setRemoveLandlordConfirmOpen(false);
+                  }
+                }}
+                disabled={removingLandlordPortal}
+                className="h-11 rounded-2xl bg-red-600/90 px-5 text-[13px] font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {removingLandlordPortal
+                  ? "Removing..."
+                  : "Remove landlord portal"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

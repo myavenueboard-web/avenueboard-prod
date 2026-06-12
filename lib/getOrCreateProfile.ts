@@ -12,6 +12,7 @@ export async function getOrCreateProfile() {
   }
 
   const accountType = user.user_metadata?.account_type;
+  const landlordPortalRemoved = user.user_metadata?.landlord_portal_removed === true;
 
   const { data: existingProfile, error: fetchError } = await supabase
     .from("profiles")
@@ -20,7 +21,7 @@ export async function getOrCreateProfile() {
     .single();
 
   if (existingProfile) {
-    if (accountType === "landlord") {
+    if (accountType === "landlord" && !landlordPortalRemoved) {
       await ensureUserRole(existingProfile.id, "landlord");
     }
 

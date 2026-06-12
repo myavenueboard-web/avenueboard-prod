@@ -1924,7 +1924,9 @@ function buildPaymentProgress(
   payments: RentPayment[] = []
 ): PaymentProgressRow[] {
   const rent = Number(lease?.monthly_rent || 0);
-  const start = getMonthStart(lease?.start_date || new Date().toISOString());
+  const start = getFirstRentCycleMonthStart(
+    lease?.start_date || new Date().toISOString()
+  );
   const end = getMonthStart(lease?.end_date || lease?.start_date || new Date().toISOString());
   const dueDay = getRentDueDayNumber(lease?.rent_due_day);
   const today = new Date();
@@ -1984,8 +1986,32 @@ function buildPaymentProgressSummary(
 }
 
 function getMonthStart(value: string) {
+  const { year, monthIndex } = getLocalDateParts(value);
+  return new Date(year, monthIndex, 1);
+}
+
+function getFirstRentCycleMonthStart(value: string) {
+  const { year, monthIndex, day } = getLocalDateParts(value);
+  return new Date(year, day === 1 ? monthIndex : monthIndex + 1, 1);
+}
+
+function getLocalDateParts(value: string) {
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (match) {
+    return {
+      year: Number(match[1]),
+      monthIndex: Number(match[2]) - 1,
+      day: Number(match[3]),
+    };
+  }
+
   const date = new Date(value);
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  return {
+    year: date.getFullYear(),
+    monthIndex: date.getMonth(),
+    day: date.getDate(),
+  };
 }
 
 function getRentDueDayNumber(rentDueDay?: string | null) {

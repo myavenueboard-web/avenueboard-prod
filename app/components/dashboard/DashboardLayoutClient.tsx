@@ -175,8 +175,11 @@ export default function DashboardLayoutClient({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState<LandlordNotification[]>([]);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  const [hasLandlordRole, setHasLandlordRole] = useState(false);
   const [hasTenantPortal, setHasTenantPortal] = useState(false);
   const [taxDocumentsOpen, setTaxDocumentsOpen] = useState(false);
+  const [removingLandlordPortal, setRemovingLandlordPortal] = useState(false);
+  const [removeLandlordError, setRemoveLandlordError] = useState("");
   
   
   const visibleNotifications = notifications.filter(
@@ -213,6 +216,38 @@ export default function DashboardLayoutClient({
         setDisplayName(resolvedName);
         setPhone(profile.phone || "");
 
+        const [
+          { data: roleData, error: roleLoadError },
+          { data: tenantAccessData, error: tenantAccessLoadError },
+        ] = await Promise.all([
+          supabase
+            .from("user_roles")
+            .select("role")
+            .eq("profile_id", profile.id),
+          supabase
+            .from("tenant_access")
+            .select("id")
+            .eq("tenant_profile_id", profile.id)
+            .eq("invite_status", "accepted")
+            .limit(1),
+        ]);
+
+        if (roleLoadError) throw roleLoadError;
+        if (tenantAccessLoadError) throw tenantAccessLoadError;
+
+        const hasCurrentLandlordRole = (roleData || []).some(
+          (item) => item.role === "landlord"
+        );
+        const hasCurrentTenantPortal = (tenantAccessData || []).length > 0;
+
+        setHasLandlordRole(hasCurrentLandlordRole);
+        setHasTenantPortal(hasCurrentTenantPortal);
+
+        if (!hasCurrentLandlordRole) {
+          router.replace(hasCurrentTenantPortal ? "/tenant" : "/select-mode");
+          return;
+        }
+
         const { data: propertyData } = await supabase
           .from("properties")
           .select("id, property_label")
@@ -221,14 +256,6 @@ export default function DashboardLayoutClient({
           .order("created_at", { ascending: false });
 
         setProperties((propertyData || []) as SidebarProperty[]);
-        const { data: tenantAccessData } = await supabase
-  .from("tenant_access")
-  .select("id")
-  .eq("tenant_profile_id", profile.id)
-  .eq("invite_status", "accepted")
-  .limit(1);
-
-setHasTenantPortal((tenantAccessData || []).length > 0);
 
         const dynamicNotifications = await getLandlordNotifications(profile.id);
         setNotifications(dynamicNotifications);
@@ -299,6 +326,58 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
     );
 
     setProfileOpen(false);
+  }
+
+  async function handleRemoveLandlordPortal() {
+    if (!profileId || removingLandlordPortal) return false;
+
+    setRemoveLandlordError("");
+    setRemovingLandlordPortal(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      if (!token) {
+        setRemoveLandlordError("Please sign in again to remove landlord portal.");
+        return false;
+      }
+
+      const response = await fetch("/api/profile/remove-landlord-portal", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const body = (await response.json().catch(() => null)) as
+        | { ok?: boolean; message?: string }
+        | null;
+
+      if (!response.ok || !body?.ok) {
+        setRemoveLandlordError(
+          body?.message || "Unable to remove landlord portal. Please try again."
+        );
+        return false;
+      }
+
+      await supabase.auth.refreshSession();
+      setHasLandlordRole(false);
+      setMenuOpen(false);
+      setProfileOpen(false);
+      router.push("/tenant");
+      router.refresh();
+      return true;
+    } catch (error) {
+      console.error("Remove landlord portal error:", error);
+      setRemoveLandlordError(
+        "Unable to remove landlord portal right now. Please try again."
+      );
+      return false;
+    } finally {
+      setRemovingLandlordPortal(false);
+    }
   }
 
   
@@ -793,11 +872,11 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
   <button
     onClick={() => {
       setMenuOpen(false);
-      router.push("/tenant");
+      router.push(hasTenantPortal ? "/tenant" : "/select-mode");
     }}
     className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-[#B9476D] hover:bg-[#FCEEF3]"
   >
-    Switch to Tenant Portal
+    Switch to tenant dashboard
   </button>
 )}
 
@@ -851,9 +930,15 @@ setHasTenantPortal((tenantAccessData || []).length > 0);
         setPhone={setPhone}
         onSave={handleSaveProfile}
         onLogout={handleLogout}
+        hasTenantPortal={hasTenantPortal}
+        hasLandlordRole={hasLandlordRole}
+        removingLandlordPortal={removingLandlordPortal}
+        removeLandlordError={removeLandlordError}
+        onClearRemoveLandlordError={() => setRemoveLandlordError("")}
+        onRemoveLandlordPortal={handleRemoveLandlordPortal}
         />
 
-    {taxDocumentsOpen && (
+{taxDocumentsOpen && (
   <TaxDocumentsPanel onClose={() => setTaxDocumentsOpen(false)} />
 )}
 

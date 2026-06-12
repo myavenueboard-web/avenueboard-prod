@@ -3789,7 +3789,7 @@ function buildPaymentTimeline(
   leaseStartDate?: string | null,
   leaseEndDate?: string | null,
   rentDueDay?: string,
-  propertyCreatedAt?: string | null
+  _propertyCreatedAt?: string | null
 ): {
   key: string;
   month: string;
@@ -3799,18 +3799,10 @@ function buildPaymentTimeline(
 }[] {
   if (!leaseStartDate || !leaseEndDate) return [];
 
-  const leaseStart = new Date(leaseStartDate);
-  const leaseEnd = new Date(leaseEndDate);
+  const leaseEnd = parseLocalDate(leaseEndDate);
   const today = new Date();
 
-  const createdDate = propertyCreatedAt ? new Date(propertyCreatedAt) : today;
-
-  const startMonth = new Date(
-    Math.max(
-      new Date(leaseStart.getFullYear(), leaseStart.getMonth(), 1).getTime(),
-      new Date(createdDate.getFullYear(), createdDate.getMonth() + 1, 1).getTime()
-    )
-  );
+  const startMonth = getFirstRentCycleMonthStart(leaseStartDate);
 
   const dueDay = Number(String(rentDueDay || "1").match(/\d+/)?.[0] || 1);
 
@@ -3869,6 +3861,35 @@ if (firstTrackedMonth) {
   }
 
   return rows;
+}
+
+function getFirstRentCycleMonthStart(value: string) {
+  const { year, monthIndex, day } = getLocalDateParts(value);
+  return new Date(year, day === 1 ? monthIndex : monthIndex + 1, 1);
+}
+
+function parseLocalDate(value: string) {
+  const { year, monthIndex, day } = getLocalDateParts(value);
+  return new Date(year, monthIndex, day);
+}
+
+function getLocalDateParts(value: string) {
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (match) {
+    return {
+      year: Number(match[1]),
+      monthIndex: Number(match[2]) - 1,
+      day: Number(match[3]),
+    };
+  }
+
+  const date = new Date(value);
+  return {
+    year: date.getFullYear(),
+    monthIndex: date.getMonth(),
+    day: date.getDate(),
+  };
 }
 
 function addBusinessDays(date: Date, businessDays: number) {
