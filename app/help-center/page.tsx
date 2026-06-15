@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Building2, Headset } from "lucide-react";
 import Image from "next/image";
@@ -364,7 +364,7 @@ function getInitialSupportSection(tabParam: string | null): ActiveSupportSection
   return "faq";
 }
 
-export default function SupportCenterPage() {
+function SupportCenterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTabParam = searchParams.get("tab");
@@ -974,6 +974,14 @@ export default function SupportCenterPage() {
         />
       )}
     </main>
+  );
+}
+
+export default function SupportCenterPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-white" />}>
+      <SupportCenterContent />
+    </Suspense>
   );
 }
 
