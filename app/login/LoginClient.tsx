@@ -5,11 +5,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
 import { supabase } from "@/lib/supabase";
 
+function getSafeInternalReturnTo(value: string | null) {
+  if (!value) return "";
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+  if (value.includes("\\") || value.includes("://")) return "";
+  return value;
+}
+
 export default function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const redirectPath = searchParams.get("redirect") || "/dashboard";
+  const returnToPath = getSafeInternalReturnTo(searchParams.get("returnTo"));
+  const redirectPath = returnToPath || searchParams.get("redirect") || "/dashboard";
   const prefilledEmail = searchParams.get("email") || "";
 
   const [email, setEmail] = useState(prefilledEmail);

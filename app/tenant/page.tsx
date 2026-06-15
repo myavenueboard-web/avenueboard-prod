@@ -59,6 +59,21 @@ type TenantNotification = {
   created_at: string;
 };
 
+type StripeReturnNotice = {
+  type: "success" | "warning" | "error";
+  title: string;
+  text: string;
+} | null;
+
+type PayEarlyPreview = {
+  rentCycleKey: string;
+  monthLabel: string;
+  rentAmountCents: number;
+  tenantServiceFeeCents: number;
+  totalAmountCents: number;
+  isFutureCycle: boolean;
+} | null;
+
 function getTenantNotificationStorageKey(profileId: string) {
   return `avenueboard_tenant_dismissed_notifications_${profileId}`;
 }
@@ -76,6 +91,14 @@ function getLeaseAddressLabel(lease?: TenantLease) {
   return `${lease.street_address}${unit}${
     location ? `, ${location}` : ""
   }${lease.zip ? ` ${lease.zip}` : ""}`;
+}
+
+function getLeaseSwitcherLabel(lease?: TenantLease) {
+  if (!lease) return "Property";
+
+  return [lease.property_label || "Property", lease.unit_name ? `Unit ${lease.unit_name}` : ""]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function resolveTenantSelectedLeaseId({
@@ -281,10 +304,18 @@ export default function TenantDashboardPage() {
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [leaseSwitcherOpen, setLeaseSwitcherOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [createLandlordOpen, setCreateLandlordOpen] = useState(false);
   const [creatingLandlordPortal, setCreatingLandlordPortal] = useState(false);
   const [createLandlordError, setCreateLandlordError] = useState("");
+  const [paymentAction, setPaymentAction] = useState<"pay-now" | "autopay" | null>(
+    null
+  );
+  const [paymentActionError, setPaymentActionError] = useState("");
+  const [stripeReturnNotice, setStripeReturnNotice] =
+    useState<StripeReturnNotice>(null);
+  const [payEarlyPreview, setPayEarlyPreview] = useState<PayEarlyPreview>(null);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>(
     []
   );
@@ -301,6 +332,8 @@ export default function TenantDashboardPage() {
   const [deletingDocumentId, setDeletingDocumentId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const leaseSwitcherRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [userInfo, setUserInfo] = useState<UserInfo>({
     name: "Tenant",
@@ -361,6 +394,7 @@ export default function TenantDashboardPage() {
 
         const propertyIds = accessRows.map((item) => item.property_id);
         const leaseIds = accessRows.map((item) => item.lease_id);
+        const tenantAccessIds = accessRows.map((item) => item.id);
 
         const [
           { data: propertyData },
@@ -392,15 +426,18 @@ export default function TenantDashboardPage() {
 
           supabase
             .from("payment_methods")
-            .select("id, lease_id, brand, last4, exp_month, exp_year, is_default")
+            .select(
+              "id, tenant_profile_id, tenant_access_id, property_id, lease_id, stripe_customer_id, stripe_payment_method_id, autopay_status, autopay_enrolled, brand, last4, exp_month, exp_year, is_default, updated_at"
+            )
             .in("lease_id", leaseIds),
 
           supabase
             .from("rent_payments")
             .select(
-              "id, lease_id, payment_method_id, amount, period_label, status, receipt_url, paid_at, created_at"
+              "id, profile_id, tenant_access_id, property_id, lease_id, payment_method_id, amount, period_label, rent_cycle_key, rent_cycle_month_label, rent_amount_cents, tenant_service_fee_cents, total_amount_cents, stripe_checkout_session_id, stripe_payment_intent_id, source, status, receipt_url, paid_at, created_at, updated_at"
             )
             .in("lease_id", leaseIds)
+            .in("tenant_access_id", tenantAccessIds)
             .order("created_at", { ascending: false }),
         ]);
 
@@ -481,6 +518,114 @@ export default function TenantDashboardPage() {
     loadTenantDashboard();
   }, [router]);
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (
+        leaseSwitcherRef.current &&
+        !leaseSwitcherRef.current.contains(event.target as Node)
+      ) {
+        setLeaseSwitcherOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setLeaseSwitcherOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get("payment");
+    const autopay = params.get("autopay");
+    const cycle = params.get("cycle");
+    let notice: StripeReturnNotice = null;
+
+    if (payment === "success") {
+      notice = {
+        type: "success",
+        title: "Payment successful",
+        text: `Your ${cycle || "rent"} payment was submitted successfully.`,
+      };
+    } else if (payment === "cancelled") {
+      notice = {
+        type: "warning",
+        title: "Payment cancelled",
+        text: "No payment was submitted. You can retry when ready.",
+      };
+    } else if (payment === "error") {
+      notice = {
+        type: "error",
+        title: "Payment could not be confirmed",
+        text: "Please try again or contact support if the issue continues.",
+      };
+    } else if (autopay === "success") {
+      notice = {
+        type: "success",
+        title: "AutoPay is active",
+        text: "Future rent payments will use your saved payment method.",
+      };
+    } else if (autopay === "cancelled") {
+      notice = {
+        type: "warning",
+        title: "AutoPay setup cancelled",
+        text: "No payment method was saved. You can try again anytime.",
+      };
+    } else if (autopay === "error") {
+      notice = {
+        type: "error",
+        title: "AutoPay setup could not be completed",
+        text: "Please try again or contact support if the issue continues.",
+      };
+    }
+
+    if (notice) {
+      setStripeReturnNotice(notice);
+      setPaymentActionError("");
+      router.replace("/tenant", { scroll: false });
+    }
+  }, [router]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target as Node)
+      ) {
+        setProfileOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   const selectedLease =
     leases.find((lease) => lease.lease_id === selectedLeaseId) || leases[0];
 
@@ -503,6 +648,7 @@ export default function TenantDashboardPage() {
     setSelectedLeaseId(leaseId);
     setNotificationOpen(false);
     setProfileOpen(false);
+    setLeaseSwitcherOpen(false);
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -550,7 +696,9 @@ export default function TenantDashboardPage() {
   const selectedRentPayments = useMemo(() => {
     if (!selectedLease) return [];
     return rentPayments.filter(
-      (payment) => payment.lease_id === selectedLease.lease_id
+      (payment) =>
+        payment.lease_id === selectedLease.lease_id &&
+        payment.tenant_access_id === selectedLease.tenant_access_id
     );
   }, [rentPayments, selectedLease]);
 
@@ -673,6 +821,92 @@ export default function TenantDashboardPage() {
     (notification) => !dismissedNotifications.includes(notification.id)
   );
   const unreadNotificationCount = visibleNotifications.length;
+
+  const selectedAutoPayMethod =
+    selectedPaymentMethods.find((method) => method.is_default) ||
+    selectedPaymentMethods[0];
+
+  async function startTenantStripeFlow(
+    action: "pay-now" | "autopay",
+    route:
+      | "/api/stripe/tenant/pay-now"
+      | "/api/stripe/tenant/setup-autopay"
+      | "/api/stripe/tenant/pay-now/preview"
+  ) {
+    if (!selectedLease) {
+      setPaymentActionError("Select an active lease before starting payment setup.");
+      return;
+    }
+
+    if (action === "pay-now" && Number(selectedLease.monthly_rent || 0) <= 0) {
+      setPaymentActionError("Rent amount is unavailable for this lease.");
+      return;
+    }
+
+    setPaymentAction(action);
+    setPaymentActionError("");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setPaymentActionError("Please sign in again before continuing.");
+        return;
+      }
+
+      const response = await fetch(route, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          tenantAccessId: selectedLease.tenant_access_id,
+          propertyId: selectedLease.property_id,
+          leaseId: selectedLease.lease_id,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (route === "/api/stripe/tenant/pay-now/preview") {
+        if (!response.ok || !data?.cycle) {
+          setPaymentActionError(
+            data?.error || "No rent payment is due right now."
+          );
+          return;
+        }
+
+        if (data.cycle.isFutureCycle && selectedAutoPayMethod) {
+          setPayEarlyPreview(data.cycle as NonNullable<PayEarlyPreview>);
+          return;
+        }
+
+        await startTenantStripeFlow("pay-now", "/api/stripe/tenant/pay-now");
+        return;
+      }
+
+      if (!response.ok || !data?.url) {
+        setPaymentActionError(
+          data?.error || "Unable to start Stripe checkout. Please try again."
+        );
+        return;
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
+      console.error("Tenant Stripe action error:", error);
+      setPaymentActionError("Unable to start Stripe checkout. Please try again.");
+    } finally {
+      setPaymentAction(null);
+    }
+  }
+
+  function handlePayNowClick() {
+    startTenantStripeFlow("pay-now", "/api/stripe/tenant/pay-now/preview");
+  }
 
   useEffect(() => {
     if (!profileId) return;
@@ -1564,23 +1798,73 @@ export default function TenantDashboardPage() {
 
         <div className="flex items-center gap-5">
           {leases.length > 1 && (
-            <div className="hidden min-w-[220px] sm:block">
-              <label className="sr-only" htmlFor="tenant-lease-switcher">
-                Select rental property
-              </label>
-              <select
-                id="tenant-lease-switcher"
-                value={selectedLease?.lease_id || ""}
-                onChange={(event) => handleLeaseSelection(event.target.value)}
-                className="h-10 max-w-[280px] rounded-2xl border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-950 outline-none transition hover:bg-zinc-50 focus:border-[#B9476D] focus:ring-4 focus:ring-[#B9476D]/10"
+            <div
+              ref={leaseSwitcherRef}
+              className="relative w-[178px] sm:w-[250px]"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setLeaseSwitcherOpen((value) => !value);
+                  setNotificationOpen(false);
+                  setProfileOpen(false);
+                }}
+                className="flex h-9 w-full items-center justify-between gap-2.5 rounded-full border border-zinc-200/80 bg-white px-3 text-left shadow-[0_5px_14px_rgba(15,23,42,0.03)] transition hover:border-zinc-300 hover:bg-zinc-50/70 focus:outline-none focus:ring-4 focus:ring-slate-200/60"
+                aria-haspopup="listbox"
+                aria-expanded={leaseSwitcherOpen}
+                aria-label="Select rental property"
               >
-                {leases.map((lease) => (
-                  <option key={lease.tenant_access_id} value={lease.lease_id}>
-                    {lease.property_label}
-                    {lease.unit_name ? ` · Unit ${lease.unit_name}` : ""}
-                  </option>
-                ))}
-              </select>
+                <span className="min-w-0 truncate text-[12.5px] font-semibold leading-none text-slate-950">
+                  {getLeaseSwitcherLabel(selectedLease)}
+                </span>
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-50 text-[12px] leading-none text-zinc-400 transition-transform ${
+                    leaseSwitcherOpen ? "rotate-180" : ""
+                  }`}
+                >
+                  ⌄
+                </span>
+              </button>
+
+              {leaseSwitcherOpen && (
+                <div
+                  role="listbox"
+                  className="absolute right-0 top-[46px] z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-3xl border border-zinc-200 bg-white p-2 shadow-[0_22px_70px_rgba(15,23,42,0.16)]"
+                >
+                  <div className="border-b border-zinc-100 px-3 pb-2 pt-2">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                      Rental workspace
+                    </p>
+                  </div>
+
+                  <div className="max-h-[320px] overflow-y-auto py-1">
+                    {leases.map((lease) => {
+                      const active = lease.lease_id === selectedLease?.lease_id;
+                      return (
+                        <button
+                          key={lease.tenant_access_id}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onClick={() => handleLeaseSelection(lease.lease_id)}
+                          className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
+                            active
+                              ? "bg-slate-50 text-slate-950"
+                              : "text-slate-700 hover:bg-zinc-50 hover:text-slate-950"
+                          }`}
+                        >
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[12px] font-semibold text-[#0F172A]">
+                            {active ? "✓" : ""}
+                          </span>
+                          <span className="min-w-0 truncate text-[13.5px] font-semibold">
+                            {getLeaseSwitcherLabel(lease)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1589,6 +1873,7 @@ export default function TenantDashboardPage() {
               onClick={() => {
                 setNotificationOpen((value) => !value);
                 setProfileOpen(false);
+                setLeaseSwitcherOpen(false);
               }}
               className="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-zinc-50"
               aria-label="Notifications"
@@ -1686,6 +1971,7 @@ export default function TenantDashboardPage() {
               setSupportOpen(true);
               setNotificationOpen(false);
               setProfileOpen(false);
+              setLeaseSwitcherOpen(false);
             }}
             className="hidden h-10 items-center gap-2 rounded-2xl px-3 text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-50 sm:flex"
           >
@@ -1717,9 +2003,14 @@ export default function TenantDashboardPage() {
 
           <div className="hidden h-8 w-px bg-zinc-200 sm:block" />
 
-          <div className="relative">
+          <div ref={profileMenuRef} className="relative">
             <button
-              onClick={() => setProfileOpen((value) => !value)}
+              type="button"
+              onClick={() => {
+                setProfileOpen((value) => !value);
+                setLeaseSwitcherOpen(false);
+                setNotificationOpen(false);
+              }}
               className="flex items-center gap-3 rounded-2xl px-2 py-1.5 hover:bg-zinc-50"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0F172A] text-[13px] font-semibold text-white">
@@ -1749,9 +2040,10 @@ export default function TenantDashboardPage() {
 
                 {hasLandlordRole ? (
                   <button
+                    type="button"
                     onClick={() => {
                       setProfileOpen(false);
-                      router.push(hasLandlordRole ? "/dashboard" : "/select-mode");
+                      router.push("/dashboard");
                     }}
                     className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
                   >
@@ -1759,6 +2051,7 @@ export default function TenantDashboardPage() {
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => {
                       setProfileOpen(false);
                       setCreateLandlordOpen(true);
@@ -1770,22 +2063,31 @@ export default function TenantDashboardPage() {
                   </button>
                 )}
 
-                <button className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50">
-                  Profile settings
-                </button>
-
                 <button
+                  type="button"
                   onClick={() => {
-                    setSupportOpen(true);
                     setProfileOpen(false);
                   }}
                   className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
                 >
-                  Support
+                  Profile settings
                 </button>
 
                 <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    router.push("/help-center");
+                  }}
+                  className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Help Center
+                </button>
+
+                <button
+                  type="button"
                   onClick={async () => {
+                    setProfileOpen(false);
                     await supabase.auth.signOut();
                     router.push("/login");
                   }}
@@ -1819,7 +2121,17 @@ export default function TenantDashboardPage() {
             <PaymentHero
             lease={selectedLease}
             paymentMethods={selectedPaymentMethods}
+            rentPayments={selectedRentPayments}
             firstName={getFirstName(userInfo.name)}
+            paymentAction={paymentAction}
+            paymentActionError={paymentActionError}
+            onPayNow={handlePayNowClick}
+            onSetupAutoPay={() =>
+              startTenantStripeFlow(
+                "autopay",
+                "/api/stripe/tenant/setup-autopay"
+              )
+            }
             />
 
             <NotesDocumentsCard
@@ -1900,6 +2212,24 @@ export default function TenantDashboardPage() {
             }
 
             handleDeleteDocument(deleteTarget.item);
+          }}
+        />
+      )}
+
+      {stripeReturnNotice && (
+        <StripeReturnNoticeModal
+          notice={stripeReturnNotice}
+          onClose={() => setStripeReturnNotice(null)}
+        />
+      )}
+
+      {payEarlyPreview && (
+        <PayEarlyConfirmationModal
+          preview={payEarlyPreview}
+          onCancel={() => setPayEarlyPreview(null)}
+          onConfirm={() => {
+            setPayEarlyPreview(null);
+            startTenantStripeFlow("pay-now", "/api/stripe/tenant/pay-now");
           }}
         />
       )}
@@ -1993,4 +2323,171 @@ export default function TenantDashboardPage() {
 
     </main>
   );
+}
+
+function StripeReturnNoticeModal({
+  notice,
+  onClose,
+}: {
+  notice: NonNullable<StripeReturnNotice>;
+  onClose: () => void;
+}) {
+  const isSuccess = notice.type === "success";
+  const isWarning = notice.type === "warning";
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+        aria-label="Dismiss payment update"
+      />
+      <div className="relative w-full max-w-[420px] rounded-[30px] border border-zinc-200 bg-white p-7 text-center shadow-[0_28px_90px_rgba(15,23,42,0.20)]">
+        <div
+          className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${
+            isSuccess
+              ? "bg-emerald-50 text-emerald-600"
+              : isWarning
+              ? "bg-amber-50 text-amber-600"
+              : "bg-red-50 text-red-600"
+          }`}
+        >
+          <span className="tenant-stripe-return-icon text-[30px] leading-none">
+            {isSuccess ? "✓" : isWarning ? "!" : "×"}
+          </span>
+        </div>
+        <h2 className="mt-5 text-[25px] font-medium tracking-[-0.055em] text-slate-950">
+          {notice.title}
+        </h2>
+        <p className="mx-auto mt-3 max-w-[320px] text-[14px] font-medium leading-6 text-zinc-500">
+          {notice.text}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-6 h-11 rounded-2xl bg-[#0F172A] px-6 text-[13px] font-semibold text-white transition hover:bg-[#182338]"
+        >
+          Done
+        </button>
+      </div>
+      <style jsx>{`
+        .tenant-stripe-return-icon {
+          animation: tenantStripeReturnIn 240ms ease-out;
+        }
+
+        @keyframes tenantStripeReturnIn {
+          from {
+            opacity: 0;
+            transform: scale(0.72);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .tenant-stripe-return-icon {
+            animation: none;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function PayEarlyConfirmationModal({
+  preview,
+  onCancel,
+  onConfirm,
+}: {
+  preview: NonNullable<PayEarlyPreview>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        onClick={onCancel}
+        aria-label="Cancel early rent payment"
+      />
+      <div className="relative w-full max-w-[460px] rounded-[30px] border border-zinc-200 bg-white p-7 shadow-[0_28px_90px_rgba(15,23,42,0.20)]">
+        <h2 className="text-[25px] font-medium tracking-[-0.055em] text-slate-950">
+          Pay rent early?
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-6 text-zinc-500">
+          Your current rent is already paid. This payment will be applied to{" "}
+          {preview.monthLabel}. Since AutoPay is active, AvenueBoard will skip
+          AutoPay for {preview.monthLabel} once this payment is completed.
+        </p>
+
+        <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200">
+          <PayEarlyRow label="Rent cycle" value={preview.monthLabel} />
+          <PayEarlyRow
+            label="Rent amount"
+            value={formatCents(preview.rentAmountCents)}
+          />
+          <PayEarlyRow
+            label="AvenueBoard service fee"
+            value={formatCents(preview.tenantServiceFeeCents)}
+          />
+          <PayEarlyRow
+            label="Total"
+            value={formatCents(preview.totalAmountCents)}
+            strong
+          />
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-11 rounded-2xl border border-zinc-200 bg-white px-5 text-[13px] font-semibold text-slate-700 transition hover:bg-zinc-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="h-11 rounded-2xl bg-[#0F172A] px-5 text-[13px] font-semibold text-white transition hover:bg-[#182338]"
+          >
+            Pay Early
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PayEarlyRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 last:border-b-0">
+      <p className="text-[13px] font-medium text-zinc-500">{label}</p>
+      <p
+        className={`text-[13px] ${
+          strong ? "font-semibold text-slate-950" : "font-medium text-slate-700"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function formatCents(value: number) {
+  return `$${(value / 100).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }

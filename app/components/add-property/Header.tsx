@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 type UserProfile = {
   name: string;
   email: string;
@@ -20,6 +22,32 @@ export default function Header({
   handleLogout,
   openProfileSettings,
 }: HeaderProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [setMenuOpen]);
+
   return (
     <header className="flex items-center justify-between">
       <button
@@ -29,7 +57,7 @@ export default function Header({
         ‹ Back
       </button>
 
-      <div className="relative">
+      <div ref={menuRef} className="relative">
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="flex items-center gap-3 rounded-2xl px-2 py-1 transition hover:bg-zinc-50"

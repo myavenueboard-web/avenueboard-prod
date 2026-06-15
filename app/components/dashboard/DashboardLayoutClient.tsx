@@ -299,6 +299,20 @@ export default function DashboardLayoutClient({
     };
   }, [router]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/login");

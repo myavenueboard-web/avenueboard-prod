@@ -833,7 +833,7 @@ function MobileMoreTab({ landlordName }: { landlordName?: string | null }) {
     { label: "Reports", Icon: Activity, action: () => (window.location.href = "/dashboard/reports") },
     { label: "Expenses", Icon: DollarSign, action: () => (window.location.href = "/dashboard/expenses") },
     { label: "Roadmap", Icon: Menu, action: () => window.dispatchEvent(new CustomEvent("avenueboard:open-assistant")) },
-    { label: "Assistant / Support", Icon: Bot, action: () => window.dispatchEvent(new CustomEvent("avenueboard:open-assistant")) },
+    { label: "Help Center", Icon: Bot, action: () => (window.location.href = "/help-center") },
   ];
 
   return (

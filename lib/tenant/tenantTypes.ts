@@ -86,24 +86,44 @@ export type DeleteTarget =
 
 export type PaymentMethod = {
   id: string;
+  tenant_access_id?: string | null;
+  tenant_profile_id?: string | null;
   lease_id: string;
+  property_id?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_payment_method_id?: string | null;
+  autopay_status?: string | null;
+  autopay_enrolled?: boolean | null;
   brand: string | null;
   last4: string | null;
   exp_month: string | null;
   exp_year: string | null;
   is_default: boolean | null;
+  updated_at?: string | null;
 };
 
 export type RentPayment = {
   id: string;
+  profile_id?: string | null;
+  tenant_access_id?: string | null;
+  property_id?: string | null;
   lease_id: string;
   payment_method_id: string | null;
   amount: number;
   period_label: string | null;
+  rent_cycle_key?: string | null;
+  rent_cycle_month_label?: string | null;
+  rent_amount_cents?: number | null;
+  tenant_service_fee_cents?: number | null;
+  total_amount_cents?: number | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_payment_intent_id?: string | null;
+  source?: string | null;
   status: string | null;
   receipt_url: string | null;
   paid_at: string | null;
   created_at: string | null;
+  updated_at?: string | null;
 };
 
 export type ActivityLog = {

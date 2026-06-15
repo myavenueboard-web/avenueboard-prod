@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
@@ -38,6 +38,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
@@ -72,6 +73,33 @@ export default function AdminLayout({
 
     checkAdminAccess();
   }, [router]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target as Node)
+      ) {
+        setProfileOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   const activeSection = useMemo(() => {
     return (
@@ -142,7 +170,7 @@ export default function AdminLayout({
           })}
         </nav>
 
-        <div className="border-t border-zinc-200 p-3">
+        <div ref={profileMenuRef} className="border-t border-zinc-200 p-3">
           <button
             onClick={() => setProfileOpen((value) => !value)}
             className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-zinc-100"

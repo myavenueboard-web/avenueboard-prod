@@ -43,20 +43,53 @@ type PaymentProgressRow = {
   status: PaymentProgressStatus;
   subtext: string;
 };
+type PaymentSummaryState = {
+  label: string;
+  amount: string;
+  subtext: string;
+  messageTone: "error" | "neutral";
+};
 
 export function PaymentHero({
   lease,
   paymentMethods,
+  rentPayments,
   firstName,
+  paymentAction,
+  paymentActionError,
+  onPayNow,
+  onSetupAutoPay,
 }: {
   lease?: TenantLease;
   paymentMethods: PaymentMethod[];
+  rentPayments: RentPayment[];
   firstName: string;
+  paymentAction?: "pay-now" | "autopay" | null;
+  paymentActionError?: string;
+  onPayNow?: () => void;
+  onSetupAutoPay?: () => void;
 }) {
   const [leaseStatusOpen, setLeaseStatusOpen] = useState(false);
   const defaultMethod =
     paymentMethods.find((method) => method.is_default) || paymentMethods[0];
   const greeting = getTimeBasedGreeting();
+  const rentUnavailable = !lease || Number(lease.monthly_rent || 0) <= 0;
+  const paymentDisabled = Boolean(paymentAction) || rentUnavailable;
+  const autoPayEnrolled = Boolean(defaultMethod);
+  const paymentMethodLabel = defaultMethod
+    ? `${formatBrand(defaultMethod.brand)} ending in ${defaultMethod.last4 || "0000"}`
+    : "Auto-pay not enrolled";
+  const paymentSummary = buildPaymentSummaryState(lease, rentPayments);
+  const actionMessage =
+    paymentActionError === "You have no payment due at this time."
+      ? "No payment due at this time."
+      : paymentActionError;
+  const actionMessageIsNeutral = Boolean(
+    actionMessage &&
+      actionMessage.toLowerCase().includes("no") &&
+      actionMessage.toLowerCase().includes("payment") &&
+      actionMessage.toLowerCase().includes("due")
+  );
 
   return (
     <>
@@ -69,12 +102,12 @@ export function PaymentHero({
             </p>
 
             <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.12em] leading-4 text-zinc-500">
-              Total Due
+              {paymentSummary.label}
             </p>
 
             <div className="mt-1 flex items-end gap-8">
               <h1 className="text-[52px] font-[600] leading-none tracking-[-0.075em] text-slate-950">
-                ${Number(lease?.monthly_rent || 0).toLocaleString()}
+                {paymentSummary.amount}
               </h1>
 
               <div className="mb-1 flex items-center gap-5">
@@ -83,13 +116,13 @@ export function PaymentHero({
                 <div>
                   <p className="flex items-center gap-1.5 text-[12px] font-medium leading-5 text-zinc-500">
                     ⓘ{" "}
-                    {defaultMethod
-                      ? `${formatBrand(defaultMethod.brand)} •••• ${defaultMethod.last4}`
-                      : "Auto-pay not enrolled"}
+                    {autoPayEnrolled ? "AutoPay Active" : "Auto-pay not enrolled"}
                   </p>
 
                   <p className="mt-1 text-[14px] font-semibold leading-5 text-zinc-900">
-                    Due on {formatDueDate(lease?.rent_due_day)}
+                    {autoPayEnrolled
+                      ? paymentMethodLabel
+                      : paymentSummary.subtext}
                   </p>
                 </div>
               </div>
@@ -97,14 +130,42 @@ export function PaymentHero({
           </div>
 
           <div className="space-y-3 -translate-x-6">
-            <button className="group flex h-[48px] w-full items-center justify-center gap-6 rounded-xl bg-[#0F172A] text-[13px] font-semibold text-white shadow-[0_14px_32px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5">
-              Pay Rent
+            <button
+              type="button"
+              onClick={onPayNow}
+              disabled={paymentDisabled}
+              className="group flex h-[48px] w-full items-center justify-center gap-6 rounded-xl bg-[#0F172A] text-[13px] font-semibold text-white shadow-[0_14px_32px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+            >
+              {paymentAction === "pay-now" ? "Redirecting..." : "Pay Now"}
               <span className="transition group-hover:translate-x-1">→</span>
             </button>
 
-            <button className="h-[48px] w-full rounded-xl border border-zinc-300 bg-white text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-50">
-              Setup Autopay
+            <button
+              type="button"
+              onClick={onSetupAutoPay}
+              disabled={Boolean(paymentAction) || !lease}
+              className="h-[48px] w-full rounded-xl border border-zinc-300 bg-white text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {paymentAction === "autopay"
+                ? "Redirecting..."
+                : autoPayEnrolled
+                ? "Manage AutoPay"
+                : "Set up AutoPay"}
             </button>
+            {(actionMessage || rentUnavailable) && (
+              <p
+                className={`text-[12px] font-medium leading-5 ${
+                  actionMessageIsNeutral
+                    ? "text-zinc-500"
+                    : actionMessage || rentUnavailable
+                    ? "text-red-600"
+                    : "text-emerald-700"
+                }`}
+              >
+                {actionMessage ||
+                  "Rent amount is unavailable for this lease."}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1985,6 +2046,92 @@ function buildPaymentProgressSummary(
   );
 }
 
+function buildPaymentSummaryState(
+  lease?: TenantLease,
+  payments: RentPayment[] = []
+): PaymentSummaryState {
+  const rent = Number(lease?.monthly_rent || 0);
+
+  if (!lease || rent <= 0) {
+    return {
+      label: "Amount Due",
+      amount: "$0",
+      subtext: "Rent amount is unavailable",
+      messageTone: "error",
+    };
+  }
+
+  const start = getFirstRentCycleMonthStart(
+    lease.start_date || new Date().toISOString()
+  );
+  const end = getMonthStart(lease.end_date || lease.start_date || new Date().toISOString());
+  const today = new Date();
+  const currentCycle = new Date(today.getFullYear(), today.getMonth(), 1);
+  const maxEarlyCycle = new Date(
+    currentCycle.getFullYear(),
+    currentCycle.getMonth() + 1,
+    1
+  );
+  const cycleEnd = end < maxEarlyCycle ? end : maxEarlyCycle;
+  const cycles: Date[] = [];
+
+  for (
+    let cursor = new Date(start);
+    cursor <= cycleEnd;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+  ) {
+    cycles.push(cursor);
+  }
+
+  const oldestUnpaidCurrentOrPast = cycles.find(
+    (cycle) => cycle <= currentCycle && !findPaymentForMonth(payments, cycle)
+  );
+
+  if (oldestUnpaidCurrentOrPast) {
+    const isCurrent = getPaymentMonthKey(oldestUnpaidCurrentOrPast) === getPaymentMonthKey(currentCycle);
+
+    return {
+      label: "Amount Due",
+      amount: formatCurrency(rent),
+      subtext: isCurrent
+        ? `Due on ${formatSummaryDueDate(oldestUnpaidCurrentOrPast)}`
+        : `Due for ${formatPaymentMonthLabel(oldestUnpaidCurrentOrPast)}`,
+      messageTone: "error",
+    };
+  }
+
+  const eligibleFuture = cycles.find(
+    (cycle) =>
+      cycle > currentCycle &&
+      cycle <= maxEarlyCycle &&
+      !findPaymentForMonth(payments, cycle)
+  );
+
+  if (eligibleFuture) {
+    return {
+      label: "Next Eligible Payment",
+      amount: formatCurrency(rent),
+      subtext: `${formatPaymentMonthLabel(eligibleFuture)} rent can be paid early`,
+      messageTone: "neutral",
+    };
+  }
+
+  const paidCycles = cycles.filter((cycle) => findPaymentForMonth(payments, cycle));
+  const paidThrough = paidCycles[paidCycles.length - 1] || currentCycle;
+  const nextEligible = new Date(
+    paidThrough.getFullYear(),
+    paidThrough.getMonth() + 1,
+    1
+  );
+
+  return {
+    label: "Rent Paid Through",
+    amount: formatPaymentMonthLabel(paidThrough),
+    subtext: `Next eligible payment starts ${formatSummaryDueDate(nextEligible)}`,
+    messageTone: "neutral",
+  };
+}
+
 function getMonthStart(value: string) {
   const { year, monthIndex } = getLocalDateParts(value);
   return new Date(year, monthIndex, 1);
@@ -2023,24 +2170,46 @@ function getPaymentMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function formatPaymentMonthLabel(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatSummaryDueDate(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function findPaymentForMonth(payments: RentPayment[], date: Date) {
   const month = date.toLocaleDateString("en-US", { month: "long" }).toLowerCase();
   const shortMonth = date
     .toLocaleDateString("en-US", { month: "short" })
     .toLowerCase();
   const year = String(date.getFullYear());
-  const monthNumber = String(date.getMonth() + 1).padStart(2, "0");
+  const paymentKey = getPaymentMonthKey(date);
 
   return payments.find((payment) => {
+    if (!isSettledPaymentStatus(payment.status)) return false;
+    if (payment.rent_cycle_key === paymentKey) return true;
+
     const label = String(payment.period_label || "").toLowerCase();
-    const paidAt = payment.paid_at || payment.created_at || "";
 
     return (
       (label.includes(month) || label.includes(shortMonth)) &&
-      (!label.match(/\d{4}/) || label.includes(year)) ||
-      paidAt.startsWith(`${year}-${monthNumber}`)
+      (!label.match(/\d{4}/) || label.includes(year))
     );
   });
+}
+
+function isSettledPaymentStatus(status?: string | null) {
+  return ["paid", "succeeded", "complete", "completed"].includes(
+    String(status || "").toLowerCase()
+  );
 }
 
 function getFirstUpcomingPaymentKey(
