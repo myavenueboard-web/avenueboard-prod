@@ -116,8 +116,8 @@ export async function getLandlordNotifications(profileId: string) {
     if (acceptedTenant) {
       notifications.push({
         id: `tenant-accepted-${acceptedTenant.id}`,
-        title: "Tenant invite accepted",
-        message: `${acceptedTenant.first_name || "Tenant"} ${
+        title: "Resident invite accepted",
+        message: `${acceptedTenant.first_name || "Resident"} ${
           acceptedTenant.last_name || ""
         } accepted the invite for ${property.property_label || "the property"}.`,
         type: "success",

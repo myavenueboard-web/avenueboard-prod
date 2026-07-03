@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import {
   getAppUrl,
   getTenantPaymentContext,
-  TENANT_SERVICE_FEE_CENTS,
+  logTenantPaymentFeeDebug,
   TenantPaymentError,
   tenantStripeSupabaseAdmin,
 } from "@/lib/stripe/tenantPayments";
@@ -15,17 +15,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const context = await getTenantPaymentContext(request, body);
     const appUrl = getAppUrl();
-
-    console.info("Tenant Pay Now checkout guardrail:", {
-      rentPaymentsFound: context.guardrailDebug.rentPaymentsFound,
-      paidCycleKeys: context.guardrailDebug.paidCycleKeys,
-      currentCycleKey: context.guardrailDebug.currentCycleKey,
-      allowedCycleKeys: context.guardrailDebug.allowedCycleKeys,
-      unpaidCycleKeys: context.guardrailDebug.unpaidCycleKeys,
-      nextUnpaidCycleKey: context.guardrailDebug.nextUnpaidCycleKey,
-      isEligible: context.guardrailDebug.isEligible,
-      selectedRentCycleKey: context.rentCycleKey,
-    });
 
     const duplicate = await getExistingCyclePayment({
       leaseId: context.leaseId,
@@ -48,6 +37,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const account = await stripe.accounts.retrieve(context.stripeAccountId);
+
+    if (!isStripeAccountPaymentReady(account)) {
+      return NextResponse.json(
+        { error: "This property is not ready for online payments yet." },
+        { status: 409 }
+      );
+    }
+
+    logTenantPaymentFeeDebug("Tenant Pay Now checkout fee context", context);
+
     const rentDescription = [
       context.propertyLabel,
       context.unitName ? `Unit ${context.unitName}` : null,
@@ -69,15 +69,15 @@ export async function POST(request: Request) {
       },
     ];
 
-    if (TENANT_SERVICE_FEE_CENTS > 0) {
+    if (context.tenantServiceFeeCents > 0) {
       lineItems.push({
         price_data: {
           currency: "usd",
           product_data: {
-            name: "AvenueBoard service fee",
-            description: "Tenant payment service fee",
+            name: "AvenueBoard Platform Fee",
+            description: "Resident monthly platform fee",
           },
-          unit_amount: TENANT_SERVICE_FEE_CENTS,
+          unit_amount: context.tenantServiceFeeCents,
         },
         quantity: 1,
       });
@@ -89,6 +89,20 @@ export async function POST(request: Request) {
       customer_email: context.userEmail || undefined,
       client_reference_id: context.tenantAccessId,
       line_items: lineItems,
+      payment_intent_data: {
+        application_fee_amount: context.applicationFeeCents,
+        transfer_data: {
+          destination: context.stripeAccountId,
+        },
+        metadata: {
+          source: "tenant_pay_now",
+          property_id: context.propertyId,
+          lease_id: context.leaseId,
+          tenant_access_id: context.tenantAccessId,
+          rent_cycle_key: context.rentCycleKey,
+          fee_payer: context.landlordAbsorbsFee ? "landlord" : "resident",
+        },
+      },
       metadata: {
         source: "tenant_pay_now",
         user_id: context.userId,
@@ -102,7 +116,12 @@ export async function POST(request: Request) {
         due_date: context.dueDate,
         rent_amount_cents: String(context.rentAmountCents),
         tenant_service_fee_cents: String(context.tenantServiceFeeCents),
+        application_fee_cents: String(context.applicationFeeCents),
         total_amount_cents: String(context.totalAmountCents),
+        landlord_absorbs_fee: String(context.landlordAbsorbsFee),
+        fee_payer: context.landlordAbsorbsFee ? "landlord" : "resident",
+        stripe_connected_account_id: context.stripeAccountId,
+        payment_method_mode: "card_only",
       },
       success_url: `${appUrl}/api/stripe/tenant/pay-now/return?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/tenant?payment=cancelled`,
@@ -119,6 +138,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: message }, { status });
   }
+}
+
+function isStripeAccountPaymentReady(account: Stripe.Account) {
+  return account.charges_enabled === true && account.payouts_enabled === true;
 }
 
 async function getExistingCyclePayment({
@@ -141,10 +164,9 @@ async function getExistingCyclePayment({
 
   if (error) {
     console.error("Tenant Pay Now duplicate lookup error:", {
-      leaseId,
-      tenantAccessId,
       rentCycleKey,
-      error,
+      message: error.message,
+      code: error.code,
     });
     return null;
   }

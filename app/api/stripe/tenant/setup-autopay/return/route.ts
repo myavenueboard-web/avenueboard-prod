@@ -32,24 +32,11 @@ export async function GET(request: Request) {
     const sessionId = searchParams.get("session_id");
 
     if (!sessionId) {
-      console.error("Tenant AutoPay return missing session_id");
       return NextResponse.redirect(`${appUrl}/tenant?autopay=cancelled`);
     }
 
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ["setup_intent", "setup_intent.payment_method"],
-    });
-
-    console.log("Tenant AutoPay return Stripe session", {
-      sessionId,
-      status: session.status,
-      customer:
-        typeof session.customer === "string" ? session.customer : session.customer?.id,
-      setupIntent:
-        typeof session.setup_intent === "string"
-          ? session.setup_intent
-          : session.setup_intent?.id,
-      metadata: session.metadata,
     });
 
     if (session.status !== "complete") {
@@ -68,17 +55,6 @@ export async function GET(request: Request) {
         : setupIntent?.customer?.id) ||
       "";
 
-    console.log("Tenant AutoPay return resolved setup result", {
-      sessionId,
-      setupIntentId: setupIntent?.id || null,
-      setupIntentStatus: setupIntent?.status || null,
-      paymentMethodId: paymentMethod?.id || null,
-      paymentMethodType: paymentMethod?.type || null,
-      cardBrand: card?.brand || null,
-      cardLast4: card?.last4 || null,
-      stripeCustomerId: stripeCustomerId || null,
-    });
-
     const tenantAccessId = metadata.tenant_access_id;
     const propertyId = metadata.property_id;
     const leaseId = metadata.lease_id;
@@ -93,15 +69,7 @@ export async function GET(request: Request) {
       !card ||
       !stripeCustomerId
     ) {
-      console.error("Tenant AutoPay return missing required data", {
-        tenantAccessId,
-        propertyId,
-        leaseId,
-        profileId,
-        hasPaymentMethod: Boolean(paymentMethod),
-        hasCard: Boolean(card),
-        stripeCustomerId: stripeCustomerId || null,
-      });
+      console.error("Tenant AutoPay return missing required setup data");
       return NextResponse.redirect(`${appUrl}/tenant?autopay=error`);
     }
 
@@ -114,6 +82,12 @@ export async function GET(request: Request) {
 
     if (!accessOk) {
       return NextResponse.redirect(`${appUrl}/tenant?autopay=error`);
+    }
+
+    const leaseAcceptsPayments = await validateLeaseAcceptsPayments(leaseId);
+
+    if (!leaseAcceptsPayments) {
+      return NextResponse.redirect(`${appUrl}/tenant?autopay=lease_ended`);
     }
 
     const saved = await saveTenantPaymentMethod({
@@ -181,26 +155,26 @@ async function validateTenantAccess({
     .eq("lease_id", leaseId)
     .maybeSingle();
 
-  console.log("Tenant AutoPay return tenant access validation", {
-    tenantAccessId,
-    profileId,
-    propertyId,
-    leaseId,
-    found: Boolean(data),
-    inviteStatus: data?.invite_status || null,
-    error: error
-      ? {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-        }
-      : null,
-  });
-
   if (error || !data) return false;
 
   return String(data.invite_status || "").toLowerCase() === "accepted";
+}
+
+async function validateLeaseAcceptsPayments(leaseId: string) {
+  const { data, error } = await tenantStripeSupabaseAdmin
+    .from("leases")
+    .select("id, lease_status, ended_at")
+    .eq("id", leaseId)
+    .maybeSingle();
+
+  if (error || !data) return false;
+
+  return !(
+    data.ended_at ||
+    ["ended", "inactive", "terminated"].includes(
+      String(data.lease_status || "").toLowerCase()
+    )
+  );
 }
 
 async function saveTenantPaymentMethod({
@@ -221,13 +195,7 @@ async function saveTenantPaymentMethod({
   card: Stripe.PaymentMethod.Card;
 }) {
   if (!profileId) {
-    console.error("Tenant AutoPay save blocked: missing profileId", {
-      leaseId,
-      tenantAccessId,
-      propertyId,
-      stripeCustomerId,
-      stripePaymentMethodId: paymentMethod.id,
-    });
+    console.error("Tenant AutoPay save blocked: missing profileId");
     return false;
   }
 
@@ -299,18 +267,6 @@ async function saveTenantPaymentMethod({
         .select("id")
         .maybeSingle();
 
-  console.log("Tenant AutoPay payment method rich save result", {
-    leaseId,
-    profileId,
-    tenantAccessId,
-    propertyId,
-    stripeCustomerId,
-    stripePaymentMethodId: paymentMethod.id,
-    existingId,
-    savedId: saveResult.data?.id || null,
-    error: saveResult.error ? formatSupabaseError(saveResult.error) : null,
-  });
-
   if (!saveResult.error && saveResult.data?.id) {
     return true;
   }
@@ -318,19 +274,6 @@ async function saveTenantPaymentMethod({
   if (saveResult.error && !isMissingColumnError(saveResult.error)) {
     return false;
   }
-
-  console.warn(
-    "Tenant AutoPay falling back to legacy payment_methods payload. Apply 202606150001_tenant_autopay_payment_method_fields.sql to persist Stripe IDs.",
-    {
-      leaseId,
-      profileId,
-      tenantAccessId,
-      propertyId,
-      stripeCustomerId,
-      stripePaymentMethodId: paymentMethod.id,
-      error: saveResult.error ? formatSupabaseError(saveResult.error) : null,
-    }
-  );
 
   const fallbackResult = existingId
     ? await tenantStripeSupabaseAdmin
@@ -344,14 +287,6 @@ async function saveTenantPaymentMethod({
         .insert(basePayload)
         .select("id")
         .maybeSingle();
-
-  console.log("Tenant AutoPay payment method fallback save result", {
-    leaseId,
-    profileId,
-    existingId,
-    savedId: fallbackResult.data?.id || null,
-    error: fallbackResult.error ? formatSupabaseError(fallbackResult.error) : null,
-  });
 
   return Boolean(!fallbackResult.error && fallbackResult.data?.id);
 }
@@ -368,11 +303,6 @@ async function findExistingPaymentMethodByStripeId(
     .maybeSingle();
 
   if (error) {
-    console.warn("Tenant AutoPay stripe payment method lookup error:", {
-      stripePaymentMethodId,
-      profileId,
-      error: formatSupabaseError(error),
-    });
     return null;
   }
 
@@ -400,11 +330,7 @@ async function findExistingPaymentMethodByCard({
     .maybeSingle();
 
   if (error) {
-    console.error("Tenant AutoPay card lookup error:", {
-      leaseId,
-      profileId,
-      error: formatSupabaseError(error),
-    });
+    console.error("Tenant AutoPay card lookup error:", formatSupabaseError(error));
     return null;
   }
 

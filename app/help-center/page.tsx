@@ -1,10 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Building2, Headset } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { MarketingHeader } from "@/components/marketing/MarketingShell";
 import { supabase } from "@/lib/supabase";
 
 type SupportUser = {
@@ -48,7 +50,7 @@ type FaqTopic = {
 const faqTopics: FaqTopic[] = [
   {
     id: "landlord_workspace",
-    name: "Landlord Portal",
+    name: "Landlord Board",
     eyebrow: "LANDLORD PORTAL",
     title: "Manage your properties with ease",
     subtitle:
@@ -57,62 +59,62 @@ const faqTopics: FaqTopic[] = [
       {
         question: "How do I create my first property?",
         answer:
-          "From the landlord dashboard, choose Add Property and enter the basic property details, address, rent amount, lease information and tenant information where available. Once saved, AvenueBoard creates a property workspace that keeps the tenant details, lease status, documents, notes, activity and payment setup organized in one place.",
+          "From the Landlord Board, choose Add Property and enter the basic property details, address, rent amount, lease information and tenant information where available. Once saved, AvenueBoard creates a property workspace that keeps the tenant details, lease status, documents, notes, activity and payment setup organized in one place.",
       },
       {
         question: "How do I invite a tenant?",
         answer:
-          "After a property and lease are set up, use the tenant management area to invite the tenant by email. The tenant receives an invitation, creates or signs into an AvenueBoard account, and accepts access to the property. Once accepted, the tenant can use their tenant portal for the connected rental workspace.",
+          "After a property and lease are set up, use the tenant management area to invite the tenant by email. The tenant receives an invitation, creates or signs into an AvenueBoard account, and accepts access to the property. Once accepted, the tenant can use their Resident Board for the connected rental workspace.",
       },
       {
         question: "Can I manage more than one tenant for a property?",
         answer:
-          "Yes. AvenueBoard supports multiple tenant access records for a property or lease. The property dashboard stays clean by showing the primary tenant first, while additional tenants can be viewed or managed through the tenant controls for that property.",
+          "Yes. AvenueBoard supports multiple tenant access records for a property or lease. The property workspace stays clean by showing the primary tenant first, while additional tenants can be viewed or managed through the tenant controls for that property.",
       },
       {
         question: "Where can I manage property notes and documents?",
         answer:
-          "Open the individual property workspace. Landlords can add property notes, mark notes as private or shared when supported, upload property documents, and review recent activity for that property. Shared notes and documents can appear in the tenant portal when they are connected to the tenant's property access.",
+          "Open the individual property workspace. Landlords can add property notes, mark notes as private or shared when supported, upload property documents, and review recent activity for that property. Shared notes and documents can appear in the Resident Board when they are connected to the tenant's property access.",
       },
       {
-        question: "How do I remove or update landlord portal access?",
+        question: "How do I remove or update Landlord Board access?",
         answer:
-          "If your account has both tenant and landlord access, Profile Settings can allow you to remove the landlord portal without deleting your full AvenueBoard account. AvenueBoard blocks removal when it would leave you without another active portal or when active owned properties would be orphaned. You can create a landlord portal again later if needed.",
+          "If your account has both tenant and landlord access, Profile Settings can allow you to remove the Landlord Board without deleting your full AvenueBoard account. AvenueBoard blocks removal when it would leave you without another active Board or when active owned properties would be orphaned. You can create a Landlord Board again later if needed.",
       },
     ],
   },
   {
     id: "tenant_workspace",
-    name: "Tenant Portal",
+    name: "Resident Board",
     eyebrow: "TENANT PORTAL",
     title: "Stay organized as a renter",
     subtitle:
       "Learn how tenants access rent details, lease status, shared notes, documents and property contact information.",
     questions: [
       {
-        question: "What can tenants see in their portal?",
+        question: "What can tenants see in their Resident Board?",
         answer:
-          "Tenants can view the rental workspace connected to an accepted invitation. The tenant portal can show rent due, payment progress, lease status, shared notes, property documents, recent activity and property contact information. Some tenant benefits, such as Avenue Perks or credit-building opportunities, may appear as planned or future-facing features unless they are enabled for that account.",
+          "Tenants can view the rental workspace connected to an accepted invitation. The Resident Board can show rent due, payment progress, lease status, shared notes, property documents, recent activity and property contact information. Some tenant benefits, such as Avenue Perks or credit-building opportunities, may appear as planned or future-facing features unless they are enabled for that account.",
       },
       {
-        question: "How do I access my tenant dashboard?",
+        question: "How do I access my Resident Board?",
         answer:
-          "Use the email address your landlord invited, then sign in or create an AvenueBoard account. After accepting the invitation, AvenueBoard connects your account to the property or lease and opens the tenant portal. If you have access to more than one rental workspace, the tenant portal can let you select the correct lease or property.",
+          "Use the email address your landlord invited, then sign in or create an AvenueBoard account. After accepting the invitation, AvenueBoard connects your account to the property or lease and opens the Resident Board. If you have access to more than one rental workspace, the Resident Board can let you select the correct lease or property.",
       },
       {
         question: "Where can I find shared notes and documents?",
         answer:
-          "Shared notes and property documents appear inside the tenant dashboard sections for the selected rental workspace. If you do not see a document or note you expected, confirm you are viewing the correct property or lease and ask your landlord whether it has been shared with your tenant access.",
+          "Shared notes and property documents appear inside the Resident Board sections for the selected rental workspace. If you do not see a document or note you expected, confirm you are viewing the correct property or lease and ask your landlord whether it has been shared with your tenant access.",
       },
       {
         question: "How do I contact my landlord?",
         answer:
-          "The tenant dashboard includes a Property Contact card with the owner or property contact details available for that rental workspace. If an email address is available, you can contact the property contact from there. For AvenueBoard account or platform issues, use Ava or open a support case instead.",
+          "The Resident Board includes a Property Contact card with the owner or property contact details available for that rental workspace. If an email address is available, you can contact the property contact from there. For AvenueBoard account or platform issues, use Ava or open a support case instead.",
       },
       {
         question: "What happens if I am invited to AvenueBoard by my landlord?",
         answer:
-          "You will receive an invitation tied to a specific property or lease. After accepting, AvenueBoard activates your tenant workspace for that rental. Your landlord may see that the invite was accepted, and you can begin viewing the information your landlord has made available through AvenueBoard.",
+          "You will receive an invitation tied to a specific property or lease. After accepting, AvenueBoard activates your resident workspace for that rental. Your landlord may see that the invite was accepted, and you can begin viewing the information your landlord has made available through AvenueBoard.",
       },
     ],
   },
@@ -137,7 +139,7 @@ const faqTopics: FaqTopic[] = [
       {
         question: "How will Pay Now work?",
         answer:
-          "Pay Now is being prepared as part of AvenueBoard's payment workflow. Once payment features are enabled for a property, tenants should be able to start a rent payment from the tenant portal and landlords should be able to track the payment status from the property workspace. Availability may depend on Stripe setup and production payment readiness.",
+          "Pay Now is being prepared as part of AvenueBoard's payment workflow. Once payment features are enabled for a property, tenants should be able to start a rent payment from the Resident Board and landlords should be able to track the payment status from the property workspace. Availability may depend on Stripe setup and production payment readiness.",
       },
       {
         question: "How will AutoPay work?",
@@ -162,7 +164,7 @@ const faqTopics: FaqTopic[] = [
       {
         question: "Where can I view lease details?",
         answer:
-          "Landlords can review lease information inside the property workspace. Tenants can see lease status and related lease information in the tenant portal after they accept access to the property or lease. The exact details shown depend on what has been entered and enabled for that workspace.",
+          "Landlords can review lease information inside the property workspace. Tenants can see lease status and related lease information in the Resident Board after they accept access to the property or lease. The exact details shown depend on what has been entered and enabled for that workspace.",
       },
       {
         question: "Can landlords upload documents?",
@@ -172,7 +174,7 @@ const faqTopics: FaqTopic[] = [
       {
         question: "Can tenants view shared property documents?",
         answer:
-          "Tenants can view documents that are available to their tenant access for the selected property or lease. If a document should be tenant-facing but does not appear, the landlord should confirm the document is connected to the correct property and available to the tenant workspace.",
+          "Tenants can view documents that are available to their tenant access for the selected property or lease. If a document should be tenant-facing but does not appear, the landlord should confirm the document is connected to the correct property and available to the resident workspace.",
       },
       {
         question: "What file types can be uploaded?",
@@ -192,32 +194,32 @@ const faqTopics: FaqTopic[] = [
     eyebrow: "ACCOUNT & PROFILE",
     title: "Manage your AvenueBoard account",
     subtitle:
-      "Learn how portal switching, profile access and account roles work in AvenueBoard.",
+      "Learn how Board switching, profile access and account roles work in AvenueBoard.",
     questions: [
       {
-        question: "How do I switch between landlord and tenant portals?",
+        question: "How do I switch between landlord and Resident Boards?",
         answer:
-          "If your account has both landlord and tenant access, the profile menu shows the direct switch action for the other portal. From the tenant portal, you can switch to the landlord dashboard. From the landlord dashboard, you can switch to the tenant dashboard when tenant access exists.",
+          "If your account has both landlord and tenant access, the profile menu shows the direct switch action for the other Board. From the Resident Board, you can switch to the Landlord Board. From the Landlord Board, you can switch to the Resident Board when tenant access exists.",
       },
       {
-        question: "How do I create a landlord portal from a tenant account?",
+        question: "How do I create a Landlord Board from a tenant account?",
         answer:
-          "If you are signed in as a tenant and do not already have landlord access, the profile menu can show Create landlord portal. AvenueBoard asks for confirmation first because a landlord portal is only needed when you manage or rent out a property. After confirmation, landlord access is enabled and you can go to the landlord dashboard.",
+          "If you are signed in as a tenant and do not already have landlord access, the profile menu can show Create Landlord Board. AvenueBoard asks for confirmation first because a Landlord Board is only needed when you manage or rent out a property. After confirmation, landlord access is enabled and you can go to the Landlord Board.",
       },
       {
-        question: "Can I remove landlord portal access?",
+        question: "Can I remove Landlord Board access?",
         answer:
-          "Yes, if your account also has another active portal such as tenant access. Removing the landlord portal removes the landlord role only; it does not delete your AvenueBoard account, tenant portal, tenant access or auth user. AvenueBoard may block removal if you own active properties that would lose a valid landlord owner.",
+          "Yes, if your account also has another active Board such as tenant access. Removing the Landlord Board removes the landlord role only; it does not delete your AvenueBoard account, Resident Board, tenant access or auth user. AvenueBoard may block removal if you own active properties that would lose a valid landlord owner.",
       },
       {
         question: "How do I update my profile information?",
         answer:
-          "Use the profile or settings area available from your dashboard menu. Support case updates are sent to the email address on your AvenueBoard account, so make sure your account email is accurate before opening a case.",
+          "Use the profile or settings area available from your board menu. Support case updates are sent to the email address on your AvenueBoard account, so make sure your account email is accurate before opening a case.",
       },
       {
-        question: "How does AvenueBoard decide which portal I see?",
+        question: "How does AvenueBoard decide which Board I see?",
         answer:
-          "AvenueBoard uses your account roles and accepted tenant access to determine which portals are available. Landlord users can access the landlord dashboard. Tenants with accepted invitations can access the tenant portal. Dual-role users can switch directly between available portals.",
+          "AvenueBoard uses your account roles and accepted tenant access to determine which Boards are available. Landlord users can access the Landlord Board. Tenants with accepted invitations can access the Resident Board. Dual-role users can switch directly between available Boards.",
       },
     ],
   },
@@ -232,7 +234,7 @@ const faqTopics: FaqTopic[] = [
       {
         question: "Can I submit maintenance requests?",
         answer:
-          "A full maintenance request workflow is planned, but AvenueBoard currently focuses on rental workspace organization, notes, documents, payment readiness, tenant access and support cases. Tenants should contact their landlord or property contact directly for property maintenance needs unless a dedicated workflow is visible in their portal.",
+          "A full maintenance request workflow is planned, but AvenueBoard currently focuses on rental workspace organization, notes, documents, payment readiness, tenant access and support cases. Tenants should contact their landlord or property contact directly for property maintenance needs unless a dedicated workflow is visible in their Board.",
       },
       {
         question: "Can landlords track maintenance notes?",
@@ -297,17 +299,17 @@ const faqTopics: FaqTopic[] = [
       {
         question: "What is AvenueBoard?",
         answer:
-          "AvenueBoard is a rental workspace for self-managing landlords and tenants. It helps organize properties, tenants, lease information, documents, notes, payment readiness, activity and support in a clean shared experience.",
+          "AvenueBoard is a rental workspace for self-managing landlords and residents. It helps organize properties, residents, lease information, documents, notes, payment readiness, activity and support in a clean shared experience.",
       },
       {
         question: "Who can use AvenueBoard?",
         answer:
-          "AvenueBoard is built for landlords who manage their own rental properties and tenants who are invited into a rental workspace by their landlord. It is designed to make rental operations feel more organized without the complexity of traditional property management software.",
+          "AvenueBoard is built for landlords who manage their own rental properties and residents who are invited into a rental workspace by their landlord. It is designed to make rental operations feel more organized without the complexity of traditional property management software.",
       },
       {
         question: "Is AvenueBoard free for landlords?",
         answer:
-          "The landlord portal is currently free to use. When payment features are fully live, tenant-facing payment services may include a tenant service fee. AvenueBoard will make fees clear before users complete payment-related actions.",
+          "Yes. AvenueBoard is free for self-managing landlords and property managers. Residents pay a $10 monthly Resident Platform Fee unless the landlord chooses to absorb it.",
       },
       {
         question: "What is Ava?",
@@ -358,22 +360,21 @@ const casePriorities: {
   },
 ];
 
-function getInitialSupportSection(tabParam: string | null): ActiveSupportSection {
-  if (tabParam === "my-cases") return "cases";
-  if (tabParam === "contact-us") return "contact";
+function getSectionFromValue(value: string | null): ActiveSupportSection {
+  if (value === "cases" || value === "my-cases") return "cases";
+  if (value === "contact" || value === "contact-us") return "contact";
   return "faq";
 }
 
 function SupportCenterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const activeTabParam = searchParams.get("tab");
+  const sectionParam = searchParams.get("section");
+  const legacyTabParam = searchParams.get("tab");
 
   const [user, setUser] = useState<SupportUser | null>(null);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [loadingUser, setLoadingUser] = useState(true);
   const [loadingCases, setLoadingCases] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [signInModalOpen, setSignInModalOpen] = useState(false);
   const [createCaseOpen, setCreateCaseOpen] = useState(false);
   const [creatingCase, setCreatingCase] = useState(false);
@@ -382,97 +383,100 @@ function SupportCenterContent() {
   const [casePriority, setCasePriority] = useState<CasePriorityId>("standard");
   const [caseSubjectInput, setCaseSubjectInput] = useState("");
   const [caseDescription, setCaseDescription] = useState("");
-  const [activeSection, setActiveSection] = useState<ActiveSupportSection>(() =>
-    getInitialSupportSection(activeTabParam)
-  );
+  const [activeSection, setActiveSection] = useState<ActiveSupportSection>(() => {
+    if (sectionParam) return getSectionFromValue(sectionParam);
+    if (legacyTabParam) return getSectionFromValue(legacyTabParam);
+
+    if (typeof window !== "undefined") {
+      return getSectionFromValue(window.location.hash.replace("#", ""));
+    }
+
+    return "faq";
+  });
   const [activeFaqTopicId, setActiveFaqTopicId] = useState(faqTopics[0].id);
   const [expandedFaqQuestion, setExpandedFaqQuestion] = useState(0);
-  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const nextSection = sectionParam
+      ? getSectionFromValue(sectionParam)
+      : legacyTabParam
+        ? getSectionFromValue(legacyTabParam)
+        : typeof window !== "undefined"
+          ? getSectionFromValue(window.location.hash.replace("#", ""))
+          : "faq";
+
+    setActiveSection(nextSection);
+  }, [sectionParam, legacyTabParam]);
+
+  useEffect(() => {
+    function handleHashChange() {
+      if (!sectionParam && !legacyTabParam) {
+        setActiveSection(getSectionFromValue(window.location.hash.replace("#", "")));
+      }
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [sectionParam, legacyTabParam]);
+
+  function updateActiveSection(section: ActiveSupportSection) {
+    setActiveSection(section);
+    router.replace(`/help-center?section=${section}`, { scroll: false });
+  }
 
   useEffect(() => {
     async function loadSupportUser() {
-      try {
-        const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
 
-        if (!authUser) {
-          setUser(null);
-          return;
-        }
-
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("id, display_name, email")
-          .eq("user_id", authUser.id)
-          .maybeSingle();
-
-        const profileId = profile?.id || "";
-        const [{ data: roles }, { data: tenantAccess }] = await Promise.all([
-          profileId
-            ? supabase
-                .from("user_roles")
-                .select("role")
-                .eq("profile_id", profileId)
-            : Promise.resolve({ data: [] }),
-          profileId
-            ? supabase
-                .from("tenant_access")
-                .select("id")
-                .eq("tenant_profile_id", profileId)
-                .eq("invite_status", "accepted")
-                .limit(1)
-            : Promise.resolve({ data: [] }),
-        ]);
-
-        const name =
-          profile?.display_name ||
-          authUser.user_metadata?.full_name ||
-          authUser.email?.split("@")[0] ||
-          "User";
-        const email = profile?.email || authUser.email || "";
-
-        setUser({
-          id: authUser.id,
-          name,
-          email,
-          initials: getInitials(name || email),
-          hasLandlordRole: (roles || []).some((item) => item.role === "landlord"),
-          hasTenantAccess: (tenantAccess || []).length > 0,
-        });
-      } finally {
-        setLoadingUser(false);
+      if (!authUser) {
+        setUser(null);
+        return;
       }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, display_name, email")
+        .eq("user_id", authUser.id)
+        .maybeSingle();
+
+      const profileId = profile?.id || "";
+      const [{ data: roles }, { data: tenantAccess }] = await Promise.all([
+        profileId
+          ? supabase
+              .from("user_roles")
+              .select("role")
+              .eq("profile_id", profileId)
+          : Promise.resolve({ data: [] }),
+        profileId
+          ? supabase
+              .from("tenant_access")
+              .select("id")
+              .eq("tenant_profile_id", profileId)
+              .eq("invite_status", "accepted")
+              .limit(1)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const name =
+        profile?.display_name ||
+        authUser.user_metadata?.full_name ||
+        authUser.email?.split("@")[0] ||
+        "User";
+      const email = profile?.email || authUser.email || "";
+
+      setUser({
+        id: authUser.id,
+        name,
+        email,
+        initials: getInitials(name || email),
+        hasLandlordRole: (roles || []).some((item) => item.role === "landlord"),
+        hasTenantAccess: (tenantAccess || []).length > 0,
+      });
     }
 
     loadSupportUser();
-  }, []);
-
-  useEffect(() => {
-    function handlePointerDown(event: MouseEvent | TouchEvent) {
-      if (
-        profileMenuRef.current &&
-        !profileMenuRef.current.contains(event.target as Node)
-      ) {
-        setProfileMenuOpen(false);
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setProfileMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
   }, []);
 
   useEffect(() => {
@@ -509,12 +513,12 @@ function SupportCenterContent() {
   }, [user]);
 
   function handleCasesClick() {
-    setActiveSection("cases");
+    updateActiveSection("cases");
   }
 
   function handleCreateCaseClick() {
     if (!user) {
-      setActiveSection("cases");
+      updateActiveSection("cases");
       return;
     }
 
@@ -523,7 +527,7 @@ function SupportCenterContent() {
   }
 
   function handleFaqSupportCaseClick() {
-    setActiveSection("cases");
+    updateActiveSection("cases");
     handleCreateCaseClick();
   }
 
@@ -617,7 +621,7 @@ function SupportCenterContent() {
       setCaseSubjectInput("");
       setCaseDescription("");
       setCreateCaseOpen(false);
-      setActiveSection("cases");
+      updateActiveSection("cases");
     } catch (error) {
       console.error("Help Center case submit error:", error);
       setCreateCaseError("Unable to create your case right now.");
@@ -652,11 +656,6 @@ function SupportCenterContent() {
       });
 
       const result = await response.json().catch(() => null);
-      console.log("Help Center close case API response", {
-        ok: response.ok,
-        status: response.status,
-        result,
-      });
 
       if (!response.ok || !result?.ok) {
         console.error("Help Center close case error:", result?.error);
@@ -688,164 +687,48 @@ function SupportCenterContent() {
     }
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfileMenuOpen(false);
-    setTickets([]);
-  }
-
-  const dashboardItems = getDashboardItems(user);
-  const activeTabIndex = supportTabs.findIndex((tab) => tab.id === activeSection);
-
   return (
     <main className="flex min-h-screen flex-col bg-white font-sans text-[#0F172A]">
-      <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto grid h-[68px] max-w-[1680px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6 lg:px-8">
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="flex items-center"
-            aria-label="AvenueBoard home"
-          >
-            <Image
-              src="/logo.png"
-              alt="AvenueBoard"
-              width={172}
-              height={32}
-              className="h-8 w-auto"
-              priority
-            />
-          </button>
+      <MarketingHeader activePage="help-center" variant="platform" />
 
+      <section className="border-b border-zinc-200 bg-white">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-7 px-5 sm:px-7 lg:px-16">
           <nav
-            className="relative hidden min-w-[740px] grid-cols-3 rounded-full border border-zinc-200 bg-white p-1.5 shadow-[0_8px_28px_rgba(15,23,42,0.04)] sm:grid"
+            className="min-w-0 flex-1 overflow-x-auto"
             aria-label="Help Center sections"
           >
-            <span
-              className="absolute left-1.5 top-1.5 h-9 rounded-full bg-slate-950 shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition-transform duration-300 ease-out"
-              style={{
-                width: "calc((100% - 12px) / 3)",
-                transform: `translateX(${Math.max(activeTabIndex, 0) * 100}%)`,
-              }}
-              aria-hidden="true"
-            />
-            {supportTabs.map((tab) => {
-              const active = activeSection === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() =>
-                    tab.id === "cases" ? handleCasesClick() : setActiveSection(tab.id)
-                  }
-                  className={`relative z-10 h-9 rounded-full bg-transparent px-8 text-[13px] font-semibold transition-colors duration-200 focus:bg-transparent focus:outline-none active:bg-transparent ${
-                    active
-                      ? "text-white"
-                      : "text-zinc-600 hover:bg-transparent hover:text-slate-950"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+            <div className="flex min-w-max items-center gap-10">
+              {supportTabs.map((tab) => {
+                const active = activeSection === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() =>
+                      tab.id === "cases"
+                        ? handleCasesClick()
+                        : updateActiveSection(tab.id)
+                    }
+                    className={`relative h-16 whitespace-nowrap text-[15px] font-semibold transition ${
+                      active
+                        ? "text-slate-950"
+                        : "text-zinc-600 hover:text-slate-950"
+                    }`}
+                  >
+                    {tab.label}
+
+                    {active && (
+                      <span className="absolute bottom-0 left-0 h-[2px] w-full bg-slate-950" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </nav>
-
-          {loadingUser ? (
-            <div className="ml-auto h-10 w-32 animate-pulse rounded-2xl bg-zinc-100" />
-          ) : user ? (
-            <div ref={profileMenuRef} className="relative ml-auto">
-              <button
-                type="button"
-                onClick={() => setProfileMenuOpen((value) => !value)}
-                className="flex items-center gap-3 rounded-2xl px-2 py-1.5 transition hover:bg-zinc-50"
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-[12px] font-semibold text-slate-800">
-                  {user.initials}
-                </span>
-                <span className="hidden max-w-[180px] truncate text-[13px] font-semibold text-slate-900 sm:block">
-                  {user.name}
-                </span>
-                <span className="text-zinc-400">⌄</span>
-              </button>
-
-              {profileMenuOpen && (
-                  <div className="absolute right-0 top-14 z-50 w-[240px] overflow-hidden rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
-                    <div className="border-b border-zinc-100 px-3 py-3">
-                      <p className="truncate text-[13px] font-semibold text-slate-900">
-                        {user.name}
-                      </p>
-                      <p className="mt-0.5 truncate text-[12px] text-zinc-500">
-                        {user.email}
-                      </p>
-                    </div>
-                    {dashboardItems.map((item) => (
-                      <button
-                        key={item.href}
-                        type="button"
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          router.push(item.href);
-                        }}
-                        className="mt-1 w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Logout
-                    </button>
-                  </div>
-              )}
-            </div>
-          ) : (
-            <div className="ml-auto flex items-center gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/login")}
-                className="h-10 rounded-2xl px-4 text-[13px] font-semibold text-slate-800 transition hover:bg-zinc-50"
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/signup")}
-                className="h-10 rounded-2xl border border-zinc-200 bg-white px-4 text-[13px] font-semibold text-slate-950 transition hover:bg-zinc-50"
-              >
-                Create Account
-              </button>
-            </div>
-          )}
         </div>
+      </section>
 
-        <div className="flex gap-2 overflow-x-auto border-t border-zinc-100 px-4 py-2 sm:hidden">
-          {supportTabs.map((tab) => {
-            const active = activeSection === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() =>
-                  tab.id === "cases" ? handleCasesClick() : setActiveSection(tab.id)
-                }
-                className={`h-9 shrink-0 rounded-full px-4 text-[13px] font-semibold transition ${
-                  active
-                    ? "bg-slate-950 text-white"
-                    : "border border-zinc-200 bg-white text-zinc-600"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </header>
-
-      <section className="mx-auto w-full max-w-[1680px] flex-1 px-4 pb-2 pt-4 sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-[1600px] flex-1 px-5 pb-16 pt-0 sm:px-7 lg:px-16">
         {activeSection === "faq" && (
           <FaqPanel
             activeTopicId={activeFaqTopicId}
@@ -871,7 +754,7 @@ function SupportCenterContent() {
             onSignIn={() =>
               router.push(
                 `/login?returnTo=${encodeURIComponent(
-                  "/help-center?tab=my-cases"
+                  "/help-center?section=cases"
                 )}`
               )
             }
@@ -885,28 +768,7 @@ function SupportCenterContent() {
         {activeSection === "contact" && <ContactPanel />}
       </section>
 
-      <footer className="mx-auto flex w-full max-w-[1680px] shrink-0 items-center justify-center border-t border-zinc-200 px-4 pb-6 pt-4 text-[12.5px] font-medium text-zinc-500 sm:px-6 lg:px-8">
-        <div className="flex flex-nowrap items-center justify-center gap-2.5 leading-none">
-          <span>© 2026</span>
-          <Image
-            src="/logo.png"
-            alt="AvenueBoard"
-            width={98}
-            height={18}
-            className="h-[18px] w-auto"
-          />
-          <span className="text-zinc-300">·</span>
-          <span>All rights reserved.</span>
-          <span className="text-zinc-300">·</span>
-          <button type="button" onClick={() => router.push("/privacy")} className="hover:text-slate-950">
-            Privacy Policy
-          </button>
-          <span className="text-zinc-300">·</span>
-          <button type="button" onClick={() => router.push("/terms")} className="hover:text-slate-950">
-            Terms of Service
-          </button>
-        </div>
-      </footer>
+      <MarketingFooter />
 
       {signInModalOpen && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
@@ -928,10 +790,10 @@ function SupportCenterContent() {
               <LockIcon />
             </div>
             <h2 className="mt-6 text-[22px] font-medium tracking-[-0.045em] text-slate-950">
-              Sign in to view your cases
+              Sign in to view your support cases.
             </h2>
             <p className="mx-auto mt-3 max-w-[280px] text-[13.5px] font-medium leading-6 text-zinc-500">
-              Support requests are linked to your AvenueBoard account.
+              Your cases are connected to your AvenueBoard account.
             </p>
             <div className="mt-6 grid gap-3">
               <button
@@ -1002,17 +864,17 @@ function FaqPanel({
     faqTopics.find((topic) => topic.id === activeTopicId) || faqTopics[0];
 
   return (
-    <div className="px-1 pb-5 pt-5 sm:px-2 lg:pt-9">
+    <div className="px-1 pb-12 pt-1 sm:px-2 lg:pb-16 lg:pt-2">
       <div>
-        <h1 className="text-[34px] font-medium tracking-[-0.065em] text-slate-950">
+        <h1 className="text-[37px] font-medium tracking-[-0.065em] text-slate-950">
           Everything You Need to Know
         </h1>
-        <div className="mt-5 h-px w-16 bg-zinc-200" />
+        <div className="mt-4 h-px w-16 bg-zinc-200" />
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="mt-7 grid gap-8 lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="lg:border-r lg:border-zinc-200 lg:pr-8">
-          <h2 className="px-1 text-[11.5px] font-bold uppercase tracking-[0.16em] text-slate-500">
+          <h2 className="px-1 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-500">
             Topics
           </h2>
           <div className="mt-4 grid gap-2">
@@ -1023,7 +885,7 @@ function FaqPanel({
                   key={topic.id}
                   type="button"
                   onClick={() => onTopicChange(topic.id)}
-                  className={`relative flex min-h-12 w-full items-center justify-between gap-4 rounded-2xl px-4 text-left text-[14px] font-semibold transition ${
+                  className={`relative flex min-h-12 w-full items-center justify-between gap-4 rounded-2xl px-4 text-left text-[15px] font-semibold transition ${
                     active
                       ? "bg-blue-50/70 text-slate-950"
                       : "bg-transparent text-slate-600 hover:bg-zinc-50 hover:text-slate-950"
@@ -1044,13 +906,13 @@ function FaqPanel({
 
         <section className="lg:pl-3">
           <div>
-            <p className="text-[11.5px] font-bold uppercase tracking-[0.16em] text-[#2563EB]">
+            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#2563EB]">
               {activeTopic.eyebrow}
             </p>
-            <h2 className="mt-3 text-[26px] font-medium tracking-[-0.055em] text-slate-950 sm:text-[28px]">
+            <h2 className="mt-3 text-[30px] font-medium tracking-[-0.055em] text-slate-950 sm:text-[32px]">
               {activeTopic.title}
             </h2>
-            <p className="mt-2 max-w-[760px] text-[14px] font-medium leading-6 text-slate-600">
+            <p className="mt-2 max-w-[820px] text-[16px] font-medium leading-7 text-slate-600">
               {activeTopic.subtitle}
             </p>
           </div>
@@ -1066,7 +928,7 @@ function FaqPanel({
                   <button
                     type="button"
                     onClick={() => onQuestionToggle(index)}
-                    className="flex min-h-[58px] w-full items-center justify-between gap-6 bg-transparent py-4 text-left text-[14px] font-semibold text-slate-950 transition hover:text-[#1E40AF]"
+                    className="flex min-h-[58px] w-full items-center justify-between gap-6 bg-transparent py-4 text-left text-[16px] font-semibold text-slate-950 transition hover:text-[#1E40AF]"
                   >
                     <span>{item.question}</span>
                     <span className="text-[18px] font-medium leading-none text-zinc-400">
@@ -1076,7 +938,7 @@ function FaqPanel({
 
                   {expanded && (
                     <div className="pb-5 pr-10">
-                      <p className="max-w-[820px] text-[13.5px] font-medium leading-6 text-slate-600">
+                      <p className="max-w-[860px] text-[15.5px] font-medium leading-7 text-slate-600">
                         {item.answer}
                       </p>
                     </div>
@@ -1091,14 +953,14 @@ function FaqPanel({
               <h3 className="text-[20px] font-medium tracking-[-0.05em] text-slate-950">
                 Still have questions?
               </h3>
-              <p className="mt-1 text-[13.5px] font-medium text-slate-600">
+              <p className="mt-1 text-[14px] font-medium text-slate-600">
                 Open a support case and we&apos;ll follow up directly.
               </p>
             </div>
             <button
               type="button"
               onClick={onOpenSupportCase}
-              className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl bg-[#0F172A] px-5 text-[13px] font-semibold text-white transition hover:bg-[#172033] sm:mt-0"
+              className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl bg-[#0F172A] px-5 text-[14px] font-semibold text-white transition hover:bg-[#172033] sm:mt-0"
             >
               Open a Support Case →
             </button>
@@ -1148,20 +1010,20 @@ function CasesPanel({
   ];
 
   return (
-    <div className="relative min-h-[calc(100vh-170px)] px-1 pb-5 pt-5 sm:px-2 lg:pt-9">
+    <div className="relative min-h-[calc(100vh-170px)] px-1 pb-12 pt-1 sm:px-2 lg:pb-16 lg:pt-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-[34px] font-medium tracking-[-0.065em] text-slate-950">
+          <h1 className="text-[37px] font-medium tracking-[-0.065em] text-slate-950">
             Support Requests
           </h1>
-          <p className="mt-2 text-[14px] font-medium leading-6 text-slate-600">
+          <p className="mt-2 text-[16px] font-medium leading-7 text-slate-600">
             View, track, and manage your AvenueBoard support requests.
           </p>
         </div>
         <button
           type="button"
           onClick={user ? onCreateCase : onSignIn}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#1E40AF] px-5 text-[13px] font-semibold text-white shadow-[0_12px_28px_rgba(30,64,175,0.18)] transition hover:bg-[#1E3A8A]"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#1E40AF] px-5 text-[14px] font-semibold text-white shadow-[0_12px_28px_rgba(30,64,175,0.18)] transition hover:bg-[#1E3A8A]"
         >
           <span className="text-lg leading-none">+</span>
           Create Case
@@ -1179,7 +1041,7 @@ function CasesPanel({
                   type="button"
                   onClick={() => setFilter(item.id)}
                   disabled={!user}
-                  className={`relative flex h-10 items-center gap-3 bg-transparent px-2 text-[13.5px] font-semibold transition focus:outline-none disabled:cursor-default ${
+                  className={`relative flex h-10 items-center gap-3 bg-transparent px-2 text-[14px] font-semibold transition focus:outline-none disabled:cursor-default ${
                     active ? "text-slate-950" : "text-slate-600 hover:text-slate-950"
                   }`}
                 >
@@ -1202,7 +1064,7 @@ function CasesPanel({
         </div>
 
         <div className="mt-6 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-[0_16px_55px_rgba(15,23,42,0.035)]">
-          <div className={`grid min-h-16 ${caseTableGridClass} items-center gap-4 border-b border-zinc-200 px-6 text-[11.5px] font-bold uppercase tracking-[0.08em] text-slate-500`}>
+          <div className={`grid min-h-16 ${caseTableGridClass} items-center gap-4 border-b border-zinc-200 px-6 text-[12px] font-bold uppercase tracking-[0.08em] text-slate-500`}>
             <span>Case ID</span>
             <span>Subject</span>
             <span>Status</span>
@@ -1245,17 +1107,17 @@ function CasesPanel({
                 <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-blue-50 text-[#1E40AF]">
                   <CaseEmptyIcon />
                 </div>
-                <h2 className="mt-7 text-[21px] font-semibold tracking-[-0.045em] text-slate-950">
+                <h2 className="mt-7 text-[23px] font-semibold tracking-[-0.045em] text-slate-950">
                   {emptyState.title}
                 </h2>
-                <p className="mt-2 text-[14px] font-medium text-slate-500">
+                <p className="mt-2 text-[15.5px] font-medium text-slate-500">
                   {emptyState.text}
                 </p>
                 {emptyState.showAction && (
                   <button
                     type="button"
                     onClick={onCreateCase}
-                    className="mt-7 h-11 rounded-2xl bg-[#1E40AF] px-6 text-[13px] font-semibold text-white shadow-[0_12px_28px_rgba(30,64,175,0.18)] transition hover:bg-[#1E3A8A]"
+                    className="mt-7 h-11 rounded-2xl bg-[#1E40AF] px-6 text-[14px] font-semibold text-white shadow-[0_12px_28px_rgba(30,64,175,0.18)] transition hover:bg-[#1E3A8A]"
                   >
                     + Open Case
                   </button>
@@ -1282,16 +1144,16 @@ function CasesPanel({
                       : "border-b border-zinc-100"
                   }`}
                 >
-                  <p className="truncate text-[13px] font-semibold text-slate-950">
+                  <p className="truncate text-[15px] font-semibold text-slate-950">
                     {ticket.ticket_number || shortCaseId(ticket.id)}
                   </p>
-                  <p className="line-clamp-1 text-[13px] font-medium text-slate-600">
+                  <p className="line-clamp-1 text-[15px] font-medium text-slate-600">
                     {caseDetailSubject(ticket)}
                   </p>
                   <span className={statusClass(ticket.status)}>
                     {statusLabel(ticket.status)}
                   </span>
-                  <div className="text-[12.5px] font-medium leading-5 text-slate-500">
+                  <div className="text-[13.5px] font-medium leading-5 text-slate-500">
                     <p>{formatDate(ticket.updated_at || ticket.created_at)}</p>
                     <p>{formatTime(ticket.updated_at || ticket.created_at)}</p>
                   </div>
@@ -1306,12 +1168,12 @@ function CasesPanel({
                           setCloseTarget(ticket);
                         }}
                         onKeyDown={(event) => event.stopPropagation()}
-                        className="h-8 rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-zinc-300 hover:bg-zinc-50"
+                        className="h-8 rounded-xl border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-slate-700 transition hover:border-zinc-300 hover:bg-zinc-50"
                       >
                         Close Case
                       </button>
                     ) : (
-                      <span className="text-[12px] font-medium text-zinc-400">
+                      <span className="text-[13px] font-medium text-zinc-400">
                         —
                       </span>
                     )}
@@ -1329,11 +1191,11 @@ function CasesPanel({
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-950">
               <LockIcon />
             </div>
-            <h2 className="mt-6 text-[22px] font-medium tracking-[-0.045em] text-slate-950">
-              Sign in to view your cases
+            <h2 className="mt-6 text-[24px] font-medium tracking-[-0.045em] text-slate-950">
+              Sign in to view your support cases.
             </h2>
-            <p className="mx-auto mt-3 max-w-[270px] text-[13.5px] font-medium leading-6 text-zinc-500">
-              Support requests are linked to your AvenueBoard account.
+            <p className="mx-auto mt-3 max-w-[290px] text-[14.5px] font-medium leading-6 text-zinc-500">
+              Your cases are connected to your AvenueBoard account.
             </p>
             <div className="mt-6 grid gap-3">
               <button
@@ -1645,21 +1507,21 @@ function CaseTimelineItem({
 
 function ContactPanel() {
   return (
-    <div className="px-1 pb-5 pt-1 sm:px-2">
-      <div className="grid items-center gap-4 rounded-[30px] bg-white px-5 py-4 sm:px-8 lg:grid-cols-[minmax(0,1fr)_390px]">
+    <div className="px-1 pb-12 pt-0 sm:px-2 lg:pb-16">
+      <div className="grid items-center gap-4 rounded-[30px] bg-white px-5 py-1 sm:px-8 sm:py-2 lg:grid-cols-[minmax(0,1fr)_390px]">
         <div>
-          <span className="inline-flex h-8 items-center gap-2 rounded-full bg-blue-50 px-3.5 text-[12.5px] font-semibold text-blue-700">
+          <span className="inline-flex h-8 items-center gap-2 rounded-full bg-blue-50 px-3.5 text-[13px] font-semibold text-blue-700">
             <span className="flex h-5 w-5 items-center justify-center">
               <HeadsetSmallIcon />
             </span>
             We’re here for you
           </span>
-          <h1 className="mt-3.5 max-w-[720px] text-[40px] font-medium leading-[1.02] tracking-[-0.075em] text-slate-950 sm:text-[52px]">
+          <h1 className="mt-3.5 max-w-[720px] text-[42px] font-medium leading-[1.02] tracking-[-0.075em] text-slate-950 sm:text-[54px]">
             Let’s talk.
             <br />
             We’re here to help.
           </h1>
-          <p className="mt-3 max-w-[620px] text-[15px] font-medium leading-7 text-slate-600">
+          <p className="mt-3 max-w-[660px] text-[17px] font-medium leading-8 text-slate-600">
             Whether you have a question, need support, or want to talk business
             — our team is ready to assist you.
           </p>
@@ -1679,7 +1541,7 @@ function ContactPanel() {
           href="mailto:support@avenueboard.com"
           items={[
             "Account or payment questions",
-            "Tenant and landlord portal help",
+            "Tenant and Landlord Board help",
             "Feedback, improvements, or product questions",
             "Response within 3 business days",
           ]}
@@ -1755,15 +1617,15 @@ function ContactCard({
           <Icon size={30} strokeWidth={1.9} />
         </span>
         <div>
-          <h2 className="text-[22px] font-semibold tracking-[-0.045em] text-slate-950">
+          <h2 className="text-[23px] font-semibold tracking-[-0.045em] text-slate-950">
             {title}
           </h2>
-          <p className="mt-2 max-w-[560px] text-[14px] font-medium leading-6 text-zinc-600">
+          <p className="mt-2 max-w-[600px] text-[16px] font-medium leading-7 text-zinc-600">
             {text}
           </p>
           <a
             href={href}
-            className={`mt-4 inline-flex items-center gap-3 text-[16px] font-semibold tracking-[-0.025em] ${
+            className={`mt-4 inline-flex items-center gap-3 text-[17px] font-semibold tracking-[-0.025em] ${
               isBusiness ? "text-[#1E40AF]" : "text-blue-700"
             }`}
           >
@@ -1781,7 +1643,7 @@ function ContactCard({
                 isBusiness ? "bg-[#1E40AF]" : "bg-slate-900"
               }`}
             />
-            <p className="text-[13.5px] font-medium leading-[1.55] text-zinc-600">
+            <p className="text-[15px] font-medium leading-[1.6] text-zinc-600">
               {item}
             </p>
           </div>
@@ -1790,7 +1652,7 @@ function ContactCard({
 
       <a
         href={href}
-        className={`mt-5 flex h-11 items-center justify-center gap-3 rounded-2xl text-[14px] font-semibold text-white transition ${
+        className={`mt-5 flex h-11 items-center justify-center gap-3 rounded-2xl text-[14.5px] font-semibold text-white transition ${
           isBusiness
             ? "bg-[#1E40AF] hover:bg-[#1E3A8A]"
             : "bg-[#0F172A] hover:bg-[#172033]"
@@ -1968,16 +1830,6 @@ function CreateCaseModal({
   );
 }
 
-function getDashboardItems(user: SupportUser | null) {
-  if (!user) return [];
-
-  const items: { label: string; href: string }[] = [];
-  if (user.hasLandlordRole) items.push({ label: "Landlord Portal", href: "/dashboard" });
-  if (user.hasTenantAccess) items.push({ label: "Tenant Portal", href: "/tenant" });
-
-  return items.length ? items : [{ label: "Select Mode", href: "/select-mode" }];
-}
-
 function getInitials(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -2116,11 +1968,11 @@ function caseIssueSummary(ticket: SupportTicket) {
     category.includes("account") ||
     searchableText.includes("login") ||
     searchableText.includes("access") ||
-    searchableText.includes("tenant portal") ||
+    searchableText.includes("Resident Board") ||
     searchableText.includes("dashboard")
   ) {
     return searchableText.includes("tenant")
-      ? "Tenant Portal Access Issue"
+      ? "Resident Board Access Issue"
       : "Account Configuration Help";
   }
 
@@ -2133,11 +1985,11 @@ function caseIssueSummary(ticket: SupportTicket) {
   }
 
   if (
-    searchableText.includes("landlord portal") ||
+    searchableText.includes("Landlord Board") ||
     searchableText.includes("property") ||
     searchableText.includes("invite tenant")
   ) {
-    return "Landlord Portal Assistance";
+    return "Landlord Board Assistance";
   }
 
   return "General Support Request";

@@ -5,6 +5,7 @@ import {
   detectPriority,
   detectSupportCategory,
   shouldCreateTicket,
+  supportDebugLog,
   storeSupportEvent,
   type ChatMessageInput,
   type SupportCategory,
@@ -83,7 +84,7 @@ export function detectAvaAction(
   const text = message.trim().toLowerCase();
   const ticketState = normalizeTicketState(pendingTicketDraft?.status);
 
-  console.log("Ava ticket flow state", {
+  supportDebugLog("Ava ticket flow state", {
     currentTicketState: ticketState,
     hasPendingTicketDraft: Boolean(pendingTicketDraft),
   });
@@ -128,7 +129,7 @@ export function detectAvaAction(
 export async function executeAvaAction(
   input: ExecuteAvaActionInput
 ): Promise<AvaActionResult> {
-  console.log("Ava selected action", {
+  supportDebugLog("Ava selected action", {
     action: input.action,
     currentTicketState: normalizeTicketState(input.pendingTicketDraft?.status),
     hasPendingTicketDraft: Boolean(input.pendingTicketDraft),
@@ -190,7 +191,7 @@ function prepareSupportTicketAction(input: ExecuteAvaActionInput): AvaActionResu
       originalUserMessage: input.message,
     };
 
-    console.log("Ava ticket state transition", {
+    supportDebugLog("Ava ticket state transition", {
       from: currentState,
       to: "collecting_ticket_details",
       pendingTicketDraft,
@@ -225,7 +226,7 @@ function prepareSupportTicketAction(input: ExecuteAvaActionInput): AvaActionResu
     conversationSummary: summary.conversationSummary,
   };
 
-  console.log("Ava ticket state transition", {
+  supportDebugLog("Ava ticket state transition", {
     from: currentState,
     to: "awaiting_ticket_confirmation",
     pendingTicketDraft,
@@ -260,7 +261,7 @@ async function confirmSupportTicketAction(input: ExecuteAvaActionInput) {
     };
   }
 
-  console.log("Ava support ticket confirmation requested", {
+  supportDebugLog("Ava support ticket confirmation requested", {
     userId: input.userId,
     profileId: input.profileId,
     conversationId: input.conversationId,
@@ -313,7 +314,7 @@ async function confirmSupportTicketAction(input: ExecuteAvaActionInput) {
     },
   });
 
-  console.log("Ava ticket creation success", {
+  supportDebugLog("Ava ticket creation success", {
     ticketNumber: ticket.ticket_number,
     category: ticket.category,
     priority: ticket.priority,
@@ -395,13 +396,13 @@ function buildIssueSummary(issueText: string, category: SupportCategory) {
     return "Unable to set up AutoPay.";
   }
   if (/cannot access lease|can't access lease|cant access lease|lease.+not (opening|loading|available)/.test(text)) {
-    return "Tenant is having trouble accessing the lease.";
+    return "Resident is having trouble accessing the lease.";
   }
   if (/document missing|document.+not (opening|loading|available)|can't download|cannot download/.test(text)) {
-    return "Tenant is having trouble with a lease/property document.";
+    return "Resident is having trouble with a lease/property document.";
   }
   if (/invite|invitation/.test(text)) {
-    return "Tenant invitation or onboarding issue.";
+    return "Resident invitation or onboarding issue.";
   }
   if (/login|password|locked out|account/.test(text)) {
     return "Account access issue.";
@@ -413,7 +414,7 @@ function buildIssueSummary(issueText: string, category: SupportCategory) {
     return "Tenant notes issue.";
   }
   if (category === "technical_issue") {
-    return "Technical issue in the AvenueBoard portal.";
+    return "Technical issue in AvenueBoard.";
   }
 
   return "General AvenueBoard support request.";
@@ -453,7 +454,7 @@ function buildLeaseInformationReply(context?: TenantSupportContext) {
   const leaseStatus = context?.leaseStatus || "not available";
   const property = context?.propertyLabel || "your selected property";
 
-  return `For ${property}, the lease status I can see is ${leaseStatus}. You can open the Lease Status card on the tenant dashboard for the full lease view.`;
+  return `For ${property}, the lease status I can see is ${leaseStatus}. You can open the Lease Status card on the Resident Board for the full lease view.`;
 }
 
 function buildPaymentInformationReply(context?: TenantSupportContext) {
@@ -464,7 +465,7 @@ function buildPaymentInformationReply(context?: TenantSupportContext) {
   const dueDate = context?.dueDate || "not available";
   const paymentStatus = context?.paymentStatus || "not available";
 
-  return `Here’s what I can see right now: monthly rent is ${rent}, due date is ${dueDate}, and payment status is ${paymentStatus}. For more detail, open Payment Progress or All history on the tenant dashboard.`;
+  return `Here’s what I can see right now: monthly rent is ${rent}, due date is ${dueDate}, and payment status is ${paymentStatus}. For more detail, open Payment Progress or All history on the Resident Board.`;
 }
 
 function buildDocumentInformationReply(context?: TenantSupportContext) {
@@ -474,16 +475,16 @@ function buildDocumentInformationReply(context?: TenantSupportContext) {
       : null;
 
   if (count === null) {
-    return "Property Documents are supported in the tenant dashboard. I’m not sure how many documents are available for this lease right now, so please check the Property Documents section to verify.";
+    return "Property Documents are supported in the Resident Board. I’m not sure how many documents are available for this lease right now, so please check the Property Documents section to verify.";
   }
 
-  return `Property Documents are supported for this lease. I can see ${count} document${count === 1 ? "" : "s"} in the current dashboard context. You can use View or Download in the Property Documents section.`;
+  return `Property Documents are supported for this lease. I can see ${count} document${count === 1 ? "" : "s"} in the current board context. You can use View or Download in the Property Documents section.`;
 }
 
 function buildNotesReply(context?: TenantSupportContext) {
   if (context?.notesEnabled === false) {
-    return "I’m not sure notes are enabled for this account. Please check the tenant dashboard, or I can create a support case if the Notes section is missing.";
+    return "I’m not sure notes are enabled for this account. Please check the Resident Board, or I can create a support case if the Notes section is missing.";
   }
 
-  return "Notes are supported in the tenant dashboard. Private notes are only visible to the tenant who created them, and shared notes can be visible between you and the landlord for the same lease/property. You can check the Notes section on the tenant dashboard.";
+  return "Notes are supported in the Resident Board. Private notes are only visible to the resident who created them, and shared notes can be visible between you and the landlord for the same lease/property. You can check the Notes section on the Resident Board.";
 }

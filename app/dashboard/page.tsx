@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { LandlordMobileHome } from "@/components/mobile/landlord/LandlordMobileDashboard";
+import {
+  deleteLandlordPropertyCascade,
+  getDeletePropertyErrorMessage,
+} from "@/lib/dashboard/deleteLandlordProperty";
 
 type ActivityLog = {
   id: string;
@@ -43,6 +47,7 @@ export default function DashboardPage() {
 
   const [properties, setProperties] = useState<DashboardProperty[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [profileId, setProfileId] = useState("");
   const [landlordName, setLandlordName] = useState("");
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -84,6 +89,7 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
         }
 
         const profile = await getOrCreateProfile();
+        setProfileId(profile.id);
         setLandlordName(
           profile.display_name || profile.email?.split("@")[0] || "Landlord"
         );
@@ -151,6 +157,37 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
     loadDashboard();
   }, [router]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+
+      if (
+        target instanceof Element &&
+        target.closest("[data-property-card-menu]")
+      ) {
+        return;
+      }
+
+      setOpenMenuId(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenMenuId(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openMenuId]);
+
   const totalMonthlyRent = properties.reduce((sum, property) => {
     const lease = property.leases?.[0];
     return sum + Number(lease?.monthly_rent || 0);
@@ -199,29 +236,11 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
     setDeleting(true);
 
     try {
-      const leaseIds = (deleteProperty.leases || []).map((lease) => lease.id);
-
-      await supabase
-        .from("activity_logs")
-        .delete()
-        .eq("property_id", deleteProperty.id);
-
-      await supabase.from("expenses").delete().eq("property_id", deleteProperty.id);
-
-      if (leaseIds.length > 0) {
-        await supabase.from("lease_tenants").delete().in("lease_id", leaseIds);
-        await supabase.from("lease_amounts").delete().in("lease_id", leaseIds);
-        await supabase.from("lease_preferences").delete().in("lease_id", leaseIds);
-        await supabase.from("lease_documents").delete().in("lease_id", leaseIds);
-        await supabase.from("leases").delete().in("id", leaseIds);
-      }
-
-      const { error } = await supabase
-        .from("properties")
-        .delete()
-        .eq("id", deleteProperty.id);
-
-      if (error) throw error;
+      await deleteLandlordPropertyCascade({
+        propertyId: deleteProperty.id,
+        ownerProfileId: profileId,
+        knownLeaseIds: (deleteProperty.leases || []).map((lease) => lease.id),
+      });
 
       setProperties((prev) =>
         prev.filter((item) => item.id !== deleteProperty.id)
@@ -234,8 +253,8 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
       setDeleteProperty(null);
       setOpenMenuId(null);
     } catch (error) {
-      console.error("Delete property error:", error);
-      alert("Unable to delete this property. Please try again.");
+      console.warn("Delete property error:", error);
+      alert(getDeletePropertyErrorMessage(error));
     } finally {
       setDeleting(false);
     }
@@ -243,9 +262,19 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
 
   async function handleConnectBank(propertyId: string) {
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        alert("Please sign in again before connecting your bank account.");
+        return;
+      }
+
       const response = await fetch("/api/stripe/connect-account", {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -270,7 +299,7 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-        Loading dashboard...
+        Loading Board...
       </div>
     );
   }
@@ -297,8 +326,8 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
           <EmptyDashboard onAdd={() => router.push("/dashboard/add-property")} />
         </div>
       ) : (
-        <div className="mt-3 hidden min-h-0 gap-4 overflow-visible lg:grid lg:h-[calc(100%-12px)] lg:grid-cols-[1fr_326px] lg:gap-5 lg:overflow-hidden">
-          <div className="min-h-0 overflow-visible lg:overflow-y-auto lg:pr-2">
+        <div className="mt-3 hidden min-h-0 gap-4 overflow-visible lg:grid lg:h-[calc(100%-12px)] lg:grid-cols-[1fr_326px] lg:gap-5 lg:overflow-visible">
+          <div className="-mt-3 min-h-0 overflow-visible pt-3 lg:overflow-y-auto lg:pr-2">
             <div className="grid grid-cols-1 gap-3.5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
               {properties.map((property) => (
                 <PropertyCard
@@ -604,9 +633,19 @@ function PropertyCard({
 
   const rent = Number(lease?.monthly_rent || 0);
   const bankConnected = property.bank_status === "connected";
+  const paymentStatus = String(lease?.payment_status || "").toLowerCase();
+  const bankPending = !bankConnected;
+  const tenantSetupIncomplete =
+    !lease || !lease.lease_tenants?.length || lease.lease_status === "draft";
+  const leaseActionNeeded = leaseStatus.showExtend;
+  const paymentIssue = paymentStatus === "late" || paymentStatus === "failed";
+  const actionNeeded =
+    bankPending || tenantSetupIncomplete || leaseActionNeeded || paymentIssue;
 
   const borderColor =
-    leaseStatus.label === "Expired"
+    actionNeeded
+      ? "border-l-[#2563EB]"
+      : leaseStatus.label === "Expired"
       ? "border-l-red-400"
       : leaseStatus.label === "Ending Soon"
       ? "border-l-blue-400"
@@ -622,7 +661,7 @@ function PropertyCard({
   return (
     <div
       onClick={onOpen}
-      className={`group relative cursor-pointer rounded-[20px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)]`}
+      className={`group relative cursor-pointer rounded-[20px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:z-[60] hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)] focus-within:z-[60]`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -635,7 +674,7 @@ function PropertyCard({
           </p>
         </div>
 
-        <div className="relative shrink-0">
+        <div className="relative shrink-0" data-property-card-menu>
           <button
             type="button"
             onClick={(e) => {
@@ -693,15 +732,15 @@ function PropertyCard({
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-full px-3 py-1 text-[11px] font-semibold ${leaseStatus.badgeClass}`}
-        >
-          {leaseStatus.label}
-        </span>
-
-        {!bankConnected && (
-          <span className="rounded-full bg-blue-50/60 px-3 py-1 text-[10px] font-semibold text-blue-600">
+        {actionNeeded ? (
+          <span className="rounded-full border border-blue-100 bg-blue-50/80 px-3 py-1 text-[11px] font-semibold text-[#2563EB]">
             Action Needed
+          </span>
+        ) : (
+          <span
+            className={`rounded-full px-3 py-1 text-[11px] font-semibold ${leaseStatus.badgeClass}`}
+          >
+            {leaseStatus.label}
           </span>
         )}
       </div>
@@ -723,7 +762,7 @@ function PropertyCard({
               e.stopPropagation();
               onConnectBank();
             }}
-            className="h-[36px] flex-1 rounded-2xl bg-[#B9476D] text-[12px] font-semibold text-white transition hover:bg-[#A93F64]"
+            className="h-[36px] flex-1 rounded-2xl bg-[#2563EB] text-[12px] font-semibold text-white transition hover:bg-[#1D4ED8]"
           >
             Connect
           </button>
@@ -827,7 +866,7 @@ function DeletePropertyModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[240] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
       <div className="w-full max-w-[460px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-[22px] font-semibold text-red-600">
           !

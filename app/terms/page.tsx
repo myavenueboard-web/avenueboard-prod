@@ -50,9 +50,11 @@ export default function TermsPage() {
             </LegalSection>
 
             <LegalSection title="6. Fees">
-              Certain setup or service fees may apply depending on the lease
-              term, payment setup, or selected preferences. Any applicable fees
-              should be disclosed before completion.
+              Residents may pay a $10 monthly Resident Platform Fee unless the
+              landlord or property manager chooses to absorb it. Card processing
+              fees may apply through the payment processor when card payments
+              are used. Any applicable fees should be disclosed before
+              completion.
             </LegalSection>
 
             <LegalSection title="7. Documents">

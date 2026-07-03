@@ -1,15 +1,30 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
+import AuthOAuthButton from "@/app/components/AuthOAuthButton";
 import { supabase } from "@/lib/supabase";
+
+function getSafeInternalRedirect(value: string | null) {
+  if (!value) return "";
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+  if (value.includes("\\") || value.includes("://")) return "";
+  return value;
+}
+
+function getFriendlyOAuthError(provider: "google" | "apple") {
+  const providerName = provider === "google" ? "Google" : "Apple";
+  return `${providerName} sign-up could not be completed. Please try again or create an account with email and password.`;
+}
 
 export default function SignupClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const redirectPath = searchParams.get("redirect") || "/dashboard";
+  const redirectPath =
+    getSafeInternalRedirect(searchParams.get("redirect")) || "/dashboard";
   const prefilledEmail = searchParams.get("email") || "";
 
   const [fullName, setFullName] = useState("");
@@ -19,6 +34,9 @@ export default function SignupClient() {
 
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(
+    null
+  );
 
   const checks = useMemo(() => {
     return {
@@ -29,7 +47,7 @@ export default function SignupClient() {
   }, [password]);
 
   const inputClass =
-    "mt-3 h-[54px] w-full rounded-2xl border border-zinc-300 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#CA6180] focus:ring-4 focus:ring-[#CA6180]/10 sm:h-[56px] sm:px-5";
+    "mt-3 h-[52px] w-full rounded-2xl border border-zinc-200 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70 sm:h-[56px] sm:px-5";
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -104,7 +122,7 @@ export default function SignupClient() {
 
     if (redirectPath.includes("/tenant/accept-invite")) {
       setMessage(
-        "Account created successfully. Please confirm your email, then log in to continue your tenant invitation."
+        "Account created successfully. Please confirm your email, then log in to continue your resident invitation."
       );
       return;
     }
@@ -112,6 +130,31 @@ export default function SignupClient() {
     setMessage(
       "Account created. Please check your email to confirm your account."
     );
+  }
+
+  async function handleOAuth(provider: "google" | "apple") {
+    setMessage("");
+    setOauthLoading(provider);
+
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", redirectPath);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: callbackUrl.toString(),
+        queryParams: prefilledEmail
+          ? {
+              login_hint: prefilledEmail,
+            }
+          : undefined,
+      },
+    });
+
+    if (error) {
+      setOauthLoading(null);
+      setMessage(getFriendlyOAuthError(provider));
+    }
   }
 
   function goToLogin() {
@@ -129,23 +172,38 @@ export default function SignupClient() {
   }
 
   return (
-    <AuthLayout>
+    <AuthLayout showLogo={false}>
       <div className="w-full">
-        <h1 className="text-[34px] font-semibold tracking-[-0.05em] text-[#0F172A] sm:text-[42px]">
-          Create your account
+        <h1 className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[27px] font-semibold tracking-[-0.055em] text-[#0F172A] sm:flex-nowrap sm:text-[31px]">
+          <span>Create your</span>
+          <Link
+            href="/latest-landing"
+            aria-label="AvenueBoard home"
+            className="shrink-0"
+          >
+            <img
+              src="/logo.png"
+              alt="AvenueBoard"
+              className="relative -top-[2px] mt-1 h-11 w-auto object-contain sm:h-12"
+            />
+          </Link>
+          <span>account</span>
         </h1>
 
         {redirectPath.includes("/tenant/accept-invite") && (
-          <div className="mt-5 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F] sm:mt-6">
+          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-[13px] leading-6 text-blue-800">
             Create your account using the same email address that received your
-            tenant invitation.
+            resident invitation.
           </div>
         )}
 
-        <form onSubmit={handleSignup} className="mt-7 space-y-4 sm:mt-8">
+        <form
+          onSubmit={handleSignup}
+          className="mx-auto mt-7 w-full max-w-[460px] space-y-3.5"
+        >
           <div>
             <label className="text-[14px] font-medium text-zinc-700">
-              Full Name
+              Full name
             </label>
 
             <input
@@ -160,7 +218,7 @@ export default function SignupClient() {
 
           <div>
             <label className="text-[14px] font-medium text-zinc-700">
-              Email Address
+              Email
             </label>
 
             <input
@@ -179,7 +237,7 @@ export default function SignupClient() {
 
             {prefilledEmail && (
               <p className="mt-2 text-[12px] text-zinc-400">
-                This email is locked to match your tenant invitation.
+                This email is locked to match your resident invitation.
               </p>
             )}
           </div>
@@ -226,34 +284,65 @@ export default function SignupClient() {
             </div>
           )}
 
+          <p className="text-center text-[12px] leading-6 text-zinc-500">
+            By creating an account, you agree to our{" "}
+            <Link
+              href="/terms"
+              className="font-semibold text-slate-700 hover:text-slate-950 hover:underline hover:underline-offset-4"
+            >
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/privacy"
+              className="font-semibold text-slate-700 hover:text-slate-950 hover:underline hover:underline-offset-4"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </p>
+
           <button
             type="submit"
             disabled={loading}
-            className="mt-3 h-[54px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:opacity-60 sm:h-[58px]"
+            className="h-[52px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#172033] hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
 
-        <div className="my-6 flex items-center gap-4">
+        <div className="mx-auto my-5 flex w-full max-w-[460px] items-center gap-4">
           <div className="h-px flex-1 bg-zinc-200" />
-          <span className="shrink-0 text-[12px] text-zinc-400 sm:text-[13px]">
-            Or continue with
+          <span className="shrink-0 text-[12px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+            OR
           </span>
           <div className="h-px flex-1 bg-zinc-200" />
         </div>
 
-        <button className="h-[50px] w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md sm:h-[52px]">
-          Continue with Google
-        </button>
+        <div className="mx-auto grid w-full max-w-[460px] gap-3">
+          <AuthOAuthButton
+            provider="google"
+            label="Continue with Google"
+            loading={oauthLoading === "google"}
+            disabled={loading || Boolean(oauthLoading)}
+            onClick={() => handleOAuth("google")}
+          />
+          <AuthOAuthButton
+            provider="apple"
+            label="Continue with Apple"
+            loading={oauthLoading === "apple"}
+            disabled={loading || Boolean(oauthLoading)}
+            onClick={() => handleOAuth("apple")}
+          />
+        </div>
 
-        <p className="mt-6 text-center text-[14px] leading-6 text-zinc-500">
+        <p className="mt-5 text-center text-[14px] leading-6 text-zinc-500">
           Already have an account?{" "}
           <button
             onClick={goToLogin}
-            className="font-semibold text-[#CA6180] hover:opacity-80"
+            className="font-semibold text-[#2563EB] transition hover:text-[#1D4ED8] hover:underline hover:underline-offset-4"
           >
-            Sign In
+            Sign in
           </button>
         </p>
       </div>

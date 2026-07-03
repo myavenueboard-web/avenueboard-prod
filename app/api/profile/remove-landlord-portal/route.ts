@@ -16,6 +16,17 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const LANDLORD_PORTAL_USAGE_ACTIVITY_TYPES = [
+  "property_added",
+  "tenant_added",
+  "bank_pending",
+  "property_updated",
+  "tenant_invite_resent",
+  "payment_request_sent",
+  "lease_updated",
+  "lease_extended",
+];
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, message }, { status });
 }
@@ -66,7 +77,8 @@ export async function POST(request: Request) {
   const [
     { data: roles, error: rolesError },
     { count: tenantAccessCount, error: tenantAccessError },
-    { count: activePropertyCount, error: activePropertyError },
+    { count: landlordPropertyCount, error: landlordPropertyError },
+    { count: landlordActivityCount, error: landlordActivityError },
   ] = await Promise.all([
     supabaseAdmin
       .from("user_roles")
@@ -80,13 +92,18 @@ export async function POST(request: Request) {
     supabaseAdmin
       .from("properties")
       .select("id", { count: "exact", head: true })
-      .eq("owner_profile_id", profile.id)
-      .eq("status", "active"),
+      .eq("owner_profile_id", profile.id),
+    supabaseAdmin
+      .from("activity_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", profile.id)
+      .in("activity_type", LANDLORD_PORTAL_USAGE_ACTIVITY_TYPES),
   ]);
 
   if (rolesError) return jsonError("Unable to verify account roles.", 500);
-  if (tenantAccessError) return jsonError("Unable to verify tenant portal access.", 500);
-  if (activePropertyError) return jsonError("Unable to verify property ownership.", 500);
+  if (tenantAccessError) return jsonError("Unable to verify Resident Board access.", 500);
+  if (landlordPropertyError) return jsonError("Unable to verify property ownership.", 500);
+  if (landlordActivityError) return jsonError("Unable to verify Landlord Board activity.", 500);
 
   const roleList = (roles || []).map((item) => item.role);
   const hasLandlordRole = roleList.includes("landlord");
@@ -94,19 +111,19 @@ export async function POST(request: Request) {
   const hasTenantAccess = (tenantAccessCount || 0) > 0;
 
   if (!hasLandlordRole) {
-    return jsonError("Landlord portal is already removed.", 409);
+    return jsonError("Landlord Board is already removed.", 409);
   }
 
   if (!hasTenantRole && !hasTenantAccess) {
     return jsonError(
-      "You need another active portal before removing landlord access.",
+      "You need another active Board before removing landlord access.",
       409
     );
   }
 
-  if ((activePropertyCount || 0) > 0) {
+  if ((landlordPropertyCount || 0) > 0 || (landlordActivityCount || 0) > 0) {
     return jsonError(
-      "This landlord portal owns active properties. Transfer or archive those properties before removing landlord access.",
+      "This Landlord Board has property data or activity and cannot be removed.",
       409
     );
   }
@@ -118,7 +135,7 @@ export async function POST(request: Request) {
     .eq("role", "landlord");
 
   if (deleteError) {
-    return jsonError("Unable to remove landlord portal. Please try again.", 500);
+    return jsonError("Unable to remove Landlord Board. Please try again.", 500);
   }
 
   const { count: remainingLandlordRoles, error: verifyError } =
@@ -129,11 +146,11 @@ export async function POST(request: Request) {
       .eq("role", "landlord");
 
   if (verifyError) {
-    return jsonError("Unable to verify landlord portal removal.", 500);
+    return jsonError("Unable to verify Landlord Board removal.", 500);
   }
 
   if ((remainingLandlordRoles || 0) > 0) {
-    return jsonError("Unable to remove landlord portal. Please try again.", 409);
+    return jsonError("Unable to remove Landlord Board. Please try again.", 409);
   }
 
   const { error: metadataError } =
@@ -146,7 +163,7 @@ export async function POST(request: Request) {
     });
 
   if (metadataError) {
-    return jsonError("Landlord portal was removed, but account state could not be refreshed.", 500);
+    return jsonError("Landlord Board was removed, but account state could not be refreshed.", 500);
   }
 
   return NextResponse.json({ ok: true });

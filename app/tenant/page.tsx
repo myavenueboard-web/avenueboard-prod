@@ -39,6 +39,7 @@ import {
   ViewAllNotesModal,
   ViewMoreActivitiesModal,
 } from "@/components/tenant/TenantDashboardComponents";
+import ProfileSettingsPanel from "@/app/components/dashboard/ProfileSettingsPanel";
 import SupportChat from "@/components/support/SupportChat";
 
 type SupabaseLikeError = {
@@ -66,11 +67,15 @@ type StripeReturnNotice = {
 } | null;
 
 type PayEarlyPreview = {
+  tenantAccessId: string;
   rentCycleKey: string;
   monthLabel: string;
   rentAmountCents: number;
+  landlordAbsorbsFee: boolean;
   tenantServiceFeeCents: number;
+  applicationFeeCents: number;
   totalAmountCents: number;
+  feePayer: "resident" | "landlord";
   isFutureCycle: boolean;
 } | null;
 
@@ -303,6 +308,7 @@ export default function TenantDashboardPage() {
   const [hasLandlordRole, setHasLandlordRole] = useState(false);
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [leaseSwitcherOpen, setLeaseSwitcherOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
@@ -331,6 +337,8 @@ export default function TenantDashboardPage() {
   const [deletingNoteId, setDeletingNoteId] = useState("");
   const [deletingDocumentId, setDeletingDocumentId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const leaseSwitcherRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -338,6 +346,7 @@ export default function TenantDashboardPage() {
   const [userInfo, setUserInfo] = useState<UserInfo>({
     name: "Tenant",
     email: "",
+    created_at: null,
   });
 
   useEffect(() => {
@@ -362,7 +371,15 @@ export default function TenantDashboardPage() {
             user.email?.split("@")[0] ||
             "Tenant",
           email: user.email || profile?.email || "",
+          created_at: profile?.created_at || null,
         });
+        setDisplayName(
+          profile?.display_name ||
+            user.user_metadata?.full_name ||
+            user.email?.split("@")[0] ||
+            "Tenant"
+        );
+        setPhone(profile?.phone || "");
 
         const { data: roleData } = await supabase
           .from("user_roles")
@@ -412,7 +429,9 @@ export default function TenantDashboardPage() {
 
           supabase
             .from("leases")
-            .select("id, start_date, end_date, monthly_rent, rent_due_day")
+            .select(
+              "id, start_date, end_date, lease_setup_type, payment_tracking_start_date, created_at, lease_status, ended_at, monthly_rent, rent_due_day"
+            )
             .in("id", leaseIds),
 
           supabase
@@ -488,6 +507,13 @@ export default function TenantDashboardPage() {
             unit_name: property?.unit_name || null,
             start_date: lease?.start_date || null,
             end_date: lease?.end_date || null,
+            lease_setup_type: lease?.lease_setup_type || null,
+            payment_tracking_start_date:
+              lease?.payment_tracking_start_date || null,
+            lease_created_at: lease?.created_at || null,
+            tenant_access_created_at: access.created_at || null,
+            lease_status: lease?.lease_status || null,
+            ended_at: lease?.ended_at || null,
             monthly_rent: Number(lease?.monthly_rent || 0),
             rent_due_day: lease?.rent_due_day || null,
           };
@@ -590,6 +616,12 @@ export default function TenantDashboardPage() {
         title: "AutoPay setup could not be completed",
         text: "Please try again or contact support if the issue continues.",
       };
+    } else if (autopay === "lease_ended") {
+      notice = {
+        type: "warning",
+        title: "Lease ended",
+        text: "Online rent payments are no longer available for this lease.",
+      };
     }
 
     if (notice) {
@@ -657,6 +689,35 @@ export default function TenantDashboardPage() {
     }
   }
 
+  async function handleSaveProfile() {
+    if (!profileId) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        display_name: displayName,
+        phone,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", profileId);
+
+    if (error) {
+      console.error("Tenant profile update error:", error);
+      return;
+    }
+
+    setUserInfo((prev) => ({
+      ...prev,
+      name: displayName || prev.name,
+    }));
+    setProfileSettingsOpen(false);
+  }
+
+  async function handleTenantLogout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
   const selectedPropertyContact =
     propertyContacts.find(
       (contact) => contact.id === selectedLease?.owner_profile_id
@@ -709,7 +770,7 @@ export default function TenantDashboardPage() {
       userName: userInfo.name,
       tenantName: userInfo.name,
       role: "tenant",
-      tenantStatus: selectedLease ? "active" : "pending",
+      tenantStatus: isTenantLeaseEnded(selectedLease) ? "ended" : selectedLease ? "active" : "pending",
       currentPage: "tenant_dashboard",
       productCapabilities: {
         shared_notes: true,
@@ -724,7 +785,11 @@ export default function TenantDashboardPage() {
       propertyId: selectedLease?.property_id || null,
       leaseId: selectedLease?.lease_id || null,
       propertyLabel: selectedLease?.property_label || null,
-      leaseStatus: selectedLease ? "active" : null,
+      leaseStatus: isTenantLeaseEnded(selectedLease)
+        ? "ended"
+        : selectedLease
+        ? "active"
+        : null,
       monthlyRent: selectedLease ? Number(selectedLease.monthly_rent || 0) : null,
       rentAmount: selectedLease
         ? `$${Number(selectedLease.monthly_rent || 0).toLocaleString()}`
@@ -823,8 +888,17 @@ export default function TenantDashboardPage() {
   const unreadNotificationCount = visibleNotifications.length;
 
   const selectedAutoPayMethod =
-    selectedPaymentMethods.find((method) => method.is_default) ||
-    selectedPaymentMethods[0];
+    selectedPaymentMethods.find(
+      (method) =>
+        method.autopay_enrolled !== false &&
+        String(method.autopay_status || "").toLowerCase() !== "disabled" &&
+        method.is_default
+    ) ||
+    selectedPaymentMethods.find(
+      (method) =>
+        method.autopay_enrolled !== false &&
+        String(method.autopay_status || "").toLowerCase() !== "disabled"
+    );
 
   async function startTenantStripeFlow(
     action: "pay-now" | "autopay",
@@ -838,6 +912,13 @@ export default function TenantDashboardPage() {
       return;
     }
 
+    if (isTenantLeaseEnded(selectedLease)) {
+      setPaymentActionError(
+        "Online rent payments are no longer available for this lease."
+      );
+      return;
+    }
+
     if (action === "pay-now" && Number(selectedLease.monthly_rent || 0) <= 0) {
       setPaymentActionError("Rent amount is unavailable for this lease.");
       return;
@@ -845,6 +926,9 @@ export default function TenantDashboardPage() {
 
     setPaymentAction(action);
     setPaymentActionError("");
+    if (route === "/api/stripe/tenant/pay-now/preview") {
+      setPayEarlyPreview(null);
+    }
 
     try {
       const {
@@ -872,6 +956,14 @@ export default function TenantDashboardPage() {
       const data = await response.json().catch(() => null);
 
       if (route === "/api/stripe/tenant/pay-now/preview") {
+        if (process.env.NODE_ENV === "development") {
+          console.info("Tenant Pay Now preview response", {
+            tenantAccessId: selectedLease.tenant_access_id,
+            leaseId: selectedLease.lease_id,
+            previewResponse: data,
+          });
+        }
+
         if (!response.ok || !data?.cycle) {
           setPaymentActionError(
             data?.error || "No rent payment is due right now."
@@ -901,6 +993,68 @@ export default function TenantDashboardPage() {
       setPaymentActionError("Unable to start Stripe checkout. Please try again.");
     } finally {
       setPaymentAction(null);
+    }
+  }
+
+  async function handleDisableAutoPay() {
+    if (!selectedLease) {
+      setPaymentActionError("Select an active lease before updating AutoPay.");
+      return false;
+    }
+
+    setPaymentActionError("");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setPaymentActionError("Please sign in again before continuing.");
+        return false;
+      }
+
+      const response = await fetch("/api/stripe/tenant/autopay", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          tenantAccessId: selectedLease.tenant_access_id,
+          propertyId: selectedLease.property_id,
+          leaseId: selectedLease.lease_id,
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        setPaymentActionError(
+          result?.error || "Unable to disable AutoPay right now."
+        );
+        return false;
+      }
+
+      setPaymentMethods((current) =>
+        current.map((method) =>
+          method.lease_id === selectedLease.lease_id &&
+          method.tenant_access_id === selectedLease.tenant_access_id
+            ? {
+                ...method,
+                autopay_status: "disabled",
+                autopay_enrolled: false,
+                is_default: false,
+              }
+            : method
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Tenant AutoPay disable error:", error);
+      setPaymentActionError("Unable to disable AutoPay right now.");
+      return false;
     }
   }
 
@@ -1333,12 +1487,26 @@ export default function TenantDashboardPage() {
 
     const allowedTypes = new Set([
       "application/pdf",
-      "image/jpeg",
-      "image/png",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "text/csv",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ]);
-    const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"];
+    const allowedExtensions = [
+      ".pdf",
+      ".doc",
+      ".docx",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".csv",
+      ".xls",
+      ".xlsx",
+    ];
     const lowerName = file.name.toLowerCase();
     const validExtension = allowedExtensions.some((extension) =>
       lowerName.endsWith(extension)
@@ -1355,7 +1523,9 @@ export default function TenantDashboardPage() {
     }
 
     if (!allowedTypes.has(file.type) && !validExtension) {
-      setDocumentError("Upload PDF, JPG, PNG, DOC, or DOCX files only.");
+      setDocumentError(
+        "Upload PDF, DOC, DOCX, PNG, JPG, CSV, XLS, or XLSX files only."
+      );
       return;
     }
 
@@ -1549,9 +1719,9 @@ export default function TenantDashboardPage() {
       setProfileOpen(false);
       router.push("/dashboard");
     } catch (error) {
-      console.error("Create landlord portal error:", error);
+      console.error("Create Landlord Board error:", error);
       setCreateLandlordError(
-        "Unable to create your landlord portal right now. You can try again or use mode selection."
+        "Unable to create your Landlord Board right now. You can try again or use mode selection."
       );
     } finally {
       setCreatingLandlordPortal(false);
@@ -1770,7 +1940,7 @@ export default function TenantDashboardPage() {
   if (loading) {
     return (
       <main className="flex h-screen items-center justify-center bg-[#F8FAFC] text-sm text-zinc-500">
-        Loading tenant portal...
+        Loading Resident Board...
       </main>
     );
   }
@@ -1785,7 +1955,7 @@ export default function TenantDashboardPage() {
 
   <div>
     <p className="text-[18px] font-normal tracking-[-0.045em] text-slate-600 sm:text-[19px]">
-      Tenant Portal
+      Resident Board
     </p>
     <p className="mt-0.5 max-w-[360px] truncate text-[12px] font-medium text-zinc-400">
 
@@ -2047,7 +2217,7 @@ export default function TenantDashboardPage() {
                     }}
                     className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
                   >
-                    Switch to landlord dashboard
+                    Switch to Landlord Board
                   </button>
                 ) : (
                   <button
@@ -2059,7 +2229,7 @@ export default function TenantDashboardPage() {
                     }}
                     className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
                   >
-                    Create landlord portal
+                    Create Landlord Board
                   </button>
                 )}
 
@@ -2067,6 +2237,7 @@ export default function TenantDashboardPage() {
                   type="button"
                   onClick={() => {
                     setProfileOpen(false);
+                    setProfileSettingsOpen(true);
                   }}
                   className="flex h-11 w-full items-center px-4 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
                 >
@@ -2109,8 +2280,8 @@ export default function TenantDashboardPage() {
             </h1>
             <p className="mt-3 max-w-[460px] text-[15px] font-medium leading-7 text-zinc-500">
               Your landlord invitation has not been connected yet. Open your
-              invite email and accept the invitation to access your tenant
-              portal.
+              invite email and accept the invitation to access your Resident
+              Board.
             </p>
           </div>
         </div>
@@ -2122,6 +2293,9 @@ export default function TenantDashboardPage() {
             lease={selectedLease}
             paymentMethods={selectedPaymentMethods}
             rentPayments={selectedRentPayments}
+            leaseDocuments={selectedDocuments}
+            propertyContact={selectedPropertyContact}
+            userInfo={userInfo}
             firstName={getFirstName(userInfo.name)}
             paymentAction={paymentAction}
             paymentActionError={paymentActionError}
@@ -2132,6 +2306,7 @@ export default function TenantDashboardPage() {
                 "/api/stripe/tenant/setup-autopay"
               )
             }
+            onDisableAutoPay={handleDisableAutoPay}
             />
 
             <NotesDocumentsCard
@@ -2187,7 +2362,26 @@ export default function TenantDashboardPage() {
     saving={savingNote}
     error={noteError}
   />
-)}
+      )}
+
+      <ProfileSettingsPanel
+        variant="tenant"
+        open={profileSettingsOpen}
+        onClose={() => setProfileSettingsOpen(false)}
+        user={userInfo}
+        displayName={displayName}
+        phone={phone}
+        setDisplayName={setDisplayName}
+        setPhone={setPhone}
+        onSave={handleSaveProfile}
+        onLogout={handleTenantLogout}
+        hasTenantPortal={leases.length > 0}
+        hasLandlordRole={hasLandlordRole}
+        removingLandlordPortal={false}
+        removeLandlordError=""
+        onClearRemoveLandlordError={() => undefined}
+        onRemoveLandlordPortal={async () => false}
+      />
 
       {deleteTarget && (
         <ConfirmDeleteModal
@@ -2238,10 +2432,10 @@ export default function TenantDashboardPage() {
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[430px] rounded-[28px] border border-zinc-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.20)]">
             <h2 className="text-[24px] font-medium tracking-[-0.05em] text-slate-950">
-              Create landlord portal?
+              Create Landlord Board?
             </h2>
             <p className="mt-3 text-[14px] font-medium leading-6 text-zinc-600">
-              A landlord portal is only needed if you manage or rent out a
+              A Landlord Board is only needed if you manage or rent out a
               property. You’ll be able to create properties, invite tenants,
               manage documents, and prepare rent collection from your
               AvenueBoard landlord workspace.
@@ -2273,7 +2467,7 @@ export default function TenantDashboardPage() {
                 disabled={creatingLandlordPortal}
                 className="h-11 rounded-2xl bg-[#0F172A] px-5 text-[13px] font-semibold text-white transition hover:bg-[#182338] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {creatingLandlordPortal ? "Creating..." : "Create landlord portal"}
+                {creatingLandlordPortal ? "Creating..." : "Create Landlord Board"}
               </button>
             </div>
           </div>
@@ -2406,6 +2600,23 @@ function PayEarlyConfirmationModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const residentPlatformFeeValue = preview.landlordAbsorbsFee
+    ? "$0 — absorbed by landlord"
+    : formatCents(preview.tenantServiceFeeCents ?? 1000);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+
+    console.info("Tenant Pay Now modal fee preview", {
+      tenantAccessId: preview.tenantAccessId,
+      cycleKey: preview.rentCycleKey,
+      previewLandlordAbsorbsFee: preview.landlordAbsorbsFee,
+      previewPlatformFeeResidentCents: preview.tenantServiceFeeCents,
+      previewApplicationFeeCents: preview.applicationFeeCents,
+      previewTotalCents: preview.totalAmountCents,
+    });
+  }, [preview]);
+
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
       <button
@@ -2431,8 +2642,8 @@ function PayEarlyConfirmationModal({
             value={formatCents(preview.rentAmountCents)}
           />
           <PayEarlyRow
-            label="AvenueBoard service fee"
-            value={formatCents(preview.tenantServiceFeeCents)}
+            label="AvenueBoard Platform Fee"
+            value={residentPlatformFeeValue}
           />
           <PayEarlyRow
             label="Total"
@@ -2490,4 +2701,13 @@ function formatCents(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function isTenantLeaseEnded(lease?: TenantLease | null) {
+  return (
+    Boolean(lease?.ended_at) ||
+    ["ended", "inactive", "terminated"].includes(
+      String(lease?.lease_status || "").toLowerCase()
+    )
+  );
 }

@@ -915,7 +915,7 @@ function WorkspaceStatusCard({
           Your property workspace is fully configured and ready for rent collection.
         </p>
         <div className="mt-4 space-y-2">
-          {["Bank account connected", "Tenant setup complete", "Lease active"].map(
+          {["Bank account connected", "Resident setup complete", "Lease active"].map(
             (item) => (
               <p
                 key={item}
@@ -1268,7 +1268,7 @@ function MobileTenantCard({
     return (
       <MobileEmptyState
         title="No tenant added yet"
-        subtitle="Invite a tenant to activate their dashboard access."
+        subtitle="Invite a tenant to activate their board access."
         actionLabel="Manage Tenant"
         onAction={onManageTenant}
       />
@@ -1299,7 +1299,7 @@ function MobileTenantCard({
             </span>
             {tenant.invite_status === "accepted" && (
               <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-700">
-                Dashboard enabled
+                Board enabled
               </span>
             )}
           </div>

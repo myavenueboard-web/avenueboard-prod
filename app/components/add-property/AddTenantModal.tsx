@@ -28,17 +28,17 @@ export default function AddTenantModal({
   const canAdd = additionalFirstName.trim() && additionalLastName.trim();
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-[500px] overflow-y-auto rounded-[28px] bg-white p-5 shadow-[0_24px_90px_rgba(15,23,42,0.25)] sm:p-6">
+    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-[500px] overflow-y-auto rounded-2xl bg-white p-5 shadow-[0_24px_90px_rgba(15,23,42,0.25)] sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-[20px] font-semibold tracking-[-0.04em] sm:text-[22px]">
               Add Additional Tenant
             </h2>
 
-            <p className="mt-2 text-[13px] leading-5 text-zinc-500">
+            <p className="mt-2 text-[14px] leading-6 text-zinc-500">
               Additional tenants are saved as optional contacts only. They will
-              not receive a portal invite.
+              not receive a board invite.
             </p>
           </div>
 
@@ -94,7 +94,7 @@ export default function AddTenantModal({
         <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
           <button
             onClick={onClose}
-            className="h-12 rounded-2xl border border-zinc-200 bg-white px-5 text-[14px] font-medium text-zinc-700"
+            className="h-12 rounded-xl border border-zinc-200 bg-white px-5 text-[15px] font-medium text-zinc-700"
           >
             Cancel
           </button>
@@ -102,9 +102,9 @@ export default function AddTenantModal({
           <button
             onClick={onAdd}
             disabled={!canAdd}
-            className={`h-12 rounded-2xl px-5 text-[14px] font-semibold ${
+            className={`h-12 rounded-xl px-5 text-[15px] font-semibold ${
               canAdd
-                ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+                ? "bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
                 : "cursor-not-allowed bg-zinc-100 text-zinc-400"
             }`}
           >

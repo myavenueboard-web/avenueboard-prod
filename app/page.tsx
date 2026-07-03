@@ -18,7 +18,7 @@ const [passcodeError, setPasscodeError] = useState("");
     return () => clearInterval(timer);
   }, []);
 
-  const previews = [{ label: "Landlord Dashboard" }, { label: "Tenant Portal" }];
+  const previews = [{ label: "Landlord Board" }, { label: "Resident Board" }];
 const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
   e.preventDefault();
 
@@ -119,7 +119,7 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
 
           <p className="mx-auto mt-6 max-w-[680px] text-[16px] leading-8 text-zinc-500 sm:text-[18px]">
             Collect rent, manage tenants, track lease details, store documents,
-            and stay organized from one clean dashboard.
+            and stay organized from one clean Board.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -146,7 +146,7 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
           <div className="overflow-hidden rounded-t-[32px] border border-zinc-200 bg-white p-3 shadow-[0_38px_120px_rgba(15,23,42,0.12)]">
             <Image
               src="/landlord.png"
-              alt="AvenueBoard landlord dashboard preview"
+              alt="AvenueBoard Landlord Board preview"
               width={1600}
               height={1000}
               priority
@@ -178,16 +178,16 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
 
           <div className="mt-10 grid gap-5 lg:grid-cols-3">
             <HowStepCard step="1" title="Add your property" description="Enter your property details, lease terms, rent amount, and important dates. Add one rental or build your entire portfolio." footerTitle="Unlimited properties" footerText="No limits. No caps. Ever." type="property" />
-            <HowStepCard step="2" title="Invite your tenant" description="Send a secure invite so your tenant can create their portal, review lease details, and set up payments in minutes." footerTitle="Tenant portal access" footerText="Secure, simple, and mobile-friendly." type="tenant" />
-            <HowStepCard step="3" title="Run everything" description="Track rent, monitor payments, send reminders, manage documents, and view reports — all from one clean dashboard." footerTitle="Everything in one place" footerText="Less admin, more clarity." type="dashboard" />
+            <HowStepCard step="2" title="Connect payments, then invite" description="Complete bank setup first. Once payouts are ready, AvenueBoard sends a secure invite so your resident can create their Resident Board." footerTitle="Resident Board access" footerText="Secure, simple, and mobile-friendly." type="tenant" />
+            <HowStepCard step="3" title="Run everything" description="Track rent, monitor payments, send reminders, manage documents, and view reports — all from one clean Board." footerTitle="Everything in one place" footerText="Less admin, more clarity." type="dashboard" />
           </div>
 
           <div className="mt-6 grid gap-4 rounded-[30px] border border-zinc-200 bg-white p-5 shadow-[0_20px_70px_rgba(15,23,42,0.05)] sm:grid-cols-2 lg:grid-cols-4">
             {[
               ["Secure & Reliable", "Bank-level security to protect your data and payments."],
-              ["Save Hours Every Week", "Automated reminders, payments, and tenant communication."],
+              ["Save Hours Every Week", "Payment visibility, reminders, and resident communication."],
               ["Everything Organized", "Leases, payments, documents, expenses — all connected."],
-              ["Works Anywhere", "Access your dashboard on desktop, tablet, or mobile."],
+              ["Works Anywhere", "Access your board on desktop, tablet, or mobile."],
             ].map(([title, text]) => (
               <div key={title} className="flex gap-4 rounded-2xl p-3 transition-all duration-300 hover:bg-[#FAFAFA]">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFF1F5] text-[#B9476D]">✓</div>
@@ -225,7 +225,7 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
           <div className="text-center">
             <div className="flex justify-center">
               <p className="inline-flex items-center rounded-full border border-[#F0CAD5] bg-white px-4 py-1.5 text-[13px] font-semibold text-[#B9476D] shadow-sm">
-                Dashboard
+                Board
               </p>
             </div>
 
@@ -273,20 +273,20 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
             </h2>
 
             <p className="mx-auto mt-6 max-w-[760px] text-[15px] leading-7 text-zinc-500 sm:text-[17px] sm:leading-8">
-              Landlords and property managers can use AvenueBoard without subscription complexity, while renters get clear payment setup when rent collection begins.
+              Landlords and property managers can use AvenueBoard for free, while residents get a clear $10 monthly Resident Platform Fee that landlords may choose to absorb.
             </p>
           </div>
 
           <div className="mt-10 grid gap-5 lg:mt-14 lg:grid-cols-3 lg:gap-6">
-            <PricingCard title="Self-Managing Landlords" badge="Always Free" price="$0" priceNote="/ year" description="For individual landlords managing one or multiple rentals with a clean operating dashboard." cta="Start Free" highlight features={["Unlimited property listings", "No rental income cap", "Tenant invitation flow", "Lease setup included", "Rent tracking dashboard", "Payment reminders", "Payment confirmation visibility", "Lease document center", "Expense tracking", "Reports dashboard"]} />
+            <PricingCard title="Self-Managing Landlords" badge="Always Free" price="$0" priceNote="/ year" description="For individual landlords managing one or multiple rentals with a clean operating board." cta="Start Free" highlight features={["Unlimited property listings", "No rental income cap", "Resident invitation flow", "Lease setup included", "Rent tracking board", "Payment reminders", "Payment confirmation visibility", "Lease document center", "Expense tracking", "Reports board"]} />
 
-            <PricingCard title="Property Managers" badge="Custom Ready" price="$0" priceNote="/ year" description="For rental teams that need more structure, operational visibility, and custom workflow support." cta="Contact Sales" href="mailto:sales@avenueboard.com?subject=AvenueBoard Property Manager Plan" features={["Everything in landlord plan", "Custom branded dashboard", "Custom email communication", "Maintenance request operations", "Portfolio-level workflows", "Multi-team management support", "Custom CRM integrations", "Premium onboarding guidance", "Up to 6 months onboarding support", "Priority support access"]} />
+            <PricingCard title="Property Managers" badge="Custom Ready" price="$0" priceNote="/ year" description="For rental teams that need more structure, operational visibility, and custom workflow support." cta="Contact Sales" href="mailto:sales@avenueboard.com?subject=AvenueBoard Property Manager Plan" features={["Everything in landlord plan", "Custom branded board", "Custom email communication", "Maintenance request operations", "Portfolio-level workflows", "Multi-team management support", "Custom CRM integrations", "Premium onboarding guidance", "Up to 6 months onboarding support", "Priority support access"]} />
 
-            <PricingCard title="Renters" badge="Clear Setup" price="Access" priceNote="included" description="For renters invited by their landlord to set up payments, view lease details, and manage rent activity." cta="Tenant Portal" href="/tenant" features={["Free tenant portal access", "One-time setup fee per lease", "Prorated by lease term", "Free ACH rent payments", "Autopay options supported", "Debit and credit card payments*", "Payment confirmations included", "Secure payment verification", "No recurring renter platform fee", "Landlord can absorb setup fee"]} />
+            <PricingCard title="Residents" badge="Platform Fee" price="$10" priceNote="/ month" description="For residents invited by their landlord to pay rent, view lease details, and manage rental activity." cta="Resident Board" href="/tenant" features={["Resident Board access", "$10 monthly Resident Platform Fee", "Landlord can absorb the platform fee", "Card payments available today*", "ACH payments coming soon", "Payment confirmations included", "Secure payment verification", "Lease details and documents", "Avenue Perks access"]} />
           </div>
 
           <p className="mx-auto mt-7 max-w-[920px] text-center text-[13px] leading-6 text-zinc-400">
-            * Card processing charges may apply based on the selected payment method, provider, or financial institution. Tenant setup fees are one-time per lease and may be prorated based on lease length.
+            * Card processing fees may apply through the payment processor. ACH payments are not live yet and should be treated as coming soon.
           </p>
         </div>
       </section>
@@ -346,7 +346,7 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
           </h2>
 
           <p className="mx-auto mt-6 max-w-[760px] text-[15px] leading-7 text-zinc-500 sm:text-[17px] sm:leading-8">
-            One streamlined dashboard for rent collection, leases, tenants, payments, and property records — developed to feel simple from day one.
+            One streamlined Board for rent collection, leases, tenants, payments, and property records — developed to feel simple from day one.
           </p>
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -371,7 +371,7 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
               <img src="/logo.png" alt="AvenueBoard" className="h-11 w-auto object-contain sm:h-14" />
 
               <p className="mt-8 max-w-[640px] text-[15px] leading-8 text-zinc-600 sm:mt-10 sm:leading-[2.05rem]">
-                A powerful rental management platform built for landlords, rental portfolios, and modern property operations. From rent collection and lease management to tenant coordination and property records, everything works together in one streamlined dashboard.
+                A powerful rental management platform built for landlords, rental portfolios, and modern property operations. From rent collection and lease management to tenant coordination and property records, everything works together in one streamlined Board.
               </p>
 
               <div className="mt-8 flex items-center gap-5 text-[15px] font-medium tracking-[-0.02em] text-[#0F172A] sm:mt-9">
@@ -382,7 +382,7 @@ const handleUnlock = (e: React.FormEvent<HTMLFormElement>) => {
             </div>
 
             <div className="grid grid-cols-1 gap-10 sm:grid-cols-3 lg:gap-14">
-              <FooterColumn title="Product" links={[["About", "#why"], ["How It Works", "#how"], ["Pricing", "#pricing"], ["Rent Collection", "#why"], ["Tenant Setup", "#how"], ["Lease Tracking", "#pricing"]]} />
+              <FooterColumn title="Product" links={[["About", "#why"], ["How It Works", "#how"], ["Pricing", "#pricing"], ["Rent Collection", "#why"], ["Resident Setup", "#how"], ["Lease Tracking", "#pricing"]]} />
               <FooterColumn title="Resources" links={[["FAQs", "#faq"], ["Login", "/login"], ["Get Started", "/signup"], ["Contact", "mailto:support@avenueboard.com"]]} />
               <FooterColumn title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"], ["Security", "#"]]} />
             </div>
@@ -547,7 +547,7 @@ const withoutItems = [
       "Rent status, balances, due dates, and payment history are tracked across memory, notes, or spreadsheets.",
   },
   {
-    title: "Scattered tenant communication",
+    title: "Scattered resident communication",
     description:
       "Important updates, reminders, and confirmations get lost across texts, emails, and separate apps.",
   },
@@ -559,7 +559,7 @@ const withoutItems = [
   {
     title: "Documents are harder to manage",
     description:
-      "Lease files, tenant records, notices, and property documents are stored in different places.",
+      "Lease files, resident records, notices, and property documents are stored in different places.",
   },
   {
     title: "Expenses and reporting feel disconnected",
@@ -570,29 +570,29 @@ const withoutItems = [
 
 const withItems = [
   {
-    title: "Clean rent collection dashboard",
+    title: "Clean rent collection board",
     description:
       "View rent activity, payment status, lease details, and property records from one organized place.",
   },
   {
     title: "Automated rent reminders",
     description:
-      "Keep tenants informed with rent reminders, due-date visibility, and payment-related updates.",
+      "Keep residents informed with rent reminders, due-date visibility, and payment-related updates.",
   },
   {
     title: "Payment confirmation notifications",
     description:
-      "Landlords and tenants get clearer visibility when payment activity is completed or updated.",
+      "Landlords and residents get clearer visibility when payment activity is completed or updated.",
   },
   {
     title: "Lease and document center",
     description:
-      "Keep lease agreements, tenant records, uploads, notices, and property files connected to each rental.",
+      "Keep lease agreements, resident records, uploads, notices, and property files connected to each rental.",
   },
   {
     title: "Expenses and reports in one place",
     description:
-      "Track property expenses, view portfolio activity, and keep records organized inside the dashboard.",
+      "Track property expenses, view portfolio activity, and keep records organized inside the board.",
   },
 ];
 
@@ -600,22 +600,22 @@ const faqItems = [
   {
     question: "How long does it take to set up AvenueBoard?",
     answer:
-      "Setup is designed to be quick. Create your account, add your property details, enter lease information, and invite your tenant. Once the tenant accepts the invite and completes payment setup, your property is ready to manage from the dashboard.",
+      "Setup is designed to be quick. Create your account, add your property details, enter lease information, and complete bank setup. Resident invitations are sent after payout setup is ready, so rent payments can be accepted immediately.",
   },
   {
     question: "Is AvenueBoard free for landlords and property managers?",
     answer:
-      "Yes. AvenueBoard is designed to stay free for landlords and property managers using the standard platform. There are no hidden monthly platform fees for landlords. Tenant onboarding may include a one-time setup fee, and landlords can choose to absorb that fee if they prefer.",
+      "Yes. AvenueBoard is free for self-managing landlords and property managers. Residents pay a $10 monthly Resident Platform Fee unless the landlord chooses to absorb it.",
   },
   {
-    question: "Do tenants need to download anything?",
+    question: "Do residents need to download anything?",
     answer:
-      "No. Tenants can access AvenueBoard from a secure browser link on mobile, tablet, or desktop. They can view lease details, manage payment setup, access shared documents, and stay updated without downloading an app.",
+      "No. Residents can access AvenueBoard from a secure browser link on mobile, tablet, or desktop. They can view lease details, manage payment setup, access shared documents, and stay updated without downloading an app.",
   },
   {
     question: "Can AvenueBoard support larger rental portfolios?",
     answer:
-      "Yes. Larger portfolios can reach out for customized onboarding, dashboard workflows, and portfolio-specific support. Qualified portfolio setups may also include additional onboarding assistance during initial setup.",
+      "Yes. Larger portfolios can reach out for customized onboarding, board workflows, and portfolio-specific support. Qualified portfolio setups may also include additional onboarding assistance during initial setup.",
   },
   {
     question: "Where can I see upcoming platform updates?",
@@ -626,7 +626,7 @@ const faqItems = [
     question:
       "Why choose AvenueBoard over traditional property management software?",
     answer:
-      "Traditional property management platforms can feel overly complex and enterprise-focused. AvenueBoard is designed for independent landlords, small property managers, and growing rental portfolios that want rent collection, leases, tenants, payments, and records organized in one clean dashboard.",
+      "Traditional property management platforms can feel overly complex and enterprise-focused. AvenueBoard is designed for independent landlords, small property managers, and growing rental portfolios that want rent collection, leases, residents, payments, and records organized in one clean Board.",
   },
 ];
 
@@ -859,7 +859,7 @@ function DashboardMockup() {
   return (
     <div className="rounded-[22px] border border-zinc-200 bg-white p-4">
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-[14px] font-semibold">Dashboard Overview</p>
+        <p className="text-[14px] font-semibold">Board Overview</p>
         <span className="text-zinc-400">•••</span>
       </div>
 

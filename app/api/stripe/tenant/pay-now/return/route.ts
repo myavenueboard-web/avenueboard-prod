@@ -23,16 +23,6 @@ export async function GET(request: Request) {
     });
     const metadata = session.metadata || {};
 
-    console.log("Tenant Pay Now return Stripe session", {
-      sessionId,
-      paymentStatus: session.payment_status,
-      paymentIntent:
-        typeof session.payment_intent === "string"
-          ? session.payment_intent
-          : session.payment_intent?.id,
-      metadata,
-    });
-
     if (session.payment_status !== "paid") {
       return NextResponse.redirect(`${appUrl}/tenant?payment=cancelled`);
     }
@@ -60,15 +50,7 @@ export async function GET(request: Request) {
       !periodLabel ||
       rentAmountCents <= 0
     ) {
-      console.error("Tenant Pay Now return missing metadata", {
-        profileId,
-        tenantAccessId,
-        propertyId,
-        leaseId,
-        rentCycleKey,
-        periodLabel,
-        rentAmountCents,
-      });
+      console.error("Tenant Pay Now return missing required metadata");
       return NextResponse.redirect(`${appUrl}/tenant?payment=error`);
     }
 
@@ -116,7 +98,10 @@ export async function GET(request: Request) {
         .maybeSingle();
 
     if (existingError) {
-      console.error("Tenant Pay Now return existing payment lookup error:", existingError);
+      console.error("Tenant Pay Now return existing payment lookup error:", {
+        message: existingError.message,
+        code: existingError.code,
+      });
       return NextResponse.redirect(`${appUrl}/tenant?payment=error`);
     }
 
@@ -133,15 +118,13 @@ export async function GET(request: Request) {
           .select("id")
           .maybeSingle();
 
-    console.log("Tenant Pay Now return payment save result", {
-      rentCycleKey,
-      periodLabel,
-      existingPaymentId: existingPayment?.id || null,
-      savedPaymentId: saveResult.data?.id || null,
-      error: saveResult.error || null,
-    });
-
     if (saveResult.error || !saveResult.data?.id) {
+      if (saveResult.error) {
+        console.error("Tenant Pay Now return payment save error:", {
+          message: saveResult.error.message,
+          code: saveResult.error.code,
+        });
+      }
       return NextResponse.redirect(`${appUrl}/tenant?payment=error`);
     }
 
@@ -176,11 +159,8 @@ async function validateTenantAccess({
 
   if (error || !data) {
     console.error("Tenant Pay Now return tenant access validation failed", {
-      profileId,
-      tenantAccessId,
-      propertyId,
-      leaseId,
-      error,
+      message: error?.message,
+      code: error?.code,
     });
     return false;
   }

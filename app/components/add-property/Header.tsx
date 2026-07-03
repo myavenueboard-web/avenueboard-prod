@@ -52,7 +52,7 @@ export default function Header({
     <header className="flex items-center justify-between">
       <button
         onClick={handleBack}
-        className="text-[14px] text-zinc-500 hover:text-zinc-900"
+        className="text-[15px] text-zinc-500 hover:text-zinc-900"
       >
         ‹ Back
       </button>
@@ -62,13 +62,13 @@ export default function Header({
           onClick={() => setMenuOpen(!menuOpen)}
           className="flex items-center gap-3 rounded-2xl px-2 py-1 transition hover:bg-zinc-50"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0F172A] text-sm font-semibold text-white">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0F172A] text-[15px] font-semibold text-white">
             {user?.name?.charAt(0)?.toUpperCase() || "U"}
           </div>
 
           <div className="hidden text-left lg:block">
-            <p className="text-[14px] font-semibold">{user?.name}</p>
-            <p className="max-w-[170px] truncate text-[12px] text-zinc-400">
+            <p className="text-[15px] font-semibold">{user?.name}</p>
+            <p className="max-w-[170px] truncate text-[13.5px] text-zinc-400">
               {user?.email}
             </p>
           </div>
@@ -79,10 +79,10 @@ export default function Header({
         {menuOpen && (
           <div className="absolute right-0 top-14 z-50 w-[230px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
             <div className="px-3 py-3">
-              <p className="text-[13px] font-semibold text-zinc-900">
+              <p className="text-[14.5px] font-semibold text-zinc-900">
                 {user?.name}
               </p>
-              <p className="mt-1 truncate text-[12px] text-zinc-400">
+              <p className="mt-1 truncate text-[13.5px] text-zinc-400">
                 {user?.email}
               </p>
             </div>
@@ -94,14 +94,14 @@ export default function Header({
                 setMenuOpen(false);
                 openProfileSettings();
               }}
-              className="mt-2 w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+              className="mt-2 w-full rounded-xl px-3 py-3 text-left text-[14.5px] font-medium text-zinc-700 hover:bg-zinc-50"
             >
               Profile Settings
             </button>
 
             <button
               onClick={handleLogout}
-              className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
+              className="w-full rounded-xl px-3 py-3 text-left text-[14.5px] font-medium text-red-600 hover:bg-red-50"
             >
               Logout
             </button>

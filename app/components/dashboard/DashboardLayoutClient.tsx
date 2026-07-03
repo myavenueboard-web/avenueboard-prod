@@ -21,6 +21,17 @@ type SidebarProperty = {
   property_label: string;
 };
 
+const LANDLORD_PORTAL_USAGE_ACTIVITY_TYPES = [
+  "property_added",
+  "tenant_added",
+  "bank_pending",
+  "property_updated",
+  "tenant_invite_resent",
+  "payment_request_sent",
+  "lease_updated",
+  "lease_extended",
+];
+
 function getFirstName(name?: string) {
   return (name || "").trim().split(/\s+/)[0] || "";
 }
@@ -109,23 +120,30 @@ function SidebarReportIcon({ active }: { active?: boolean }) {
   );
 }
 
-function SidebarExpenseIcon({ active }: { active?: boolean }) {
+function SidebarPerksIcon({ active }: { active?: boolean }) {
   return (
-    <SidebarIconShell active={active}>
+    <span
+      className={`flex h-8 w-8 shrink-0 items-center justify-center transition ${
+        active ? "text-black" : "text-slate-800"
+      }`}
+      aria-hidden="true"
+    >
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
         <path
-          d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"
+          d="M12 3 13.55 8.45A3 3 0 0 0 15.55 10.45L21 12 15.55 13.55A3 3 0 0 0 13.55 15.55L12 21 10.45 15.55A3 3 0 0 0 8.45 13.55L3 12 8.45 10.45A3 3 0 0 0 10.45 8.45L12 3Z"
           stroke="currentColor"
           strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
         <path
-          d="M12 7v10M15 9.5c-.5-1-1.4-1.5-3-1.5-1.7 0-3 .8-3 2.2 0 3 6 1.5 6 4.6 0 1.4-1.3 2.2-3 2.2-1.7 0-2.8-.6-3.4-1.7"
+          d="M19 4v4M21 6h-4"
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
         />
       </svg>
-    </SidebarIconShell>
+    </span>
   );
 }
 
@@ -177,6 +195,7 @@ export default function DashboardLayoutClient({
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [hasLandlordRole, setHasLandlordRole] = useState(false);
   const [hasTenantPortal, setHasTenantPortal] = useState(false);
+  const [canRemoveLandlordPortal, setCanRemoveLandlordPortal] = useState(false);
   const [taxDocumentsOpen, setTaxDocumentsOpen] = useState(false);
   const [removingLandlordPortal, setRemovingLandlordPortal] = useState(false);
   const [removeLandlordError, setRemoveLandlordError] = useState("");
@@ -242,20 +261,44 @@ export default function DashboardLayoutClient({
 
         setHasLandlordRole(hasCurrentLandlordRole);
         setHasTenantPortal(hasCurrentTenantPortal);
+        setCanRemoveLandlordPortal(false);
 
         if (!hasCurrentLandlordRole) {
           router.replace(hasCurrentTenantPortal ? "/tenant" : "/select-mode");
           return;
         }
 
-        const { data: propertyData } = await supabase
-          .from("properties")
-          .select("id, property_label")
-          .eq("owner_profile_id", profile.id)
-          .eq("status", "active")
-          .order("created_at", { ascending: false });
+        const [
+          { data: propertyData },
+          { count: landlordPropertyCount, error: landlordPropertyCountError },
+          { count: landlordActivityCount, error: landlordActivityCountError },
+        ] = await Promise.all([
+          supabase
+            .from("properties")
+            .select("id, property_label")
+            .eq("owner_profile_id", profile.id)
+            .eq("status", "active")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("properties")
+            .select("id", { count: "exact", head: true })
+            .eq("owner_profile_id", profile.id),
+          supabase
+            .from("activity_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("profile_id", profile.id)
+            .in("activity_type", LANDLORD_PORTAL_USAGE_ACTIVITY_TYPES),
+        ]);
 
         setProperties((propertyData || []) as SidebarProperty[]);
+        setCanRemoveLandlordPortal(
+          hasCurrentTenantPortal &&
+            hasCurrentLandlordRole &&
+            !landlordPropertyCountError &&
+            !landlordActivityCountError &&
+            (landlordPropertyCount || 0) === 0 &&
+            (landlordActivityCount || 0) === 0
+        );
 
         const dynamicNotifications = await getLandlordNotifications(profile.id);
         setNotifications(dynamicNotifications);
@@ -271,13 +314,19 @@ export default function DashboardLayoutClient({
   }, [router, pathname]);
 
   useEffect(() => {
+    function closeWorkspaceOverlays() {
+      window.dispatchEvent(new CustomEvent("avenueboard:close-landlord-overlays"));
+    }
+
     function openAssistant() {
+      closeWorkspaceOverlays();
       setHelpOpen(true);
       setNotificationOpen(false);
       setMenuOpen(false);
     }
 
     function openProfile() {
+      closeWorkspaceOverlays();
       setProfileOpen(true);
       setNotificationOpen(false);
       setMenuOpen(false);
@@ -353,7 +402,7 @@ export default function DashboardLayoutClient({
       const token = sessionData.session?.access_token;
 
       if (!token) {
-        setRemoveLandlordError("Please sign in again to remove landlord portal.");
+        setRemoveLandlordError("Please sign in again to remove Landlord Board.");
         return false;
       }
 
@@ -371,22 +420,23 @@ export default function DashboardLayoutClient({
 
       if (!response.ok || !body?.ok) {
         setRemoveLandlordError(
-          body?.message || "Unable to remove landlord portal. Please try again."
+          body?.message || "Unable to remove Landlord Board. Please try again."
         );
         return false;
       }
 
       await supabase.auth.refreshSession();
       setHasLandlordRole(false);
+      setCanRemoveLandlordPortal(false);
       setMenuOpen(false);
       setProfileOpen(false);
       router.push("/tenant");
       router.refresh();
       return true;
     } catch (error) {
-      console.error("Remove landlord portal error:", error);
+      console.error("Remove Landlord Board error:", error);
       setRemoveLandlordError(
-        "Unable to remove landlord portal right now. Please try again."
+        "Unable to remove Landlord Board right now. Please try again."
       );
       return false;
     } finally {
@@ -405,7 +455,13 @@ export default function DashboardLayoutClient({
 
   const isPropertyDetailPage =
     pathname.startsWith("/dashboard/properties/") && !pathname.includes("/edit");
+  const isEditPropertyPage =
+    pathname.startsWith("/dashboard/properties/") && pathname.includes("/edit");
   const isAllPropertiesPage = pathname === "/dashboard";
+  const isAddPropertyPage = pathname === "/dashboard/add-property";
+  const isReportsArea =
+    pathname === "/dashboard/reports" || pathname === "/dashboard/expenses";
+  const isPerksPage = pathname === "/avenue-perks";
   const landlordFirstName = getFirstName(user?.name);
   const landlordGreeting = landlordFirstName
     ? `${getGreeting()}, ${landlordFirstName}`
@@ -416,33 +472,35 @@ export default function DashboardLayoutClient({
       ? "Property Workspace"
       : isAllPropertiesPage
       ? landlordGreeting
-      : pathname === "/dashboard/reports"
-      ? "Reports"
-      : pathname === "/dashboard/expenses"
-      ? "Expenses"
-      : pathname === "/dashboard/add-property"
+      : isReportsArea
+      ? "Analytics"
+      : isPerksPage
+      ? "Avenue Perks"
+      : isAddPropertyPage
       ? "Add Property"
+      : isEditPropertyPage
+      ? "Property"
       : "Property";
 
   const pageContext =
     isAllPropertiesPage
       ? ""
-      : pathname === "/dashboard/reports"
-      ? "Portfolio reporting"
-      : pathname === "/dashboard/expenses"
-      ? "Expense workspace"
-      : pathname === "/dashboard/add-property"
-      ? "Create a rental property"
+      : isReportsArea
+      ? ""
+      : isPerksPage
+      ? "Partner benefits for landlords"
+      : isAddPropertyPage
+      ? ""
       : isPropertyDetailPage
       ? ""
+      : isEditPropertyPage
+      ? ""
       : "Landlord workspace";
-
-  const showAddPropertyButton = pathname !== "/dashboard/add-property";
 
   if (loading) {
     return (
       <main className="flex h-screen items-center justify-center bg-white text-sm text-zinc-500">
-        Loading dashboard...
+        Loading board...
       </main>
     );
   }
@@ -491,6 +549,18 @@ export default function DashboardLayoutClient({
               </button>
             );
           })}
+
+          <button
+            onClick={() => goTo("/dashboard/add-property")}
+            className="group flex w-full items-center gap-3 rounded-[13px] border border-transparent px-3 py-2.5 text-left text-[13.5px] font-medium text-slate-600 transition-all duration-200 hover:bg-zinc-100 hover:text-slate-950 active:scale-[0.99] active:bg-zinc-100 active:text-slate-950"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center pb-px text-[19px] font-light leading-none text-slate-500 transition-colors group-hover:text-[#0F172A]">
+              +
+            </span>
+            <span className="truncate text-[13.5px] font-medium">
+              Add Property
+            </span>
+          </button>
         </div>
       </div>
 
@@ -498,26 +568,28 @@ export default function DashboardLayoutClient({
         <button
           onClick={() => goTo("/dashboard/reports")}
           className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
-            pathname === "/dashboard/reports"
+            isReportsArea
               ? "bg-zinc-50 text-slate-950"
               : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
           }`}
         >
-          <SidebarReportIcon active={pathname === "/dashboard/reports"} />
-          Reports
+          <SidebarReportIcon active={isReportsArea} />
+          Reports & Expenses
         </button>
 
-        <button
-          onClick={() => goTo("/dashboard/expenses")}
+        <a
+          href="/avenue-perks"
+          target="_blank"
+          rel="noopener noreferrer"
           className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
-            pathname === "/dashboard/expenses"
+            isPerksPage
               ? "bg-zinc-50 text-slate-950"
               : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
           }`}
         >
-          <SidebarExpenseIcon active={pathname === "/dashboard/expenses"} />
-          Expenses
-        </button>
+          <SidebarPerksIcon active={isPerksPage} />
+          Avenue Perks
+        </a>
 
         <button
           onClick={() => {
@@ -602,6 +674,16 @@ export default function DashboardLayoutClient({
                     })}
                   </div>
                 )}
+
+                <button
+                  onClick={() => goTo("/dashboard/add-property")}
+                  className="mt-3 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-[14px] font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950 active:scale-[0.99] active:bg-zinc-100"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center pb-px text-[18px] font-light leading-none text-zinc-500">
+                    +
+                  </span>
+                  <span>Add Property</span>
+                </button>
               </div>
 
               <div className="shrink-0 border-t border-zinc-200 pt-5">
@@ -621,18 +703,23 @@ export default function DashboardLayoutClient({
                         />
                       </svg>
                     </span>
-                    Reports
+                    Reports & Expenses
                   </button>
 
-                  <button
-                    onClick={() => goTo("/dashboard/expenses")}
+                  <a
+                    href="/avenue-perks"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-100 text-[14px] font-semibold text-slate-800">
-                      $
+                    <span
+                      className="flex h-7 w-7 items-center justify-center text-[16px] leading-none text-slate-800"
+                      aria-hidden="true"
+                    >
+                      ✦
                     </span>
-                    Expenses
-                  </button>
+                    Avenue Perks
+                  </a>
 
                   <button
                     onClick={() => {
@@ -662,10 +749,14 @@ export default function DashboardLayoutClient({
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white pl-3 pr-5 lg:pl-3 lg:pr-7">
           <header
-            className={`flex shrink-0 items-center justify-between gap-3 bg-white ${
+            className={`relative z-[120] flex shrink-0 items-center justify-between gap-3 bg-white ${
               isPropertyDetailPage ? "h-[58px]" : "h-[76px]"
             } ${
-              isPropertyDetailPage || isAllPropertiesPage
+              isPropertyDetailPage ||
+              isAllPropertiesPage ||
+              isAddPropertyPage ||
+              isEditPropertyPage ||
+              isReportsArea
                 ? ""
                 : "border-b border-zinc-200"
             }`}
@@ -682,9 +773,13 @@ export default function DashboardLayoutClient({
                 <h1
                   className={`truncate tracking-[-0.045em] ${
                     isPropertyDetailPage
-                      ? "text-[18px] font-normal text-slate-600 sm:text-[19px]"
-                      : isAllPropertiesPage
+                      ? "translate-y-1.5 text-[18px] font-normal text-slate-600 sm:text-[19px]"
+                    : isAllPropertiesPage
                       ? "text-[20px] font-medium text-slate-950 sm:text-[21px]"
+                    : isReportsArea
+                      ? "text-[20px] font-semibold text-slate-950 sm:text-[21px]"
+                    : isAddPropertyPage || isEditPropertyPage
+                      ? "text-[18px] font-semibold text-slate-950 sm:text-[19px]"
                       : "text-[14px] font-semibold text-zinc-950 sm:text-[15px]"
                   }`}
                 >
@@ -698,21 +793,27 @@ export default function DashboardLayoutClient({
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 sm:gap-5">
-              {showAddPropertyButton && (
+            <div
+              className={`flex shrink-0 items-center gap-2 sm:gap-5 ${
+                isPropertyDetailPage ? "translate-y-1.5" : ""
+              }`}
+            >
+              {isAllPropertiesPage && (
                 <button
                   onClick={() => router.push("/dashboard/add-property")}
-                  className="hidden h-[42px] items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50 sm:flex"
+                  className="hidden h-[42px] items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-[13.5px] font-semibold text-slate-950 transition hover:bg-zinc-50 active:scale-[0.98] sm:flex"
                 >
-                  <span className="text-[19px] leading-none text-slate-500">+</span>
+                  <span className="text-[19px] leading-none text-slate-500">
+                    +
+                  </span>
                   Add Property
                 </button>
               )}
 
-              {showAddPropertyButton && (
+              {isAllPropertiesPage && (
                 <button
                   onClick={() => router.push("/dashboard/add-property")}
-                  className="flex h-[42px] w-[42px] items-center justify-center rounded-2xl bg-[#0F172A] text-[25px] leading-none text-white sm:hidden"
+                  className="flex h-[42px] w-[42px] items-center justify-center rounded-2xl bg-[#0F172A] text-[25px] leading-none text-white transition active:scale-[0.98] sm:hidden"
                 >
                   +
                 </button>
@@ -752,13 +853,13 @@ export default function DashboardLayoutClient({
 
                 {notificationOpen && (
                   <>
-                    <button
-                      className="fixed inset-0 z-40 cursor-default"
+	                    <button
+	                      className="fixed inset-0 z-[180] cursor-default"
                       onClick={() => setNotificationOpen(false)}
                       aria-label="Close notifications"
                     />
 
-                    <div className="absolute right-0 top-14 z-50 w-[360px] overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.16)]">
+	                    <div className="absolute right-0 top-14 z-[220] w-[360px] overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.16)]">
                       <div className="border-b border-zinc-200 px-5 py-4">
                         <p className="text-[15px] font-semibold text-zinc-900">
                           Notifications
@@ -875,23 +976,23 @@ export default function DashboardLayoutClient({
 
                 {menuOpen && (
                   <>
-                    <button
-                      className="fixed inset-0 z-40 cursor-default"
+	                    <button
+	                      className="fixed inset-0 z-[180] cursor-default"
                       onClick={() => setMenuOpen(false)}
                       aria-label="Close menu"
                     />
 
-                    <div className="absolute right-0 top-14 z-50 w-[230px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
+	                    <div className="absolute right-0 top-14 z-[220] w-[230px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
   {hasTenantPortal && (
-  <button
-    onClick={() => {
-      setMenuOpen(false);
-      router.push(hasTenantPortal ? "/tenant" : "/select-mode");
-    }}
-    className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-[#B9476D] hover:bg-[#FCEEF3]"
-  >
-    Switch to tenant dashboard
-  </button>
+	  <button
+	    onClick={() => {
+	      setMenuOpen(false);
+	      router.push(hasTenantPortal ? "/tenant" : "/select-mode");
+	    }}
+	    className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+	  >
+	    Switch to Resident Board
+	  </button>
 )}
 
 <button
@@ -907,6 +1008,7 @@ export default function DashboardLayoutClient({
 
                       <button
                         onClick={() => {
+                          window.dispatchEvent(new CustomEvent("avenueboard:close-landlord-overlays"));
                           setMenuOpen(false);
                           setProfileOpen(true);
                         }}
@@ -928,7 +1030,7 @@ export default function DashboardLayoutClient({
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto pt-2 scrollbar-hide lg:overflow-hidden lg:pt-0">
+          <div className="min-h-0 flex-1 overflow-y-auto pt-2 scrollbar-hide lg:overflow-visible lg:pt-0">
             {children}
           </div>
         </section>
@@ -946,6 +1048,7 @@ export default function DashboardLayoutClient({
         onLogout={handleLogout}
         hasTenantPortal={hasTenantPortal}
         hasLandlordRole={hasLandlordRole}
+        canRemoveLandlordPortal={canRemoveLandlordPortal}
         removingLandlordPortal={removingLandlordPortal}
         removeLandlordError={removeLandlordError}
         onClearRemoveLandlordError={() => setRemoveLandlordError("")}

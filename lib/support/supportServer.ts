@@ -109,6 +109,15 @@ export const supportSupabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const SUPPORT_DEBUG_LOGS_ENABLED =
+  process.env.NODE_ENV !== "production" &&
+  process.env.NEXT_PUBLIC_ENABLE_SUPPORT_DEBUG_LOGS === "true";
+
+export function supportDebugLog(message: string, payload?: unknown) {
+  if (!SUPPORT_DEBUG_LOGS_ENABLED) return;
+  console.log(message, payload);
+}
+
 export function getBearerToken(request: Request) {
   const header = request.headers.get("authorization") || "";
   const [scheme, token] = header.split(" ");
@@ -235,19 +244,19 @@ export function buildFallbackReply(
     avenueBoardProductKnowledge.capabilities.shared_notes.supported;
 
   if (category === "payment_issue" || category === "rent_question") {
-    return `I can help with that${property}. In your tenant portal, check the payment area for current status, due date, and payment method details. I can explain what you’re seeing, but I can’t promise refunds, reversals, or payment outcomes. If it needs review, I’ll create a support case for the AvenueBoard team.`;
+    return `I can help with that${property}. In your Resident Board, check the payment area for current status, due date, and payment method details. I can explain what you’re seeing, but I can’t promise refunds, reversals, or payment outcomes. If it needs review, I’ll create a support case for the AvenueBoard team.`;
   }
 
   if (category === "lease_issue" || category === "document_issue") {
-    return `I can help you find lease documents${property}. In the tenant portal, use Property Documents for uploaded files and Lease Status for lease details. If a document is missing or will not open, I’ll create a support case for review.`;
+    return `I can help you find lease documents${property}. In the Resident Board, use Property Documents for uploaded files and Lease Status for lease details. If a document is missing or will not open, I’ll create a support case for review.`;
   }
 
   if (/note|notes|shared note|private note/.test(message.toLowerCase())) {
     if (supportsSharedNotes) {
-      return `Shared Notes are supported in the tenant dashboard. Private notes stay visible only to the tenant who created them, while shared notes for the same lease/property can be visible between the tenant and landlord. You can check the Notes section on the tenant dashboard.`;
+      return `Shared Notes are supported in the Resident Board. Private notes stay visible only to the tenant who created them, while shared notes for the same lease/property can be visible between the tenant and landlord. You can check the Notes section on the Resident Board.`;
     }
 
-    return `I’m not fully sure whether notes are enabled for this account. Please check the Notes section on the tenant dashboard, or I can create a support case if it is missing.`;
+    return `I’m not fully sure whether notes are enabled for this account. Please check the Notes section on the Resident Board, or I can create a support case if it is missing.`;
   }
 
   if (category === "account_access") {
@@ -322,7 +331,7 @@ export async function createSupportTicket({
     payload.metadata = safeInput.metadata;
   }
 
-  console.log("Ticket creation requested", {
+  supportDebugLog("Ticket creation requested", {
     userId,
     profileId,
     payload,
@@ -334,7 +343,7 @@ export async function createSupportTicket({
     .select("id, ticket_number, category, status, priority, created_at")
     .single();
 
-  console.log("Support ticket Supabase response", {
+  supportDebugLog("Support ticket Supabase response", {
     data,
     error: error ? describeSupportError(error) : null,
   });
@@ -360,7 +369,7 @@ export async function createSupportTicket({
     );
   }
 
-  console.log("Support ticket insert succeeded", {
+  supportDebugLog("Support ticket insert succeeded", {
     userId,
     ticketId: data.id,
     ticketNumber: data.ticket_number,
@@ -541,7 +550,7 @@ export function buildConversationSummary(
 export function supportSystemPrompt(context?: TenantSupportContext) {
   const availableFeatures = context?.availableFeatures?.length
     ? context.availableFeatures.join(", ")
-    : "Tenant portal, lease documents, payment history, property documents, notes, support cases, Avenue Perks, and eligible credit-building features when enabled";
+    : "Resident Board, lease documents, payment history, property documents, notes, support cases, Avenue Perks, and eligible credit-building features when enabled";
   const capabilities = {
     shared_notes:
       context?.productCapabilities?.shared_notes ??
@@ -584,7 +593,7 @@ You are Ava, the built-in AvenueBoard assistant. You represent AvenueBoard with 
 
 Do not say you are an AI assistant. Refer to yourself as Ava.
 
-You help AvenueBoard users with rent payments, leases, lease documents, receipts, tenant onboarding, tenant invitations, account access, dashboard navigation, support tickets, payment setup, payment status, rent reminders, AvenueBoard features, AvenueBoard benefits, credit reporting when enabled, rewards/perks when enabled, and property information available in the tenant portal.
+You help AvenueBoard users with rent payments, leases, lease documents, receipts, resident onboarding, resident invitations, account access, board navigation, support tickets, payment setup, payment status, rent reminders, AvenueBoard features, AvenueBoard benefits, credit reporting when enabled, rewards/perks when enabled, and property information available in the Resident Board.
 
 Rules:
 - You may engage in brief, natural small talk, including greetings, thanks, acknowledgements, and simple conversational questions like "How are you?"
@@ -594,7 +603,7 @@ Rules:
 - If asked about competitors or "a better platform", do not use a fallback response, do not recommend competitors, and do not say another platform is better. Explain AvenueBoard strengths and supported features neutrally.
 - Never guess product capabilities. Use the structured capability context and product knowledge below. If capability information is unavailable or unclear, say you are unsure and suggest where the user can verify it in AvenueBoard.
 - Do not invent functionality, policies, statuses, refunds, payments, document permissions, or notes behavior.
-- Give clear navigation steps when useful, such as which dashboard section to open.
+- Give clear navigation steps when useful, such as which board section to open.
 - Keep answers natural, short, helpful, and professional.
 - Avoid robotic wording, repetitive support-bot language, and repeatedly listing everything Ava can help with.
 - Do not make legal, financial, tax, refund, chargeback, reversal, or payment outcome promises.

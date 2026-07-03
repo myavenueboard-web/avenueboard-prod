@@ -24,7 +24,17 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
+import {
+  getLeaseFirstPaymentCycleDate,
+  getLeasePaymentAmountForCycle,
+  getProratedRentAmount,
+  type LeaseAmountLike,
+} from "@/lib/leasePaymentAmounts";
 import { LandlordMobilePropertyDetail } from "@/components/mobile/landlord/LandlordMobileDashboard";
+import {
+  deleteLandlordPropertyCascade,
+  getDeletePropertyErrorMessage,
+} from "@/lib/dashboard/deleteLandlordProperty";
 
 type TenantRecord = {
   invite_token: string | null;
@@ -64,6 +74,10 @@ type RentPaymentRecord = {
   created_at?: string | null;
 };
 
+type LeaseAmountRecord = LeaseAmountLike & {
+  id: string;
+};
+
 type PropertyRecord = {
   id: string;
   created_at?: string | null;
@@ -84,8 +98,12 @@ type PropertyRecord = {
     monthly_rent: number;
     security_deposit: number | null;
     rent_due_day: string;
+    lease_setup_type?: string | null;
+    payment_tracking_start_date?: string | null;
     lease_status: string | null;
     payment_status: string | null;
+    ended_at?: string | null;
+    lease_amounts?: LeaseAmountRecord[];
     lease_tenants?: TenantRecord[];
     lease_documents?: LeaseDocumentRecord[];
 }[];
@@ -100,6 +118,19 @@ type PropertyNote = {
 };
 
 type MonthStatus = "paid" | "upcoming" | "late" | "future" | "inactive";
+
+const STARTER_PROPERTY_NOTES = [
+  {
+    note_type: "shared",
+    title: "Welcome to AvenueBoard",
+    body: "Use shared notes to communicate important information with your resident, such as move-in instructions, maintenance updates, reminders, or lease-related notices.",
+  },
+  {
+    note_type: "private",
+    title: "Save reminders, updates, and important property notes.",
+    body: "Getting Started • AvenueBoard",
+  },
+] as const;
 
 export default function PropertyDetailPage() {
   const params = useParams();
@@ -143,6 +174,8 @@ export default function PropertyDetailPage() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [endLeaseOpen, setEndLeaseOpen] = useState(false);
+  const [endingLease, setEndingLease] = useState(false);
   const [paymentRequestOpen, setPaymentRequestOpen] = useState(false);
   const [selectedPaymentTenant, setSelectedPaymentTenant] =
   useState<TenantRecord | null>(null);
@@ -173,6 +206,7 @@ export default function PropertyDetailPage() {
     useState<TenantRecord | null>(null);
   const [deletingTenant, setDeletingTenant] = useState(false);
   const tenantPopoverRef = useRef<HTMLDivElement | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [payments, setPayments] = useState<RentPaymentRecord[]>([]);
   const [leaseForm, setLeaseForm] = useState({
    startDate: "",
@@ -180,6 +214,34 @@ export default function PropertyDetailPage() {
    monthlyRent: "",
    rentDueDay: "",
    });
+
+  useEffect(() => {
+    if (!actionMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        actionMenuRef.current &&
+        event.target instanceof Node &&
+        !actionMenuRef.current.contains(event.target)
+      ) {
+        setActionMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setActionMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [actionMenuOpen]);
 
   useEffect(() => {
     async function loadPropertyDashboard() {
@@ -206,8 +268,16 @@ export default function PropertyDetailPage() {
               monthly_rent,
               security_deposit,
               rent_due_day,
+              lease_setup_type,
+              payment_tracking_start_date,
               lease_status,
+              ended_at,
               payment_status,
+              lease_amounts (
+                id,
+                amount_type,
+                amount
+              ),
               lease_tenants (
                 id,
                 first_name,
@@ -283,8 +353,15 @@ if (!activityError) {
   .order("created_at", { ascending: false });
 
 if (!noteError) {
+  const resolvedNotes = await ensureMissingStarterNotes({
+    propertyId,
+    leaseId: lease?.id || null,
+    profileId: profile.id,
+    notes: noteData || [],
+  });
+
   setNotes(
-    (noteData || []).map((note) => ({
+    resolvedNotes.map((note) => ({
       id: note.id,
       text: note.text,
       type: note.note_type,
@@ -335,6 +412,25 @@ if (!noteError) {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [tenantsExpanded]);
+
+  useEffect(() => {
+    function closeWorkspaceOverlays() {
+      setTenantsExpanded(false);
+      setActionMenuOpen(false);
+    }
+
+    window.addEventListener(
+      "avenueboard:close-landlord-overlays",
+      closeWorkspaceOverlays
+    );
+
+    return () => {
+      window.removeEventListener(
+        "avenueboard:close-landlord-overlays",
+        closeWorkspaceOverlays
+      );
+    };
+  }, []);
 
   async function handleSavePropertyEdit() {
     if (!property) return;
@@ -442,6 +538,10 @@ function openTenantManageEdit(tenant: TenantRecord) {
 
 async function handleDeleteTenant(tenant: TenantRecord) {
   if (!property || deletingTenant) return;
+  if (tenant.tenant_role?.toLowerCase() === "primary") {
+    setTenantDeleteTarget(null);
+    return;
+  }
 
   setDeletingTenant(true);
 
@@ -471,40 +571,66 @@ async function handleDeleteTenant(tenant: TenantRecord) {
 async function sendTenantInvite(tenant: TenantRecord, showSuccess = true) {
   if (!property) return false;
 
-if (!tenant.invite_token) {
-  alert("Invite token is missing for this tenant. Please recreate the invite.");
-  return false;
-}
-
-  const { error } = await supabase.functions.invoke("resend-email", {
-    body: {
-      tenantEmail: tenant.email,
-      tenantName: `${tenant.first_name} ${tenant.last_name}`,
-      propertyName: property.property_label,
-      inviteLink: `${window.location.origin}/tenant/accept-invite?token=${tenant.invite_token}`,
-    },
-  });
-
-  if (error) {
-    console.error("Tenant invite error:", error);
-    alert("Unable to send invite. Please try again.");
+  if (property.bank_status !== "connected") {
+    alert(
+      "Connect your bank account first. Resident invitations are sent after bank setup is complete so payments can be accepted immediately."
+    );
     return false;
   }
+
+  if (!tenant.invite_token) {
+    alert("Invite token is missing for this resident. Please recreate the invite.");
+    return false;
+  }
+
+  const result = await triggerEmailEvent({
+    trigger: "tenant_invite_created",
+    propertyId: property.id,
+    leaseId: property.leases?.[0]?.id || null,
+    tenantId: tenant.id,
+  });
+
+  if (!result?.ok) {
+    alert(
+      typeof result?.error === "string"
+        ? result.error
+        : "Unable to send invite. Please try again."
+    );
+    return false;
+  }
+
+  const sentAt = new Date().toISOString();
+
+  await supabase
+    .from("lease_tenants")
+    .update({
+      invite_status: "sent",
+      invite_sent_at: sentAt,
+    })
+    .eq("id", tenant.id);
 
   await supabase.from("activity_logs").insert({
     property_id: property.id,
     profile_id: profileId,
     lease_id: property.leases?.[0]?.id || null,
     activity_type: "tenant_invite_resent",
-    title: "Tenant invite sent",
+    title: "Resident invite sent",
     description: `Invite sent to ${tenant.email}`,
   });
 
-  await triggerEmailEvent({
-    trigger: "tenant_invite_created",
-    propertyId: property.id,
-    leaseId: property.leases?.[0]?.id || null,
-    tenantId: tenant.id,
+  setProperty({
+    ...property,
+    leases: property.leases?.map((lease) => ({
+      ...lease,
+      lease_tenants: lease.lease_tenants?.map((leaseTenant) =>
+        leaseTenant.id === tenant.id
+          ? {
+              ...leaseTenant,
+              invite_status: "sent",
+            }
+          : leaseTenant
+      ),
+    })),
   });
 
   return true;
@@ -513,6 +639,13 @@ if (!tenant.invite_token) {
   function handleResendTenantInvite(tenant: TenantRecord) {
   if (!tenant.email) {
     alert("This tenant does not have an email address.");
+    return;
+  }
+
+  if (property?.bank_status !== "connected") {
+    alert(
+      "Connect your bank account first. Resident invitations are sent after bank setup is complete so payments can be accepted immediately."
+    );
     return;
   }
 
@@ -642,40 +775,104 @@ invite_status: "not_sent",
     setDeleting(true);
 
     try {
-      const leaseIds = (property.leases || []).map((lease) => lease.id);
-
-      await supabase
-        .from("activity_logs")
-        .delete()
-        .eq("property_id", property.id);
-
-      await supabase.from("expenses").delete().eq("property_id", property.id);
-
-      if (leaseIds.length > 0) {
-        await supabase.from("lease_tenants").delete().in("lease_id", leaseIds);
-        await supabase.from("lease_amounts").delete().in("lease_id", leaseIds);
-        await supabase
-          .from("lease_preferences")
-          .delete()
-          .in("lease_id", leaseIds);
-        await supabase.from("lease_documents").delete().in("lease_id", leaseIds);
-        await supabase.from("leases").delete().in("id", leaseIds);
-      }
-
-      const { error } = await supabase
-        .from("properties")
-        .delete()
-        .eq("id", property.id)
-        .eq("owner_profile_id", profileId);
-
-      if (error) throw error;
+      await deleteLandlordPropertyCascade({
+        propertyId: property.id,
+        ownerProfileId: profileId,
+        knownLeaseIds: (property.leases || []).map((lease) => lease.id),
+      });
 
       router.push("/dashboard");
     } catch (error) {
-      console.error("Property delete error:", error);
-      alert("Unable to delete this property. Please try again.");
+      console.warn("Property delete error:", error);
+      alert(getDeletePropertyErrorMessage(error));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleEndLease() {
+    if (!property || !lease?.id || endingLease) return;
+
+    setEndingLease(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        alert("Please sign in again before ending this lease.");
+        return;
+      }
+
+      const response = await fetch("/api/dashboard/end-lease", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          propertyId: property.id,
+          leaseId: lease.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || "Unable to end this lease.");
+      }
+
+      const endedAt = data.endedAt || new Date().toISOString();
+
+      setProperty({
+        ...property,
+        leases: property.leases?.map((leaseItem) =>
+          leaseItem.id === lease.id
+            ? {
+                ...leaseItem,
+                lease_status: "ended",
+                payment_status: "ended",
+                ended_at: endedAt,
+              }
+            : leaseItem
+        ),
+      });
+
+      setPayments((currentPayments) =>
+        currentPayments.map((payment) => {
+          const status = String(payment.status || "").toLowerCase();
+
+          if (["pending", "upcoming", "future", "processing"].includes(status)) {
+            return { ...payment, status: "canceled" };
+          }
+
+          return payment;
+        })
+      );
+
+      setActivities((currentActivities) => [
+        {
+          id: `lease-ended-${endedAt}`,
+          activity_type: "lease_ended",
+          title: "Lease ended",
+          description: `${property.property_label} lease was ended.`,
+          created_at: endedAt,
+        },
+        ...currentActivities,
+      ]);
+
+      setEndLeaseOpen(false);
+      setActionMenuOpen(false);
+    } catch (error) {
+      console.warn("End lease error:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to end this lease. Please try again."
+      );
+    } finally {
+      setEndingLease(false);
     }
   }
 
@@ -801,6 +998,8 @@ async function handleDeleteNote() {
     return;
   }
 
+  rememberDeletedStarterNote(propertyId, noteToDelete.text);
+
   if (property) {
     await supabase.from("activity_logs").insert({
       property_id: property.id,
@@ -921,17 +1120,37 @@ async function downloadDocument(doc: LeaseDocumentRecord) {
 async function openDocument(doc: LeaseDocumentRecord) {
   if (!doc.storage_path) return;
 
+  const previewWindow = window.open("about:blank", "_blank");
+  if (previewWindow) {
+    previewWindow.opener = null;
+    previewWindow.document.title = doc.file_name || "Document";
+    previewWindow.document.body.innerHTML =
+      '<p style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: #52525b; padding: 24px;">Opening document...</p>';
+  }
+
   const { data, error } = await supabase.storage
     .from("lease-documents")
     .createSignedUrl(doc.storage_path, 60);
 
   if (error || !data?.signedUrl) {
+    previewWindow?.close();
     console.error("Open document error:", error);
     alert("Unable to open document.");
     return;
   }
 
-  window.open(data.signedUrl, "_blank");
+  if (previewWindow) {
+    previewWindow.location.replace(data.signedUrl);
+    return;
+  }
+
+  const link = document.createElement("a");
+  link.href = data.signedUrl;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 async function handleDeleteDocument() {
@@ -991,9 +1210,19 @@ async function handleDeleteDocument() {
 
     async function handleConnectStripe() {
   try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      alert("Please sign in again before connecting your bank account.");
+      return;
+    }
+
     const response = await fetch("/api/stripe/connect-account", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -1026,7 +1255,8 @@ async function handleDeleteDocument() {
   if (!property) return null;
 
   const lease = property.leases?.[0];
-  const leaseEndingSoon = lease?.end_date
+  const leaseEnded = isLeaseEnded(lease);
+  const leaseEndingSoon = !leaseEnded && lease?.end_date
   ? (() => {
       const diffDays = Math.ceil(
         (new Date(lease.end_date).getTime() - new Date().getTime()) /
@@ -1036,7 +1266,11 @@ async function handleDeleteDocument() {
       return diffDays >= 0 && diffDays <= 60;
     })()
   : false;
-  const leaseStatus = getLeaseStatus(lease?.end_date);
+  const leaseStatus = getLeaseStatus(
+    lease?.end_date,
+    lease?.lease_status,
+    lease?.ended_at
+  );
   const bankConnected = property.bank_status === "connected";
   const tenants = [...(lease?.lease_tenants || [])].sort((a, b) => {
   const aPrimary = a.tenant_role?.toLowerCase() === "primary";
@@ -1052,22 +1286,61 @@ async function handleDeleteDocument() {
   ) || tenants[0];
   const secondaryTenants = tenants.slice(1);
   const documents = lease?.lease_documents || [];
-  const visibleNotes = notes.slice(0, 2);
+  const workspaceNotes = getWorkspaceNotes(notes);
+  const visibleNotes = workspaceNotes.slice(0, 2);
   const visibleDocuments = documents.slice(0, 2);
   const visibleActivities = activities.slice(0, 4);
   const emptyActivitySlots = Math.max(0, 4 - visibleActivities.length);
+  const workspacePaymentTimeline = leaseEnded
+    ? []
+    : buildPaymentTimeline(
+        lease?.start_date,
+        lease?.end_date,
+        lease?.rent_due_day || "1st of the Month",
+        property.created_at,
+        {
+          monthlyRent: Number(lease?.monthly_rent || 0),
+          leaseSetupType: lease?.lease_setup_type,
+          paymentTrackingStartDate: lease?.payment_tracking_start_date,
+          leaseAmounts: lease?.lease_amounts || [],
+        }
+      );
+  const dueThisMonthRow =
+    workspacePaymentTimeline.find((item) => item.status === "upcoming") ??
+    workspacePaymentTimeline.find((item) => item.status === "late") ??
+    workspacePaymentTimeline[0] ??
+    null;
+  const dueThisMonthAmount = leaseEnded
+    ? 0
+    : dueThisMonthRow?.amount ?? Number(lease?.monthly_rent || 0);
+  const dueThisMonthHelper = leaseEnded
+    ? "Online rent collection is no longer available for this lease."
+    : buildDueThisMonthHelper({
+        leaseStartDate: lease?.start_date,
+        leaseSetupType: lease?.lease_setup_type,
+        dueRow: dueThisMonthRow,
+        leaseAmounts: lease?.lease_amounts || [],
+      });
   const mobilePaymentMap = new Map(
     payments.map((payment) => [
       String(payment.period_label || "").toLowerCase(),
       payment,
     ])
   );
-  const mobilePaymentsPreview = buildPaymentTimeline(
-    lease?.start_date,
-    lease?.end_date,
-    lease?.rent_due_day || "1st of the Month",
-    property.created_at
-  )
+  const mobilePaymentsPreview = (leaseEnded
+    ? []
+    : buildPaymentTimeline(
+        lease?.start_date,
+        lease?.end_date,
+        lease?.rent_due_day || "1st of the Month",
+        property.created_at,
+        {
+          monthlyRent: Number(lease?.monthly_rent || 0),
+          leaseSetupType: lease?.lease_setup_type,
+          paymentTrackingStartDate: lease?.payment_tracking_start_date,
+          leaseAmounts: lease?.lease_amounts || [],
+        }
+      ))
     .map((item) => {
       const savedPayment = mobilePaymentMap.get(item.monthFull.toLowerCase());
       const status = normalizePaymentStatus(savedPayment?.status || item.status);
@@ -1076,7 +1349,7 @@ async function handleDeleteDocument() {
         id: savedPayment?.id || item.key,
         month: item.month,
         status: getPaymentRowStyles(status).label,
-        amount: savedPayment?.amount || lease?.monthly_rent || 0,
+        amount: savedPayment?.amount || item.amount,
       };
     })
     .slice(0, 6);
@@ -1110,9 +1383,9 @@ async function handleDeleteDocument() {
         onViewPayments={() => setPaymentHistoryOpen(true)}
       />
 
-      <div className="mt-1 hidden h-full min-h-0 grid-cols-1 gap-2.5 overflow-y-auto pb-3 lg:mt-1.5 lg:grid lg:grid-cols-[minmax(0,1fr)_312px] lg:gap-2.5 lg:overflow-hidden">
+      <div className="mt-1 hidden h-full min-h-0 grid-cols-1 gap-2.5 overflow-y-auto pb-3 lg:mt-1.5 lg:grid lg:grid-cols-[minmax(0,1fr)_336px] lg:gap-2.5 lg:overflow-hidden">
         <div className="min-h-0 space-y-2.5 lg:overflow-y-auto lg:pr-0">
-          <section className="overflow-visible rounded-[26px] border border-zinc-200 bg-white p-4 shadow-none">
+          <section className="overflow-visible">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1153,25 +1426,36 @@ async function handleDeleteDocument() {
 </p>
               </div>
 
-            <div className="flex shrink-0 items-center gap-2">
-  <button
-  onClick={() =>
-    router.push(
-      leaseEndingSoon
-        ? `/dashboard/properties/${propertyId}/edit?step=3`
-        : `/dashboard/properties/${propertyId}/edit?step=1`
-    )
-  }
-  className={`rounded-2xl px-4 py-2.5 text-[13.5px] font-semibold transition ${
-    leaseEndingSoon
-      ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-      : "border border-zinc-200 bg-white text-slate-950 hover:bg-zinc-50"
-  }`}
->
-  {leaseEndingSoon ? "Extend Lease" : "Edit Lease"}
-</button>
+            <div className="flex shrink-0 translate-y-2 items-center gap-2">
+  {leaseEnded ? (
+    <button
+      type="button"
+      disabled
+      className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-[13.5px] font-semibold text-zinc-400"
+      title="New lease setup will be available from the property edit flow."
+    >
+      Create New Lease
+    </button>
+  ) : (
+    <button
+      onClick={() =>
+        router.push(
+          leaseEndingSoon
+            ? `/dashboard/properties/${propertyId}/edit?step=3`
+            : `/dashboard/properties/${propertyId}/edit?step=1`
+        )
+      }
+      className={`rounded-2xl px-4 py-2.5 text-[13.5px] font-semibold transition ${
+        leaseEndingSoon
+          ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+          : "border border-zinc-200 bg-white text-slate-950 hover:bg-zinc-50"
+      }`}
+    >
+      {leaseEndingSoon ? "Extend Lease" : "Edit Lease"}
+    </button>
+  )}
 
-  <div className="relative">
+  <div ref={actionMenuRef} className="relative">
     <button
       onClick={() => setActionMenuOpen(!actionMenuOpen)}
       className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
@@ -1181,6 +1465,17 @@ async function handleDeleteDocument() {
 
     {actionMenuOpen && (
       <div className="absolute right-0 top-12 z-50 w-[180px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
+        {!leaseEnded && lease?.id && (
+          <button
+            onClick={() => {
+              setActionMenuOpen(false);
+              setEndLeaseOpen(true);
+            }}
+            className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium text-slate-700 hover:bg-zinc-50 hover:text-slate-950"
+          >
+            End Lease
+          </button>
+        )}
         <button
           onClick={() => {
             setActionMenuOpen(false);
@@ -1199,9 +1494,10 @@ async function handleDeleteDocument() {
             <div className="mt-3.5 grid overflow-hidden rounded-[22px] border border-zinc-200 bg-white md:grid-cols-3">
               <PropertyTopMetric
                 icon="dollar"
-                label="Due This Month"
-                value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
-                subtext={`Due on ${lease?.rent_due_day || "—"}`}
+                value={formatCurrency(dueThisMonthAmount)}
+                subtext=""
+                rightLabel={`Due: ${lease?.rent_due_day || "—"}`}
+                helperText={dueThisMonthHelper}
                 tone="emerald"
               />
 
@@ -1233,19 +1529,20 @@ async function handleDeleteDocument() {
                 <>
                   <div>
                     <p className="text-[14px] font-semibold text-emerald-900">
-                      Workspace Ready
+                      {leaseEnded ? "Lease Ended" : "Workspace Ready"}
                     </p>
                     <p className="mt-1 text-[12px] leading-5 text-emerald-800">
-                      Your property workspace is fully configured and ready for
-                      rent collection.
+                      {leaseEnded
+                        ? "This lease is closed. History, notes, and documents remain available."
+                        : "Your property workspace is fully configured and ready for rent collection."}
                     </p>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2 lg:mt-0 lg:justify-end">
                     {[
                       "Bank account connected",
-                      "Tenant setup complete",
-                      "Lease active",
+                      leaseEnded ? "Resident history retained" : "Resident setup complete",
+                      leaseEnded ? "Lease ended" : "Email notifications enabled",
                     ].map((label) => (
                       <span
                         key={label}
@@ -1279,7 +1576,7 @@ async function handleDeleteDocument() {
               )}
             </div>
 
-            <div ref={tenantPopoverRef} className="relative mt-3 pt-2">
+            <div ref={tenantPopoverRef} className="relative z-[90] mt-3 pt-2">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <h2 className="text-[19px] font-medium tracking-[-0.04em] text-slate-950">
@@ -1314,10 +1611,12 @@ async function handleDeleteDocument() {
                 <div className="overflow-visible">
                   <TenantCard
                     tenant={primaryTenant}
+                    bankConnected={bankConnected}
                     onEdit={() =>
                       router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
                     }
                     onResendInvite={() => handleResendTenantInvite(primaryTenant)}
+                    onConnectBank={handleConnectStripe}
                     onRequestPayment={() => {
                       setSelectedPaymentTenant(primaryTenant);
                       setPaymentRequestOpen(true);
@@ -1332,7 +1631,7 @@ async function handleDeleteDocument() {
               )}
 
               {tenantsExpanded && secondaryTenants.length > 0 && (
-                <div className="absolute left-0 right-0 top-full z-[70] mt-2 rounded-[22px] border border-zinc-200 bg-white p-2.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
+                <div className="absolute left-0 right-0 top-full z-[140] mt-2 rounded-[22px] border border-zinc-200 bg-white p-2.5 shadow-[0_26px_80px_rgba(15,23,42,0.18)]">
                   <div
                     className={`space-y-2.5 ${
                       secondaryTenants.length > 3
@@ -1344,10 +1643,12 @@ async function handleDeleteDocument() {
                       <TenantCard
                         key={tenant.id}
                         tenant={tenant}
+                        bankConnected={bankConnected}
                         onEdit={() =>
                           router.push(`/dashboard/properties/${propertyId}/edit?step=2`)
                         }
                         onResendInvite={() => handleResendTenantInvite(tenant)}
+                        onConnectBank={handleConnectStripe}
                         onRequestPayment={() => {
                           setSelectedPaymentTenant(tenant);
                           setPaymentRequestOpen(true);
@@ -1361,15 +1662,15 @@ async function handleDeleteDocument() {
             </div>
           </section>
 
-          <section className="relative grid h-[236px] overflow-hidden rounded-[26px] border border-zinc-200 bg-white shadow-none lg:grid-cols-[minmax(0,1.45fr)_minmax(310px,1fr)]">
-            <div className="flex min-h-0 min-w-0 flex-col p-3.5">
+          <section className="relative grid h-[300px] py-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col px-0 py-2 lg:pr-3.5">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
                     Notes
                   </h2>
                   <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12.5px] font-semibold text-zinc-500">
-                    {notes.length}
+                    {workspaceNotes.length}
                   </span>
                 </div>
 
@@ -1391,90 +1692,100 @@ async function handleDeleteDocument() {
                 </div>
               </div>
 
-              <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
-                {notes.length === 0 ? (
-                  <div className="rounded-[18px] border border-amber-200 bg-[#FFF8EA] px-3.5 py-2.5">
-                    <span className="rounded-full bg-[#FFE8B8] px-2.5 py-1 text-[10.5px] font-semibold text-[#8A5A00]">
-                      Private Note
-                    </span>
-
-                    <p className="mt-2.5 text-[14px] font-medium leading-5 text-zinc-900">
+              <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-hidden pr-1">
+                {workspaceNotes.length === 0 ? (
+                  <div className="flex h-[96px] flex-col justify-between rounded-[18px] border border-amber-200 bg-[#FFF8EA] px-3.5 py-3">
+                    <p className="truncate text-[15px] font-semibold leading-5 text-zinc-900">
                       Save reminders, updates, and important property notes.
                     </p>
 
-                    <p className="mt-2.5 text-[12.5px] text-zinc-500">
+                    <p className="truncate text-[12.5px] text-zinc-500">
                       Getting Started • AvenueBoard
                     </p>
+
+                    <div className="flex justify-end">
+                      <span className="rounded-full bg-[#FFE8B8] px-2.5 py-1 text-[10.5px] font-semibold text-[#8A5A00]">
+                        Private Note
+                      </span>
+                    </div>
                   </div>
                 ) : (
-                  notes.map((note) => (
-                    <div
-                      key={note.id}
-                      className={`group relative rounded-[18px] border px-3.5 py-2 pr-11 ${
-                        note.type === "private"
-                          ? "border-amber-200 bg-[#FFF8EA]"
-                          : "border-blue-200 bg-[#EFF7FF]"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedNoteDelete(note);
-                          setNoteDeleteOpen(true);
-                        }}
-                        className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-zinc-400 opacity-0 transition-all duration-200 hover:bg-white hover:text-red-500 group-hover:opacity-100"
+                  visibleNotes.map((note) => {
+                    const notePreview = getNotePreview(note.text);
+                    const starterKind = getStarterNoteKind(note);
+
+                    return (
+                      <div
+                        key={note.id}
+                        className={`group relative flex h-[96px] flex-col justify-between rounded-[18px] border px-3.5 py-3 pr-11 ${
+                          note.type === "private"
+                            ? "border-amber-200 bg-[#FFF8EA]"
+                            : "border-blue-200 bg-[#EFF7FF]"
+                        }`}
                       >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                          <path
-                            d="M9 3h6M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-
-                      <p className="text-[14px] font-semibold leading-5 text-slate-950">
-                        {note.text}
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                        <p className="min-w-0 text-[12.5px] text-zinc-500">
-                          {formatDate(note.created_at)} •{" "}
-                          {note.created_by_role === "tenant"
-                            ? "Created by tenant"
-                            : "Created by landlord"}
-                          {note.type === "shared" && (
-                            <>
-                              {" "}•{" "}
-                              {note.created_by_role === "tenant"
-                                ? "Shared with landlord"
-                                : "Shared with tenant"}
-                            </>
-                          )}
-                        </p>
-
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
-                            note.type === "private"
-                              ? "bg-[#FFE8B8] text-[#8A5A00]"
-                              : "bg-[#DCEEFF] text-[#1D5F9F]"
-                          }`}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedNoteDelete(note);
+                            setNoteDeleteOpen(true);
+                          }}
+                          className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-zinc-400 opacity-0 transition-all duration-200 hover:bg-white hover:text-red-500 group-hover:opacity-100"
                         >
-                          {note.type === "private" ? "Private Note" : "Shared Note"}
-                        </span>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M9 3h6M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-semibold leading-5 text-slate-950">
+                            {notePreview.title}
+                          </p>
+
+                          <p className="mt-1 truncate text-[12.5px] text-zinc-500">
+                            {starterKind
+                              ? "Getting Started • AvenueBoard"
+                              : `${formatDate(note.created_at)} • ${
+                                  note.created_by_role === "tenant"
+                                    ? "Created by tenant"
+                                    : "Created by landlord"
+                                }${
+                                  note.type === "shared"
+                                    ? note.created_by_role === "tenant"
+                                      ? " • Shared with landlord"
+                                      : " • Shared with resident"
+                                    : ""
+                                }`}
+                          </p>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <span
+                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${
+                              note.type === "private"
+                                ? "bg-[#FFE8B8] text-[#8A5A00]"
+                                : "bg-[#DCEEFF] text-[#1D5F9F]"
+                            }`}
+                          >
+                            {note.type === "private" ? "Private Note" : "Shared Note"}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
             </div>
 
-            <div className="pointer-events-none absolute bottom-4 top-4 hidden w-px bg-zinc-200 lg:block" style={{ left: "59.2%" }} />
+            <div className="pointer-events-none absolute bottom-4 top-4 hidden w-px bg-zinc-200 lg:block" style={{ left: "55.6%" }} />
 
-            <div className="flex min-h-0 min-w-0 flex-col border-t border-zinc-200 p-3.5 lg:border-t-0">
+            <div className="flex min-h-0 min-w-0 flex-col border-t border-zinc-200 px-0 py-2 lg:border-t-0 lg:pl-3.5">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <h2 className="text-[20px] font-medium tracking-[-0.045em] text-slate-950">
@@ -1534,39 +1845,39 @@ async function handleDeleteDocument() {
                         </span>
                       </button>
 
-                      <div className="ml-3 flex shrink-0 items-center gap-2 text-[12.5px] font-semibold text-slate-600">
-                        <button
-                          type="button"
-                          onClick={() => openDocument(doc)}
-                          className="transition hover:text-slate-950"
-                        >
-                          View
-                        </button>
-                        <span className="text-zinc-300">/</span>
-                        <button
-                          type="button"
-                          onClick={() => downloadDocument(doc)}
-                          className="transition hover:text-slate-950"
-                        >
-                          Download
-                        </button>
-                        <span className="text-zinc-300">/</span>
-                        <button
+	                      <div className="ml-2 flex shrink-0 items-center gap-1 text-[10.5px] font-semibold text-slate-500">
+	                        <button
+	                          type="button"
+	                          onClick={() => openDocument(doc)}
+	                          className="px-0.5 py-0.5 transition hover:text-slate-950"
+	                        >
+	                          View
+	                        </button>
+	                        <span className="text-zinc-300">/</span>
+	                        <button
+	                          type="button"
+	                          onClick={() => downloadDocument(doc)}
+	                          className="px-0.5 py-0.5 transition hover:text-slate-950"
+	                        >
+	                          Download
+	                        </button>
+	                        <span className="text-zinc-300">/</span>
+	                        <button
                           type="button"
                           onClick={() => {
-                            setSelectedDocumentDelete(doc);
-                            setDocumentDeleteOpen(true);
-                          }}
-                          className="transition hover:text-red-500"
-                        >
-                          Delete
-                        </button>
+	                            setSelectedDocumentDelete(doc);
+	                            setDocumentDeleteOpen(true);
+	                          }}
+	                          className="px-0.5 py-0.5 transition hover:text-red-500"
+	                        >
+	                          Delete
+	                        </button>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-8 text-center">
-                    <p className="text-[14px] font-semibold text-zinc-800">
+                  <div className="flex min-h-[124px] items-center justify-center rounded-2xl border border-zinc-200 bg-zinc-50/70 px-5 py-8 text-center">
+                    <p className="max-w-[360px] text-[14px] font-medium leading-6 text-zinc-500">
                       Store leases, renewals, notices, inspections, and important property documents.
                     </p>
                   </div>
@@ -1618,7 +1929,7 @@ async function handleDeleteDocument() {
         </div>
 
 
-        <aside className="hidden min-h-0 flex-col gap-2.5 lg:flex lg:overflow-hidden">
+        <aside className="hidden min-h-0 translate-y-2 flex-col gap-2.5 lg:flex lg:overflow-hidden">
           <PaymentPerformanceCard
             payments={payments}
             leaseStartDate={lease?.start_date}
@@ -1626,6 +1937,9 @@ async function handleDeleteDocument() {
             monthlyRent={lease?.monthly_rent || 0}
             rentDueDay={lease?.rent_due_day || "1st of the Month"}
             propertyCreatedAt={property.created_at}
+            leaseSetupType={lease?.lease_setup_type}
+            paymentTrackingStartDate={lease?.payment_tracking_start_date}
+            leaseAmounts={lease?.lease_amounts || []}
             onViewHistory={() => setPaymentHistoryOpen(true)}
           />
 
@@ -1682,6 +1996,20 @@ async function handleDeleteDocument() {
     Manage Payout Settings
   </button>
 </section>
+
+          <div className="px-[18px] pt-5 text-right">
+            <p className="text-[14px] font-medium leading-5 text-zinc-500">
+              Need help?{" "}
+              <a
+                href="/help-center?section=faq"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#2563EB] transition hover:text-[#1D4ED8]"
+              >
+                Visit FAQ →
+              </a>
+            </p>
+          </div>
 
         </aside>
       </div>
@@ -1922,7 +2250,7 @@ async function handleDeleteDocument() {
 {inviteConfirmOpen && inviteTenant && (
   <ModalShell
     title="Resend tenant invite?"
-    subtitle={`This will send a new portal invitation to ${inviteTenant.email}.`}
+    subtitle={`This will send a new Resident Board invitation to ${inviteTenant.email}.`}
     onClose={() => {
       if (!sendingInvite) {
         setInviteConfirmOpen(false);
@@ -2011,6 +2339,35 @@ async function handleDeleteDocument() {
   </ModalShell>
 )}
 
+      {endLeaseOpen && (
+        <ModalShell
+          title="End this lease?"
+          subtitle="Use this when the resident has moved out or you no longer want to collect rent for this lease."
+          onClose={() => {
+            if (!endingLease) setEndLeaseOpen(false);
+          }}
+        >
+          <div className="rounded-2xl border border-zinc-100 bg-zinc-50/80 px-4 py-4">
+            <p className="text-[13.5px] font-semibold leading-5 text-slate-950">
+              Ending the lease will:
+            </p>
+            <ul className="mt-3 space-y-2 text-[13.5px] font-medium leading-5 text-zinc-600">
+              <li>• Stop future rent collection</li>
+              <li>• Disable Pay Now and AutoPay for this lease</li>
+              <li>• Keep payment history, notes, documents, and activity</li>
+              <li>• Let you create a new lease later for this property</li>
+            </ul>
+          </div>
+
+          <ModalActions
+            onCancel={() => setEndLeaseOpen(false)}
+            onSave={handleEndLease}
+            saving={endingLease}
+            saveLabel="End Lease"
+          />
+        </ModalShell>
+      )}
+
       {notesViewOpen && (
         <PropertyNotesFullView
           notes={notes}
@@ -2049,6 +2406,9 @@ async function handleDeleteDocument() {
           monthlyRent={lease?.monthly_rent || 0}
           rentDueDay={lease?.rent_due_day || "1st of the Month"}
           propertyCreatedAt={property.created_at}
+          leaseSetupType={lease?.lease_setup_type}
+          paymentTrackingStartDate={lease?.payment_tracking_start_date}
+          leaseAmounts={lease?.lease_amounts || []}
           propertyName={property.property_label}
           onClose={() => setPaymentHistoryOpen(false)}
         />
@@ -2121,6 +2481,9 @@ function PaymentPerformanceCard({
   monthlyRent,
   rentDueDay,
   propertyCreatedAt,
+  leaseSetupType,
+  paymentTrackingStartDate,
+  leaseAmounts,
   onViewHistory,
 }: {
   payments: RentPaymentRecord[];
@@ -2129,6 +2492,9 @@ function PaymentPerformanceCard({
   monthlyRent: number;
   rentDueDay: string;
   propertyCreatedAt?: string | null;
+  leaseSetupType?: string | null;
+  paymentTrackingStartDate?: string | null;
+  leaseAmounts?: LeaseAmountRecord[];
   onViewHistory: () => void;
 }) {
   const upcomingRef = useRef<HTMLDivElement | null>(null);
@@ -2140,11 +2506,17 @@ function PaymentPerformanceCard({
     ])
   );
 
-  const timeline = buildPaymentTimeline(
+  const timeline = applyPaymentTimelineStatuses(buildPaymentTimeline(
   leaseStartDate,
   leaseEndDate,
   rentDueDay,
-  propertyCreatedAt
+  propertyCreatedAt,
+  {
+    monthlyRent,
+    leaseSetupType,
+    paymentTrackingStartDate,
+    leaseAmounts,
+  }
 ).map((item) => {
   const savedPayment = paymentMap.get(item.monthFull.toLowerCase());
 
@@ -2152,9 +2524,11 @@ function PaymentPerformanceCard({
     ...item,
     id: savedPayment?.id || item.key,
     status: normalizePaymentStatus(savedPayment?.status || item.status),
-    amount: savedPayment?.amount || monthlyRent,
+    amount: savedPayment?.amount || item.amount,
+    paidAt: savedPayment?.paid_at || null,
+    createdAt: savedPayment?.created_at || null,
   };
-});
+}));
 
   const upcomingKey =
     timeline.find((item) => item.status === "upcoming")?.id || "";
@@ -2176,39 +2550,34 @@ function PaymentPerformanceCard({
   const futureCount = timeline.filter((p) => p.status === "future").length;
 
   return (
-    <section className="rounded-[24px] border border-zinc-200 bg-white p-[18px] shadow-none">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[20px] font-medium leading-6 tracking-[-0.045em] text-slate-950">
+    <section className="rounded-[24px] border border-zinc-200 bg-white p-5 shadow-none">
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 pb-4">
+        <h2 className="min-w-0 text-[18px] font-medium leading-6 tracking-[-0.045em] text-slate-950">
             Payout Performance
-          </h2>
-          <div className="mt-1 text-[12.5px] leading-5">
-            <p className="whitespace-nowrap text-zinc-500">
-              <span>
-                Rent payments for {formatMonthYear(leaseStartDate)} –{" "}
-                {formatMonthYear(leaseEndDate)}
-              </span>
-            </p>
-            <button
-              type="button"
-              onClick={onViewHistory}
-              className="mt-0.5 block w-full text-right text-[12.5px] font-semibold text-slate-950 transition hover:text-slate-700"
-            >
-              All history →
-            </button>
-          </div>
-        </div>
+        </h2>
+
+        <button
+          type="button"
+          onClick={onViewHistory}
+          className="flex shrink-0 items-center gap-1.5 text-[13px] font-semibold leading-5 text-slate-950 transition hover:text-slate-700 active:scale-[0.96]"
+        >
+          All Statements <span>→</span>
+        </button>
       </div>
 
-      <div className="mt-3 max-h-[286px] space-y-1.5 overflow-y-auto scroll-smooth pr-1 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
-        {timeline.map((item) => (
+      <div className="mt-5 max-h-[304px] space-y-4 overflow-y-auto scroll-smooth pr-1 [scrollbar-color:#d4d4d8_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent">
+        {timeline.map((item, index) => (
           <PaymentMonthRow
             key={item.id}
+            isLast={index === timeline.length - 1}
             item={{
               key: item.id,
               month: item.month,
               dueText: item.dueText,
+              dueDate: item.dueDate,
               status: item.status,
+              paidAt: item.paidAt,
+              createdAt: item.createdAt,
             }}
             monthlyRent={item.amount}
             rowRef={item.status === "upcoming" ? upcomingRef : undefined}
@@ -2216,7 +2585,7 @@ function PaymentPerformanceCard({
         ))}
       </div>
 
-      <div className="mt-3.5 grid grid-cols-4 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
+      <div className="mt-3 grid grid-cols-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
         <PaymentStat label="Paid" value={paidCount} color="text-emerald-600" dot="bg-emerald-500" />
         <PaymentStat label="Upcoming" value={upcomingCount} color="text-blue-600" dot="bg-blue-500" />
         <PaymentStat label="Late" value={lateCount} color="text-amber-600" dot="bg-amber-400" />
@@ -2230,37 +2599,78 @@ function PaymentMonthRow({
   item,
   monthlyRent,
   rowRef,
+  isLast,
 }: {
   item: {
     key: string;
     month: string;
     dueText: string;
+    dueDate?: string | null;
     status: MonthStatus;
+    paidAt?: string | null;
+    createdAt?: string | null;
   };
   monthlyRent: number;
   rowRef?: RefObject<HTMLDivElement | null>;
+  isLast?: boolean;
 }) {
-  const styles = getPaymentRowStyles(item.status);
+  const yearLabel = item.month.match(/\b\d{4}\b/)?.[0] || "";
+  const dueDateText = yearLabel ? `${item.dueText}, ${yearLabel}` : item.dueText;
+  const monthLabel = formatFullMonthFromDueText(dueDateText, item.month);
+  const detailText =
+    item.status === "paid"
+      ? `Paid on ${formatDate(item.paidAt || item.createdAt)}`
+      : `Due on ${dueDateText}`;
 
   return (
     <div
       ref={rowRef}
-      className="grid grid-cols-[minmax(72px,1fr)_auto_minmax(64px,auto)] items-center gap-2 rounded-2xl border border-zinc-100 bg-zinc-50/70 px-3 py-2"
+      className="grid grid-cols-[28px_minmax(0,1fr)] items-start gap-3"
     >
-      <p className="truncate text-[12.5px] font-semibold tracking-[-0.01em] text-slate-800">
-        {item.month}
-      </p>
+      <div className="relative flex justify-center">
+        {!isLast && (
+          <span className="absolute top-8 h-[42px] w-px bg-zinc-200" />
+        )}
+        <span
+          className={`z-10 flex h-7 w-7 items-center justify-center rounded-full border text-[12px] font-semibold ${
+            item.status === "paid"
+              ? "border-emerald-500 bg-emerald-500 text-white shadow-[0_8px_18px_rgba(16,185,129,0.22)]"
+              : item.status === "late"
+              ? "border-amber-400 bg-amber-400 text-white shadow-[0_8px_18px_rgba(251,191,36,0.2)]"
+              : item.status === "upcoming"
+              ? "border-blue-500 bg-blue-500 text-white shadow-[0_8px_18px_rgba(59,130,246,0.2)]"
+              : "border-zinc-300 bg-white text-zinc-400"
+          }`}
+        >
+          {item.status === "paid" ? "✓" : ""}
+        </span>
+      </div>
 
-      <span
-        className={`inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles.pill}`}
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${styles.dot}`} />
-        {styles.label}
-      </span>
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="shrink-0 whitespace-nowrap text-[13px] font-semibold leading-5 text-zinc-950">
+            {monthLabel}
+          </p>
 
-      <p className="shrink-0 text-right text-[12.5px] font-semibold tabular-nums text-slate-950">
-        ${Number(monthlyRent || 0).toLocaleString()}
-      </p>
+          <span className="h-px min-w-[18px] flex-1 bg-zinc-100" />
+
+          <p
+            className={`shrink-0 text-right text-[13px] font-semibold leading-5 tabular-nums ${
+              item.status === "paid"
+                ? "text-emerald-600"
+                : item.status === "late"
+                ? "text-amber-700"
+                : "text-zinc-700"
+            }`}
+          >
+            ${Number(monthlyRent || 0).toLocaleString()}
+          </p>
+        </div>
+
+        <p className="mt-1 truncate text-[12px] font-medium leading-5 text-zinc-500">
+          {detailText}
+        </p>
+      </div>
     </div>
   );
 }
@@ -2277,13 +2687,15 @@ function PaymentStat({
   dot: string;
 }) {
   return (
-    <div className="border-r border-zinc-200 px-2 py-2.5 text-center last:border-r-0">
-      <div className="flex items-center justify-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-        <p className="text-[11px] font-semibold text-zinc-500">{label}</p>
+    <div className="min-w-0 border-r border-zinc-200 px-2 py-3 text-center last:border-r-0">
+      <div className="flex min-w-0 items-center justify-center gap-1">
+        <span className={`aspect-square h-1.5 shrink-0 rounded-full ${dot}`} />
+        <p className="whitespace-nowrap text-[10px] font-semibold leading-4 text-zinc-500">
+          {label}
+        </p>
       </div>
 
-      <p className={`mt-1 text-[19px] font-semibold tracking-[-0.04em] ${color}`}>
+      <p className={`mt-2 text-center text-[22px] font-semibold leading-none tracking-[-0.05em] ${color}`}>
         {value}
       </p>
     </div>
@@ -2449,29 +2861,29 @@ function PropertyDocumentsFullView({
                 </span>
               </button>
 
-              <div className="flex shrink-0 items-center gap-2 text-[12.5px] font-semibold text-slate-600">
-                <button
-                  type="button"
-                  onClick={() => onOpenDocument(doc)}
-                  className="transition hover:text-slate-950"
-                >
-                  View
-                </button>
-                <span className="text-zinc-300">/</span>
-                <button
-                  type="button"
-                  onClick={() => onDownloadDocument(doc)}
-                  className="transition hover:text-slate-950"
-                >
-                  Download
-                </button>
-                <span className="text-zinc-300">/</span>
-                <button
-                  type="button"
-                  onClick={() => onDeleteDocument(doc)}
-                  className="transition hover:text-red-500"
-                >
-                  Delete
+	              <div className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold text-slate-500">
+	                <button
+	                  type="button"
+	                  onClick={() => onOpenDocument(doc)}
+	                  className="px-0.5 py-0.5 transition hover:text-slate-950"
+	                >
+	                  View
+	                </button>
+	                <span className="text-zinc-300">/</span>
+	                <button
+	                  type="button"
+	                  onClick={() => onDownloadDocument(doc)}
+	                  className="px-0.5 py-0.5 transition hover:text-slate-950"
+	                >
+	                  Download
+	                </button>
+	                <span className="text-zinc-300">/</span>
+	                <button
+	                  type="button"
+	                  onClick={() => onDeleteDocument(doc)}
+	                  className="px-0.5 py-0.5 transition hover:text-red-500"
+	                >
+	                  Delete
                 </button>
               </div>
             </div>
@@ -2489,6 +2901,9 @@ function PaymentHistoryFullView({
   monthlyRent,
   rentDueDay,
   propertyCreatedAt,
+  leaseSetupType,
+  paymentTrackingStartDate,
+  leaseAmounts,
   propertyName,
   onClose,
 }: {
@@ -2498,6 +2913,9 @@ function PaymentHistoryFullView({
   monthlyRent: number;
   rentDueDay: string;
   propertyCreatedAt?: string | null;
+  leaseSetupType?: string | null;
+  paymentTrackingStartDate?: string | null;
+  leaseAmounts?: LeaseAmountRecord[];
   propertyName: string;
   onClose: () => void;
 }) {
@@ -2507,11 +2925,17 @@ function PaymentHistoryFullView({
       payment,
     ])
   );
-  const timeline = buildPaymentTimeline(
+  const timeline = applyPaymentTimelineStatuses(buildPaymentTimeline(
     leaseStartDate,
     leaseEndDate,
     rentDueDay,
-    propertyCreatedAt
+    propertyCreatedAt,
+    {
+      monthlyRent,
+      leaseSetupType,
+      paymentTrackingStartDate,
+      leaseAmounts,
+    }
   ).map((item) => {
     const savedPayment = paymentMap.get(item.monthFull.toLowerCase());
     const status = normalizePaymentStatus(savedPayment?.status || item.status);
@@ -2519,12 +2943,12 @@ function PaymentHistoryFullView({
     return {
       ...item,
       id: savedPayment?.id || item.key,
-      amount: savedPayment?.amount || monthlyRent,
+      amount: savedPayment?.amount || item.amount,
       status,
       paidAt: savedPayment?.paid_at || null,
       createdAt: savedPayment?.created_at || null,
     };
-  });
+  }));
 
   const paidCount = timeline.filter((item) => item.status === "paid").length;
   const lateCount = timeline.filter((item) => item.status === "late").length;
@@ -2652,7 +3076,7 @@ function LargePropertyModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/30 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[240] overflow-y-auto bg-black/30 backdrop-blur-sm">
       <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
         <div className="flex h-[76vh] min-h-[520px] w-full max-w-[1120px] flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_40px_120px_rgba(15,23,42,0.22)]">
           <div className="flex shrink-0 items-start justify-between gap-5 border-b border-zinc-200 px-6 py-5">
@@ -2775,12 +3199,16 @@ function PropertyTopMetric({
   label,
   value,
   subtext,
+  rightLabel,
+  helperText,
   tone,
 }: {
   icon: "dollar" | "shield" | "calendar";
-  label: string;
+  label?: string;
   value: string;
-  subtext: string;
+  subtext?: string;
+  rightLabel?: string;
+  helperText?: string;
   tone: "emerald" | "amber" | "blue";
 }) {
   const toneClass =
@@ -2837,14 +3265,29 @@ function PropertyTopMetric({
         )}
       </span>
 
-      <div className="min-w-0">
-        <p className="text-[12.5px] font-semibold leading-4 text-slate-500">{label}</p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          {label ? (
+            <p className="text-[12.5px] font-semibold leading-4 text-slate-500">{label}</p>
+          ) : null}
+          {rightLabel ? (
+            <p className="shrink-0 text-right text-[11.5px] font-medium leading-4 text-zinc-400">
+              {rightLabel}
+            </p>
+          ) : null}
+        </div>
         <p className="mt-1 truncate text-[22px] font-semibold tracking-[-0.055em] text-slate-950">
           {value}
         </p>
-        <p className="mt-0.5 truncate text-[13px] font-medium leading-5 text-slate-500">
-          {subtext}
-        </p>
+        {helperText ? (
+          <p className="mt-0.5 truncate text-[12.5px] font-medium leading-5 text-zinc-500">
+            {helperText}
+          </p>
+        ) : subtext ? (
+          <p className="mt-0.5 truncate text-[13px] font-medium leading-5 text-slate-500">
+            {subtext}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -2888,14 +3331,18 @@ function MetricCard({
 
 function TenantCard({
   tenant,
+  bankConnected,
   onEdit,
   onResendInvite,
+  onConnectBank,
   onRequestPayment,
   onDelete,
 }: {
   tenant: TenantRecord;
+  bankConnected: boolean;
   onEdit: () => void;
   onResendInvite: () => void;
+  onConnectBank: () => void;
   onRequestPayment: () => void;
   onDelete: () => void;
 }) {
@@ -2920,8 +3367,15 @@ useEffect(() => {
 }, []);
 
   const inviteAccepted = tenant.invite_status === "accepted";
+  const inviteSent = tenant.invite_status === "sent";
   const isPrimaryTenant = tenant.tenant_role?.toLowerCase() === "primary";
-  const roleLabel = getTenantRoleLabel(tenant.tenant_role);
+  const inviteStatusLabel = inviteAccepted
+    ? "Invite accepted"
+    : !bankConnected
+    ? "Bank setup required"
+    : inviteSent
+    ? "Invite sent"
+    : "Invite ready";
 
   return (
     <div
@@ -2938,31 +3392,29 @@ useEffect(() => {
             {tenant.first_name} {tenant.last_name}
           </p>
 
-          {tenant.tenant_role && (
-            <span
-              className={`rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold ${
-                isPrimaryTenant
-                  ? "border-blue-100 bg-blue-50/80 text-blue-700"
-                  : "border-zinc-200 bg-zinc-100 text-zinc-600"
-              }`}
-            >
-              {roleLabel}
+          {isPrimaryTenant && (
+            <span className="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-0.5 text-[10.5px] font-semibold text-blue-700">
+              Primary
             </span>
           )}
 
-          <span
-            className={`rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold ${
-              inviteAccepted
-                ? "border-emerald-100 bg-emerald-50/80 text-emerald-700"
-                : "border-amber-100 bg-amber-50/80 text-amber-700"
-            }`}
-          >
-            {inviteAccepted ? "Invite accepted" : "Invite sent"}
-          </span>
+          {isPrimaryTenant && (
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold ${
+                inviteAccepted
+                  ? "border-emerald-100 bg-emerald-50/80 text-emerald-700"
+                  : !bankConnected
+                  ? "border-blue-100 bg-blue-50/80 text-blue-700"
+                  : "border-amber-100 bg-amber-50/80 text-amber-700"
+              }`}
+            >
+              {inviteStatusLabel}
+            </span>
+          )}
 
-          {inviteAccepted && (
+          {isPrimaryTenant && inviteAccepted && (
             <span className="rounded-full border border-emerald-100 bg-emerald-50/80 px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700">
-              Dashboard enabled
+              Board enabled
             </span>
           )}
         </div>
@@ -2983,11 +3435,16 @@ useEffect(() => {
         return;
       }
 
+      if (!bankConnected) {
+        onConnectBank();
+        return;
+      }
+
       onResendInvite();
     }}
     className="relative z-30 rounded-xl bg-[#33435F] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[#2A3850]"
   >
-    {inviteAccepted ? "Request Payment" : "Resend Invite"}
+    {inviteAccepted ? "Request Payment" : !bankConnected ? "Connect Bank" : "Resend Invite"}
   </button>
 )}
 
@@ -3017,15 +3474,17 @@ useEffect(() => {
           </button>
 
 
-          <button
-            onClick={() => {
-              setMenuOpen(false);
-              onDelete();
-            }}
-            className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-red-600 hover:bg-red-50"
-          >
-            Delete tenant
-          </button>
+          {!isPrimaryTenant && (
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                onDelete();
+              }}
+              className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-red-600 hover:bg-red-50"
+            >
+              Delete tenant
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -3209,7 +3668,7 @@ function getActivityTone(activity: ActivityLog) {
   const isTenant =
     activityType.includes("tenant") ||
     activityTitle.includes("tenant") ||
-    activityTitle.includes("dashboard enabled");
+    activityTitle.includes("board enabled");
   const isTenantSuccess =
     isTenant &&
     (text.includes("accepted") ||
@@ -3284,7 +3743,7 @@ function getActivityTone(activity: ActivityLog) {
       iconClass: isTenantSuccess
         ? "bg-slate-950 text-white ring-1 ring-slate-950/10"
         : "bg-white text-slate-950 ring-1 ring-slate-950/15",
-      badge: "Tenant",
+      badge: "",
       badgeClass: "",
     };
   }
@@ -3412,7 +3871,7 @@ function ModalShell({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/30 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[240] overflow-y-auto bg-black/30 backdrop-blur-sm">
       <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-[720px] overflow-hidden rounded-[32px] bg-white shadow-[0_40px_120px_rgba(15,23,42,0.22)]">
           <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-5 pb-4 pt-5 sm:px-6">
@@ -3486,7 +3945,7 @@ function DeleteDocumentModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
       <div className="w-full max-w-[430px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
         <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900">
           Delete document?
@@ -3528,7 +3987,7 @@ function DeleteNoteModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
       <div className="w-full max-w-[430px] rounded-[28px] bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.25)]">
         <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900">
           Delete note?
@@ -3574,7 +4033,7 @@ function DeleteTenantModal({
   const tenantName = getTenantFullName(tenant);
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
       <div className="w-full max-w-[460px] rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
         <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-900">
           Remove tenant?
@@ -3621,7 +4080,7 @@ function DeletePropertyModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
       <div className="w-full max-w-[460px] rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-[22px] font-semibold text-red-600">
           !
@@ -3715,6 +4174,159 @@ function formatDate(date?: string | null) {
   });
 }
 
+function getNotePreview(text: string) {
+  const parts = String(text || "")
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    title: parts[0] || "Untitled note",
+    body: parts.slice(1).join(" "),
+  };
+}
+
+function getStarterNoteTitle(text: string) {
+  const title = String(text || "").split("\n")[0].trim();
+  return STARTER_PROPERTY_NOTES.some((note) => note.title === title)
+    ? title
+    : "";
+}
+
+function getStarterNoteKind(
+  note: Pick<PropertyNote, "text" | "type"> | { text?: string | null; note_type?: string | null }
+) {
+  const title = String(note.text || "").split("\n")[0].trim();
+  const type = "type" in note ? note.type : note.note_type;
+
+  if (type === "shared" && title === "Welcome to AvenueBoard") {
+    return "shared";
+  }
+
+  if (
+    type === "private" &&
+    (title === "Save reminders, updates, and important property notes." ||
+      title === "Welcome to your Property Workspace")
+  ) {
+    return "private";
+  }
+
+  return "";
+}
+
+function getWorkspaceNotes(notes: PropertyNote[]) {
+  const starters = new Map<string, PropertyNote>();
+  const normalNotes: PropertyNote[] = [];
+
+  notes.forEach((note) => {
+    const starterKind = getStarterNoteKind(note);
+
+    if (!starterKind) {
+      normalNotes.push(note);
+      return;
+    }
+
+    const existing = starters.get(starterKind);
+    if (
+      !existing ||
+      new Date(note.created_at).getTime() > new Date(existing.created_at).getTime()
+    ) {
+      starters.set(starterKind, note);
+    }
+  });
+
+  normalNotes.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  return [
+    ...normalNotes,
+    ...(["shared", "private"] as const)
+      .map((kind) => starters.get(kind))
+      .filter((note): note is PropertyNote => Boolean(note)),
+  ];
+}
+
+function getDeletedStarterNoteKey(propertyId: string) {
+  return `avenueboard_deleted_starter_notes_${propertyId}`;
+}
+
+function getDeletedStarterNotes(propertyId: string) {
+  if (typeof window === "undefined") return new Set<string>();
+
+  try {
+    return new Set<string>(
+      JSON.parse(localStorage.getItem(getDeletedStarterNoteKey(propertyId)) || "[]")
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function rememberDeletedStarterNote(propertyId: string, text: string) {
+  const title = getStarterNoteTitle(text);
+  if (!title || typeof window === "undefined") return;
+
+  const deletedTitles = getDeletedStarterNotes(propertyId);
+  deletedTitles.add(title);
+  localStorage.setItem(
+    getDeletedStarterNoteKey(propertyId),
+    JSON.stringify([...deletedTitles])
+  );
+}
+
+async function ensureMissingStarterNotes({
+  propertyId,
+  leaseId,
+  profileId,
+  notes,
+}: {
+  propertyId: string;
+  leaseId: string | null;
+  profileId: string;
+  notes: any[];
+}) {
+  const starterKinds = new Set(
+    notes.map((note) => getStarterNoteKind(note)).filter(Boolean)
+  );
+  const normalNoteCount = notes.filter((note) => !getStarterNoteKind(note)).length;
+  const deletedTitles = getDeletedStarterNotes(propertyId);
+  const shouldSeedEmptyProperty =
+    notes.length === 0 && deletedTitles.size === 0;
+  const shouldRepairStarterOnlyProperty =
+    notes.length > 0 && normalNoteCount === 0 && starterKinds.size > 0 && starterKinds.size < 2;
+
+  if (!shouldSeedEmptyProperty && !shouldRepairStarterOnlyProperty) return notes;
+
+  const missingNotes = STARTER_PROPERTY_NOTES.filter(
+    (note) => !starterKinds.has(note.note_type) && !deletedTitles.has(note.title)
+  ).map((note, index) => ({
+    property_id: propertyId,
+    lease_id: leaseId,
+    profile_id: profileId,
+    note_type: note.note_type,
+    text: `${note.title}\n\n${note.body}`,
+    created_by_role: "landlord",
+    created_at: new Date(Date.now() - index * 1000).toISOString(),
+  }));
+
+  if (missingNotes.length === 0) return notes;
+
+  const { data, error } = await supabase
+    .from("property_notes")
+    .insert(missingNotes)
+    .select("*");
+
+  if (error) {
+    console.warn("Starter note repair skipped:", error);
+    return notes;
+  }
+
+  return [...(data || []), ...notes].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
 function formatDateTime(date?: string | null) {
   if (!date) return "—";
 
@@ -3764,6 +4376,38 @@ function formatDateShort(date?: string | null) {
   });
 }
 
+function formatFullMonthFromDueText(dueText: string, fallback: string) {
+  const parsed = new Date(dueText);
+
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-US", { month: "long" });
+  }
+
+  const monthToken = fallback.split(/\s+/)[0] || fallback;
+  const monthIndex = [
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+  ].indexOf(monthToken.slice(0, 3).toLowerCase());
+
+  if (monthIndex >= 0) {
+    return new Date(2026, monthIndex, 1).toLocaleDateString("en-US", {
+      month: "long",
+    });
+  }
+
+  return monthToken;
+}
+
 function normalizePaymentStatus(status?: string | null): MonthStatus {
   const normalized = String(status || "").toLowerCase();
 
@@ -3789,20 +4433,33 @@ function buildPaymentTimeline(
   leaseStartDate?: string | null,
   leaseEndDate?: string | null,
   rentDueDay?: string,
-  _propertyCreatedAt?: string | null
+  _propertyCreatedAt?: string | null,
+  paymentOptions: {
+    monthlyRent?: number;
+    leaseSetupType?: string | null;
+    paymentTrackingStartDate?: string | null;
+    leaseAmounts?: LeaseAmountRecord[];
+  } = {}
 ): {
   key: string;
   month: string;
   monthFull: string;
   dueText: string;
+  dueDate: string;
   status: MonthStatus;
+  amount: number;
 }[] {
   if (!leaseStartDate || !leaseEndDate) return [];
 
   const leaseEnd = parseLocalDate(leaseEndDate);
   const today = new Date();
-
-  const startMonth = getFirstRentCycleMonthStart(leaseStartDate);
+  const startMonth =
+    getLeaseFirstPaymentCycleDate({
+      startDate: leaseStartDate,
+      paymentTrackingStartDate: paymentOptions.paymentTrackingStartDate,
+      leaseSetupType: paymentOptions.leaseSetupType,
+      leaseAmounts: paymentOptions.leaseAmounts || [],
+    }) || getFirstRentCycleMonthStart(leaseStartDate);
 
   const dueDay = Number(String(rentDueDay || "1").match(/\d+/)?.[0] || 1);
 
@@ -3811,7 +4468,9 @@ function buildPaymentTimeline(
     month: string;
     monthFull: string;
     dueText: string;
+    dueDate: string;
     status: MonthStatus;
+    amount: number;
   }[] = [];
 
   const cursor = new Date(startMonth);
@@ -3854,7 +4513,15 @@ if (firstTrackedMonth) {
         month: "short",
         day: "numeric",
       }),
+      dueDate: dueDate.toISOString(),
       status,
+      amount: getLeasePaymentAmountForCycle({
+        cycleDate: monthDate,
+        firstCycleDate: startMonth,
+        monthlyRent: Number(paymentOptions.monthlyRent || 0),
+        leaseSetupType: paymentOptions.leaseSetupType,
+        leaseAmounts: paymentOptions.leaseAmounts || [],
+      }),
     });
 
     cursor.setMonth(cursor.getMonth() + 1);
@@ -3863,9 +4530,96 @@ if (firstTrackedMonth) {
   return rows;
 }
 
+function applyPaymentTimelineStatuses<
+  T extends {
+    status: MonthStatus;
+    dueDate?: string | null;
+  }
+>(timeline: T[]) {
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  let upcomingAssigned = false;
+
+  return timeline.map((item) => {
+    if (item.status === "paid") return item;
+
+    const dueDate = item.dueDate ? parseLocalDate(item.dueDate) : null;
+
+    if (dueDate && dueDate < todayStart) {
+      return { ...item, status: "late" as MonthStatus };
+    }
+
+    if (!upcomingAssigned) {
+      upcomingAssigned = true;
+      return { ...item, status: "upcoming" as MonthStatus };
+    }
+
+    return { ...item, status: "future" as MonthStatus };
+  });
+}
+
 function getFirstRentCycleMonthStart(value: string) {
   const { year, monthIndex, day } = getLocalDateParts(value);
   return new Date(year, day === 1 ? monthIndex : monthIndex + 1, 1);
+}
+
+function buildDueThisMonthHelper({
+  leaseStartDate,
+  leaseSetupType,
+  dueRow,
+  leaseAmounts,
+}: {
+  leaseStartDate?: string | null;
+  leaseSetupType?: string | null;
+  dueRow?: { key: string; monthFull: string } | null;
+  leaseAmounts: LeaseAmountRecord[];
+}) {
+  if (leaseSetupType !== "new" || !leaseStartDate || !dueRow) return "";
+  if (!getProratedRentAmount(leaseAmounts)) return "";
+
+  const firstPaymentCycle =
+    getLeaseFirstPaymentCycleDate({
+      startDate: leaseStartDate,
+      leaseSetupType,
+      leaseAmounts,
+    }) || getFirstRentCycleMonthStart(leaseStartDate);
+
+  if (dueRow.key !== `${firstPaymentCycle.getFullYear()}-${firstPaymentCycle.getMonth()}`) {
+    return "";
+  }
+
+  const startMonth = formatMonthName(parseLocalDate(leaseStartDate));
+  const firstPaymentMonth = formatMonthName(firstPaymentCycle);
+  const adjustmentTypes = leaseAmounts
+    .map((item) => String(item.amount_type || "").trim().toLowerCase())
+    .filter((type) => type && type !== "prorated rent");
+  const hasDiscount = adjustmentTypes.includes("one-time discount");
+  const hasOneTimeCharge = adjustmentTypes.some((type) => type !== "one-time discount");
+
+  if (hasDiscount) {
+    return `Includes prorated ${startMonth} rent and first payment adjustments.`;
+  }
+
+  if (hasOneTimeCharge) {
+    return `Includes prorated ${startMonth} rent, ${firstPaymentMonth} monthly rent, and one-time charges.`;
+  }
+
+  return `Includes prorated ${startMonth} rent + ${firstPaymentMonth} monthly rent.`;
+}
+
+function formatMonthName(date: Date) {
+  return date.toLocaleDateString("en-US", { month: "long" });
+}
+
+function formatCurrency(value: number) {
+  return `$${Number(value || 0).toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function parseLocalDate(value: string) {
@@ -3942,7 +4696,35 @@ function LegendDot({
   );
 }
 
-function getLeaseStatus(endDate?: string | null) {
+function isLeaseEnded(lease?: {
+  lease_status?: string | null;
+  ended_at?: string | null;
+}) {
+  return (
+    Boolean(lease?.ended_at) ||
+    ["ended", "inactive", "terminated"].includes(
+      String(lease?.lease_status || "").toLowerCase()
+    )
+  );
+}
+
+function getLeaseStatus(
+  endDate?: string | null,
+  leaseStatus?: string | null,
+  endedAt?: string | null
+) {
+  if (
+    endedAt ||
+    ["ended", "inactive", "terminated"].includes(
+      String(leaseStatus || "").toLowerCase()
+    )
+  ) {
+    return {
+      label: "Ended",
+      badgeClass: "bg-zinc-100 text-zinc-700 border border-zinc-200",
+    };
+  }
+
   if (!endDate) {
     return {
       label: "Active",

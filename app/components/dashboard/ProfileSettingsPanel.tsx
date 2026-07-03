@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type ProfileSettingsPanelProps = {
+  variant?: "landlord" | "tenant";
   open: boolean;
   onClose: () => void;
   user: {
@@ -17,6 +18,7 @@ type ProfileSettingsPanelProps = {
   onLogout: () => void;
   hasTenantPortal: boolean;
   hasLandlordRole: boolean;
+  canRemoveLandlordPortal?: boolean;
   removingLandlordPortal: boolean;
   removeLandlordError: string;
   onClearRemoveLandlordError: () => void;
@@ -24,6 +26,7 @@ type ProfileSettingsPanelProps = {
 };
 
 export default function ProfileSettingsPanel({
+  variant = "landlord",
   open,
   onClose,
   user,
@@ -35,6 +38,7 @@ export default function ProfileSettingsPanel({
   onLogout,
   hasTenantPortal,
   hasLandlordRole,
+  canRemoveLandlordPortal = false,
   removingLandlordPortal,
   removeLandlordError,
   onClearRemoveLandlordError,
@@ -43,6 +47,7 @@ export default function ProfileSettingsPanel({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [removeLandlordConfirmOpen, setRemoveLandlordConfirmOpen] =
     useState(false);
+  const isTenantVariant = variant === "tenant";
 
   if (!open) return null;
 
@@ -50,20 +55,19 @@ export default function ProfileSettingsPanel({
     <>
       <div
         onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[240] bg-black/20 backdrop-blur-[2px]"
       />
 
-      <aside className="fixed bottom-0 right-0 top-0 z-50 h-[100dvh] w-[88vw] max-w-[420px] overflow-hidden bg-white shadow-[0_24px_90px_rgba(15,23,42,0.22)] sm:w-[420px]">
+      <aside
+        className="fixed bottom-0 right-0 top-0 z-[250] h-[100dvh] w-[92vw] max-w-[560px] overflow-hidden bg-white shadow-[0_24px_90px_rgba(15,23,42,0.22)] sm:w-[560px]"
+      >
         <div className="flex h-full flex-col">
-          <div className="shrink-0 px-5 py-5 sm:px-7 sm:py-7">
+          <div className="shrink-0 px-5 py-5 sm:px-7 sm:py-6">
             <div className="flex items-start justify-between gap-5">
               <div>
                 <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-[#0F172A] sm:text-[24px]">
                   Profile Settings
                 </h2>
-                <p className="mt-1 text-[13px] text-zinc-500">
-                  Manage your AvenueBoard account details.
-                </p>
               </div>
 
               <button
@@ -76,9 +80,17 @@ export default function ProfileSettingsPanel({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-7">
-            <div className="flex items-center gap-4 rounded-[22px] border border-zinc-200 bg-[#FAFAFA] p-4 text-left">
+            <div
+              className={`flex items-center gap-5 text-left ${
+                isTenantVariant
+                  ? "border-b border-zinc-200 pb-5"
+                  : "border-b border-zinc-200 pb-5"
+              }`}
+            >
               <div className="relative shrink-0">
-                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#0F172A] text-[22px] font-semibold text-white sm:h-24 sm:w-24 sm:text-[26px]">
+                <div
+                  className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-[#0F172A] text-[24px] font-semibold text-white"
+                >
                   {previewImage ? (
                     <img
                       src={previewImage}
@@ -109,20 +121,17 @@ export default function ProfileSettingsPanel({
                 </label>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-[15px] font-semibold text-zinc-900">
                   Profile Photo
                 </h3>
-                <p className="mt-1 text-[13px] leading-5 text-zinc-500">
-                  Upload a profile image for your landlord account.
-                </p>
-                <p className="mt-2 text-[12px] text-zinc-400">
+                <p className="mt-1 text-[12px] text-zinc-400">
                   JPG or PNG. Recommended 400×400.
                 </p>
               </div>
             </div>
 
-            <div className="mt-6 space-y-4 sm:mt-8 sm:space-y-5">
+            <div className="mt-6 space-y-4 sm:mt-6 sm:space-y-4">
               <div>
                 <label className="text-[13px] font-medium text-zinc-800 sm:text-[14px]">
                   Display Name
@@ -131,7 +140,7 @@ export default function ProfileSettingsPanel({
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Your name"
-                  className="mt-2 h-[48px] w-full rounded-2xl border border-zinc-200 bg-[#F8F9FA] px-4 text-[16px] text-zinc-900 outline-none focus:border-[#CA6180] focus:bg-white focus:ring-4 focus:ring-[#CA6180]/10 sm:h-[52px] sm:px-5 sm:text-[14px]"
+                  className="mt-2 h-[48px] w-full rounded-xl border border-zinc-200 bg-[#F8F9FA] px-4 text-[16px] text-zinc-900 outline-none focus:border-[#2563EB] focus:bg-white focus:ring-4 focus:ring-[#2563EB]/10 sm:h-[52px] sm:px-5 sm:text-[14px]"
                 />
               </div>
 
@@ -142,8 +151,14 @@ export default function ProfileSettingsPanel({
                 <input
                   value={user?.email || ""}
                   disabled
-                  className="mt-2 h-[48px] w-full cursor-not-allowed rounded-2xl border border-zinc-200 bg-zinc-50 px-4 text-[16px] text-zinc-500 outline-none sm:h-[52px] sm:px-5 sm:text-[14px]"
+                  className="mt-2 h-[48px] w-full cursor-not-allowed rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-[16px] text-zinc-500 outline-none sm:h-[52px] sm:px-5 sm:text-[14px]"
                 />
+                {isTenantVariant && (
+                  <p className="mt-2 text-[12px] font-medium text-zinc-400">
+                    Email is linked to your AvenueBoard account and cannot be
+                    changed here.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -155,25 +170,25 @@ export default function ProfileSettingsPanel({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(415) 555-0000"
-                  className="mt-2 h-[48px] w-full rounded-2xl border border-zinc-200 bg-[#F8F9FA] px-4 text-[16px] text-zinc-900 outline-none focus:border-[#CA6180] focus:bg-white focus:ring-4 focus:ring-[#CA6180]/10 sm:h-[52px] sm:px-5 sm:text-[14px]"
+                  className="mt-2 h-[48px] w-full rounded-xl border border-zinc-200 bg-[#F8F9FA] px-4 text-[16px] text-zinc-900 outline-none focus:border-[#2563EB] focus:bg-white focus:ring-4 focus:ring-[#2563EB]/10 sm:h-[52px] sm:px-5 sm:text-[14px]"
                 />
               </div>
             </div>
 
-            <div className="mt-6 rounded-[22px] border border-zinc-200 bg-white p-4 sm:mt-8">
+            <div className="mt-6 bg-white sm:mt-6">
               <div>
                 <h3 className="text-[15px] font-semibold tracking-[-0.02em] text-zinc-950">
-                  Portals
+                  Boards
                 </h3>
                 <p className="mt-1 text-[12.5px] leading-5 text-zinc-500">
-                  Manage the AvenueBoard workspaces connected to this account.
+                  AvenueBoard workspaces connected to this account.
                 </p>
               </div>
 
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
                   <span className="text-[13.5px] font-semibold text-slate-800">
-                    Tenant Portal
+                    Resident Board
                   </span>
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
@@ -188,7 +203,7 @@ export default function ProfileSettingsPanel({
 
                 <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
                   <span className="text-[13.5px] font-semibold text-slate-800">
-                    Landlord Portal
+                    Landlord Board
                   </span>
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
@@ -202,13 +217,13 @@ export default function ProfileSettingsPanel({
                 </div>
               </div>
 
-              {removeLandlordError && (
+              {removeLandlordError && !isTenantVariant && (
                 <p className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-medium leading-5 text-red-600">
                   {removeLandlordError}
                 </p>
               )}
 
-              {hasTenantPortal && hasLandlordRole ? (
+              {!isTenantVariant && canRemoveLandlordPortal ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -217,12 +232,8 @@ export default function ProfileSettingsPanel({
                   }}
                   className="mt-4 h-11 w-full rounded-2xl border border-red-100 bg-red-50 text-[13px] font-semibold text-red-600 transition hover:bg-red-100"
                 >
-                  Remove landlord portal
+                  Remove Landlord Board
                 </button>
-              ) : hasLandlordRole ? (
-                <p className="mt-4 text-[12.5px] font-medium leading-5 text-zinc-500">
-                  You need another active portal before removing landlord access.
-                </p>
               ) : null}
             </div>
           </div>
@@ -231,16 +242,16 @@ export default function ProfileSettingsPanel({
             <div className="grid grid-cols-1 gap-3 sm:space-y-3">
               <button
                 onClick={onSave}
-                className="h-[50px] w-full rounded-2xl bg-[#B9476D] text-[15px] font-semibold text-white hover:bg-[#A93F64] sm:h-[52px]"
+                className="h-[50px] w-full rounded-xl bg-[#2563EB] text-[15px] font-semibold text-white hover:bg-[#1D4ED8] sm:h-[52px]"
               >
-                Save Changes
+                {isTenantVariant ? "Save Changes" : "Save Settings"}
               </button>
 
               <button
                 onClick={onLogout}
-                className="h-[50px] w-full rounded-2xl border border-red-100 bg-red-50 text-[14px] font-semibold text-red-600 hover:bg-red-100 sm:h-[52px]"
+                className="h-[50px] w-full rounded-xl border border-red-100 bg-white text-[14px] font-semibold text-red-600 hover:bg-red-50 sm:h-[52px]"
               >
-                Logout
+                {isTenantVariant ? "Logout" : "Sign Out"}
               </button>
             </div>
           </div>
@@ -248,15 +259,15 @@ export default function ProfileSettingsPanel({
       </aside>
 
       {removeLandlordConfirmOpen && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[270] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[460px] rounded-[28px] border border-zinc-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.20)]">
             <h2 className="text-[24px] font-medium tracking-[-0.05em] text-slate-950">
-              Remove landlord portal?
+              Remove Landlord Board?
             </h2>
             <p className="mt-3 text-[14px] font-medium leading-6 text-zinc-600">
-              You’ll no longer have access to the landlord dashboard. Your
-              tenant portal will remain active, and you can create a landlord
-              portal again later if you need to manage or rent out a property.
+              You’ll no longer have access to the Landlord Board. Your
+              Resident Board will remain active, and you can create a Landlord
+              Board again later if you need to manage or rent out a property.
             </p>
 
             <div className="mt-6 flex justify-end gap-3">
@@ -285,7 +296,7 @@ export default function ProfileSettingsPanel({
               >
                 {removingLandlordPortal
                   ? "Removing..."
-                  : "Remove landlord portal"}
+                  : "Remove Landlord Board"}
               </button>
             </div>
           </div>

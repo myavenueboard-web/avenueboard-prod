@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   emailSupabaseAdmin,
-  recordEmailEventSent,
   sendEmailEvent,
 } from "@/lib/email/sendEmail";
 
@@ -32,6 +31,7 @@ type PropertyRow = {
   id: string;
   property_label: string | null;
   owner_profile_id: string | null;
+  bank_status?: string | null;
 };
 
 type LeaseRow = {
@@ -111,7 +111,7 @@ async function getOwnedProperty(profileId: string, propertyId?: string | null) {
 
   const { data } = await emailSupabaseAdmin
     .from("properties")
-    .select("id, property_label, owner_profile_id")
+    .select("id, property_label, owner_profile_id, bank_status")
     .eq("id", propertyId)
     .eq("owner_profile_id", profileId)
     .single();
@@ -239,7 +239,16 @@ async function handleTenantInviteCreated(profile: ProfileRow, body: TriggerReque
     return { ok: false, error: "Invite context not found" };
   }
 
-  const event = await recordEmailEventSent({
+  if (property.bank_status !== "connected") {
+    return {
+      ok: false,
+      skipped: true,
+      error:
+        "Connect your bank account first. Resident invitations are sent after bank setup is complete so payments can be accepted immediately.",
+    };
+  }
+
+  const result = await sendEmailEvent({
     eventType: "tenant_invitation",
     recipientEmail: tenant.email,
     relatedPropertyId: property.id,
@@ -251,7 +260,7 @@ async function handleTenantInviteCreated(profile: ProfileRow, body: TriggerReque
     },
   });
 
-  return { ok: true, event };
+  return result;
 }
 
 async function handleTenantInviteAccepted(profile: ProfileRow, body: TriggerRequestBody) {

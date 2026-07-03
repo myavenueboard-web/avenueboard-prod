@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { createActivity } from "@/lib/createActivity";
+import { parseLandlordAbsorbsResidentPlatformFee } from "@/lib/fees/residentPlatformFee";
 
 import StepIndicator from "@/app/components/add-property/StepIndicator";
 import PropertyStep from "@/app/components/add-property/PropertyStep";
@@ -29,6 +30,269 @@ type AdditionalAmount = {
   amount: string;
 };
 
+type DocumentAttachment = {
+  id: string;
+  name: string;
+  type?: string;
+  size?: number;
+};
+
+type PendingLeaseDocument = DocumentAttachment & {
+  file: File;
+};
+
+type ExistingLeaseDocument = DocumentAttachment & {
+  storagePath?: string | null;
+  existing: true;
+};
+
+type SupabaseLikeError = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  status?: number;
+  statusCode?: number;
+};
+
+const LEASE_DOCUMENT_BUCKET = "lease-documents";
+
+type EditLeaseRow = {
+  id?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  created_at?: string | null;
+  monthly_rent?: number | string | null;
+  security_deposit?: number | string | null;
+  rent_due_day?: string | null;
+  lease_status?: string | null;
+  lease_tenants?: Array<{
+    id?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    tenant_role?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  }>;
+  lease_amounts?: Array<{
+    id?: string | null;
+    amount_type?: string | null;
+    amount?: number | string | null;
+  }>;
+  lease_documents?: Array<{
+    id?: string | null;
+    file_name?: string | null;
+    file_type?: string | null;
+    file_size?: number | string | null;
+    storage_path?: string | null;
+  }>;
+  lease_preferences?: Array<{
+    id?: string | null;
+    lease_id?: string | null;
+    landlord_absorbs_fee?: unknown;
+    created_at?: string | null;
+    notification_phone?: string | null;
+    whatsapp_enabled?: unknown;
+    sms_enabled?: unknown;
+    authorized_agreement?: unknown;
+    terms_agreement?: unknown;
+  }>;
+};
+
+function resolveCurrentEditLease(leases: EditLeaseRow[] = []) {
+  return [...leases].sort((left, right) => {
+    const leftActive = String(left.lease_status || "").toLowerCase() === "active";
+    const rightActive =
+      String(right.lease_status || "").toLowerCase() === "active";
+
+    if (leftActive !== rightActive) return leftActive ? -1 : 1;
+
+    const leftPrimary = Boolean(
+      left.lease_tenants?.some(
+        (tenant) => String(tenant.tenant_role || "").toLowerCase() === "primary"
+      )
+    );
+    const rightPrimary = Boolean(
+      right.lease_tenants?.some(
+        (tenant) => String(tenant.tenant_role || "").toLowerCase() === "primary"
+      )
+    );
+
+    if (leftPrimary !== rightPrimary) return leftPrimary ? -1 : 1;
+
+    return getEditLeaseSortTime(right) - getEditLeaseSortTime(left);
+  })[0];
+}
+
+function getEditLeaseSortTime(lease: EditLeaseRow) {
+  const value = lease.created_at || lease.start_date || lease.end_date || "";
+  const time = value ? new Date(value).getTime() : 0;
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function createPendingDocumentId(file: File) {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+
+  return `${file.name}-${file.size}-${file.lastModified}-${Date.now()}`;
+}
+
+function sanitizeStorageFileName(name: string) {
+  const fallbackName = "lease-document";
+  const sanitized = (name.trim() || fallbackName)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return sanitized || fallbackName;
+}
+
+function createLeaseDocumentStoragePath(propertyId: string, file: File) {
+  return `${propertyId}/${createPendingDocumentId(file)}-${sanitizeStorageFileName(
+    file.name
+  )}`;
+}
+
+function getSupabaseErrorMessage(error: unknown) {
+  if (!error) return "Unknown Supabase error";
+  if (error instanceof Error) return error.message || "Unknown Supabase error";
+
+  if (typeof error === "object") {
+    const typedError = error as SupabaseLikeError;
+    return (
+      typedError.message ||
+      typedError.details ||
+      typedError.hint ||
+      JSON.stringify(error)
+    );
+  }
+
+  return String(error);
+}
+
+async function uploadEditLeaseDocuments({
+  files,
+  propertyId,
+  leaseId,
+  profileId,
+}: {
+  files: PendingLeaseDocument[];
+  propertyId: string;
+  leaseId: string;
+  profileId: string;
+}) {
+  for (const fileItem of files) {
+    const { data: existingDocument, error: existingDocumentError } =
+      await supabase
+        .from("lease_documents")
+        .select("id")
+        .eq("lease_id", leaseId)
+        .eq("file_name", fileItem.file.name)
+        .eq("file_size", fileItem.file.size)
+        .maybeSingle();
+
+    if (existingDocumentError) {
+      throw new Error(
+        `Document lookup failed for "${fileItem.file.name}": ${getSupabaseErrorMessage(
+          existingDocumentError
+        )}`
+      );
+    }
+
+    if (existingDocument) continue;
+
+    const filePath = createLeaseDocumentStoragePath(propertyId, fileItem.file);
+
+    if (!filePath.startsWith(`${propertyId}/`) || filePath.includes("//")) {
+      throw new Error(
+        `Unable to prepare storage path for "${fileItem.file.name}".`
+      );
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from(LEASE_DOCUMENT_BUCKET)
+      .upload(filePath, fileItem.file);
+
+    if (uploadError) {
+      throw new Error(
+        `Storage upload failed for "${fileItem.file.name}": ${getSupabaseErrorMessage(
+          uploadError
+        )}`
+      );
+    }
+
+    const { error: insertError } = await supabase
+      .from("lease_documents")
+      .insert({
+        property_id: propertyId,
+        lease_id: leaseId,
+        file_name: fileItem.file.name,
+        file_type: fileItem.file.type || null,
+        file_size: fileItem.file.size,
+        storage_path: filePath,
+        uploaded_by_profile_id: profileId,
+      });
+
+    if (insertError) {
+      await supabase.storage.from(LEASE_DOCUMENT_BUCKET).remove([filePath]);
+      throw new Error(
+        `Document record insert failed for "${fileItem.file.name}": ${getSupabaseErrorMessage(
+          insertError
+        )}`
+      );
+    }
+
+    await createActivity({
+      profile_id: profileId,
+      property_id: propertyId,
+      lease_id: leaseId,
+      activity_type: "document_uploaded",
+      title: "Document uploaded",
+      description: fileItem.file.name,
+    });
+  }
+}
+
+async function deleteEditLeaseDocuments({
+  documents,
+  propertyId,
+}: {
+  documents: ExistingLeaseDocument[];
+  propertyId: string;
+}) {
+  for (const document of documents) {
+    if (document.storagePath) {
+      const { error: storageError } = await supabase.storage
+        .from(LEASE_DOCUMENT_BUCKET)
+        .remove([document.storagePath]);
+
+      if (storageError) {
+        throw new Error(
+          `Storage delete failed for "${document.name}": ${getSupabaseErrorMessage(
+            storageError
+          )}`
+        );
+      }
+    }
+
+    const { error: deleteError } = await supabase
+      .from("lease_documents")
+      .delete()
+      .eq("id", document.id)
+      .eq("property_id", propertyId);
+
+    if (deleteError) {
+      throw new Error(
+        `Document record delete failed for "${document.name}": ${getSupabaseErrorMessage(
+          deleteError
+        )}`
+      );
+    }
+  }
+}
+
 export default function EditPropertyPage() {
   const params = useParams();
   const router = useRouter();
@@ -36,6 +300,7 @@ export default function EditPropertyPage() {
 
   const propertyId = params.id as string;
   const requestedStep = Number(searchParams.get("step") || "1");
+  const saveInProgressRef = useRef(false);
 
   const [profileId, setProfileId] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
@@ -56,6 +321,9 @@ export default function EditPropertyPage() {
   const [additionalEmail, setAdditionalEmail] = useState("");
   const [additionalPhone, setAdditionalPhone] = useState("");
   const [deletedTenantIds, setDeletedTenantIds] = useState<string[]>([]);
+  const [tenantValidationAttempted, setTenantValidationAttempted] =
+    useState(false);
+  const [leaseValidationAttempted, setLeaseValidationAttempted] = useState(0);
 
   const [propertyForm, setPropertyForm] = useState({
     streetAddress: "",
@@ -103,6 +371,22 @@ export default function EditPropertyPage() {
   );
 
   const [attachments, setAttachments] = useState<Record<string, string>>({});
+  const [leaseDocumentFiles, setLeaseDocumentFiles] = useState<
+    PendingLeaseDocument[]
+  >([]);
+  const [existingLeaseDocuments, setExistingLeaseDocuments] = useState<
+    ExistingLeaseDocument[]
+  >([]);
+  const [removedExistingDocuments, setRemovedExistingDocuments] = useState<
+    ExistingLeaseDocument[]
+  >([]);
+  const [documentDeleteConfirm, setDocumentDeleteConfirm] =
+    useState<ExistingLeaseDocument | null>(null);
+  const [leaseDocumentError, setLeaseDocumentError] = useState("");
+  const documentAttachments: DocumentAttachment[] = [
+    ...existingLeaseDocuments,
+    ...leaseDocumentFiles,
+  ];
 
   useEffect(() => {
     async function loadEditData() {
@@ -126,11 +410,13 @@ export default function EditPropertyPage() {
             *,
             leases (
               id,
+              created_at,
               start_date,
               end_date,
               monthly_rent,
               security_deposit,
               rent_due_day,
+              lease_status,
               lease_tenants (
                 id,
                 first_name,
@@ -144,8 +430,17 @@ export default function EditPropertyPage() {
                 amount_type,
                 amount
               ),
+              lease_documents (
+                id,
+                file_name,
+                file_type,
+                file_size,
+                storage_path
+              ),
               lease_preferences (
                 id,
+                lease_id,
+                created_at,
                 notification_phone,
                 whatsapp_enabled,
                 sms_enabled,
@@ -166,7 +461,63 @@ export default function EditPropertyPage() {
           return;
         }
 
-        const lease = propertyData.leases?.[0];
+        const loadedLeases = (propertyData.leases || []) as EditLeaseRow[];
+        const lease = resolveCurrentEditLease(loadedLeases);
+        const nestedPreference = lease?.lease_preferences?.[0] || null;
+        let preference = nestedPreference;
+
+        if (lease?.id) {
+          const { data: directPreference, error: directPreferenceError } =
+            await supabase
+              .from("lease_preferences")
+              .select(
+                "id, lease_id, created_at, notification_phone, whatsapp_enabled, sms_enabled, landlord_absorbs_fee, authorized_agreement, terms_agreement"
+              )
+              .eq("lease_id", lease.id)
+              .maybeSingle();
+
+          if (!directPreferenceError && directPreference) {
+            preference = directPreference;
+          }
+
+          if (process.env.NODE_ENV === "development") {
+            const rawLandlordAbsorbsFee = preference?.landlord_absorbs_fee;
+            const parsedLandlordAbsorbsFee =
+              parseLandlordAbsorbsResidentPlatformFee(rawLandlordAbsorbsFee);
+
+            console.info("Landlord edit lease preference source", {
+              propertyId,
+              selectedLeaseId: lease.id,
+              nestedPreferenceRowId: nestedPreference?.id || null,
+              directPreferenceRowId: directPreference?.id || null,
+              directPreferenceError: directPreferenceError
+                ? {
+                    message: directPreferenceError.message,
+                    code: directPreferenceError.code,
+                    details: directPreferenceError.details,
+                  }
+                : null,
+              rawLandlordAbsorbsFee,
+              parsedLandlordAbsorbsFee,
+              initialPreferencesFormLandlordAbsorbsFee:
+                parsedLandlordAbsorbsFee,
+              leases: loadedLeases.map((leaseRow) => ({
+                id: leaseRow.id,
+                created_at: leaseRow.created_at,
+                start_date: leaseRow.start_date,
+                lease_status: leaseRow.lease_status,
+                primaryTenantEmail:
+                  leaseRow.lease_tenants?.find(
+                    (tenant) =>
+                      String(tenant.tenant_role || "").toLowerCase() ===
+                      "primary"
+                  )?.email || null,
+                lease_preferences: leaseRow.lease_preferences || [],
+              })),
+            });
+          }
+        }
+
         const tenants = lease?.lease_tenants || [];
         const primaryTenant = tenants.find(
           (tenant: any) => tenant.tenant_role === "primary"
@@ -227,16 +578,33 @@ export default function EditPropertyPage() {
           }))
         );
 
-        const preference = lease?.lease_preferences?.[0];
+        setExistingLeaseDocuments(
+          (lease?.lease_documents || []).map((document: any) => ({
+            id: document.id,
+            name: document.file_name || "Document",
+            type: document.file_type || undefined,
+            size:
+              document.file_size === null || document.file_size === undefined
+                ? undefined
+                : Number(document.file_size),
+            storagePath: document.storage_path || null,
+            existing: true,
+          }))
+        );
+        setRemovedExistingDocuments([]);
+        setLeaseDocumentFiles([]);
+        setLeaseDocumentError("");
 
         if (preference) {
-          setPreferenceId(preference.id);
+          setPreferenceId(preference.id || "");
 
           setPreferencesForm({
             phone: preference.notification_phone || "",
             whatsappEnabled: !!preference.whatsapp_enabled,
             smsEnabled: !!preference.sms_enabled,
-            landlordAbsorbsFee: !!preference.landlord_absorbs_fee,
+            landlordAbsorbsFee: parseLandlordAbsorbsResidentPlatformFee(
+              preference.landlord_absorbs_fee
+            ),
             authorizedAgreement: !!preference.authorized_agreement,
             termsAgreement: !!preference.terms_agreement,
           });
@@ -303,8 +671,17 @@ export default function EditPropertyPage() {
   const progress = (step / 4) * 100;
 
   async function saveEdit() {
-    if (!profileId || !leaseId || !canContinue || saving) return;
+    if (
+      !profileId ||
+      !leaseId ||
+      !canContinue ||
+      saving ||
+      saveInProgressRef.current
+    ) {
+      return;
+    }
 
+    saveInProgressRef.current = true;
     setSaving(true);
 
     try {
@@ -420,43 +797,71 @@ export default function EditPropertyPage() {
         if (amountError) throw amountError;
       }
 
-      if (preferenceId) {
-        const { error: preferenceError } = await supabase
+      const now = new Date().toISOString();
+
+      const { data: savedPreference, error: preferenceInsertError } =
+        await supabase
           .from("lease_preferences")
-          .update({
-            notification_phone: preferencesForm.phone.trim() || null,
-            whatsapp_enabled: preferencesForm.whatsappEnabled,
-            sms_enabled: preferencesForm.smsEnabled,
-            landlord_absorbs_fee: preferencesForm.landlordAbsorbsFee,
-            authorized_agreement: preferencesForm.authorizedAgreement,
-            terms_agreement: preferencesForm.termsAgreement,
-          })
-          .eq("id", preferenceId);
+          .upsert(
+            {
+              lease_id: leaseId,
+              notification_email: loginEmail,
+              notification_phone: preferencesForm.phone.trim() || null,
+              whatsapp_enabled: preferencesForm.whatsappEnabled,
+              sms_enabled: preferencesForm.smsEnabled,
+              landlord_absorbs_fee: preferencesForm.landlordAbsorbsFee === true,
+              authorized_agreement: preferencesForm.authorizedAgreement,
+              terms_agreement: preferencesForm.termsAgreement,
+              authorized_agreed_at: preferencesForm.authorizedAgreement
+                ? now
+                : null,
+              terms_agreed_at: preferencesForm.termsAgreement ? now : null,
+            },
+            { onConflict: "lease_id" }
+          )
+          .select("id")
+          .single();
 
-        if (preferenceError) throw preferenceError;
-      } else {
-  const now = new Date().toISOString();
+      if (preferenceInsertError) throw preferenceInsertError;
+      setPreferenceId(savedPreference?.id || "");
 
-  const { error: preferenceInsertError } = await supabase
-    .from("lease_preferences")
-    .upsert(
-      {
-        lease_id: leaseId,
-        notification_email: loginEmail,
-        notification_phone: preferencesForm.phone.trim() || null,
-        whatsapp_enabled: preferencesForm.whatsappEnabled,
-        sms_enabled: preferencesForm.smsEnabled,
-        landlord_absorbs_fee: preferencesForm.landlordAbsorbsFee,
-        authorized_agreement: preferencesForm.authorizedAgreement,
-        terms_agreement: preferencesForm.termsAgreement,
-        authorized_agreed_at: preferencesForm.authorizedAgreement ? now : null,
-        terms_agreed_at: preferencesForm.termsAgreement ? now : null,
-      },
-      { onConflict: "lease_id" }
-    );
+      if (removedExistingDocuments.length > 0 || leaseDocumentFiles.length > 0) {
+        try {
+          if (removedExistingDocuments.length > 0) {
+            await deleteEditLeaseDocuments({
+              documents: removedExistingDocuments,
+              propertyId,
+            });
+          }
 
-  if (preferenceInsertError) throw preferenceInsertError;
-}
+          await uploadEditLeaseDocuments({
+            files: leaseDocumentFiles,
+            propertyId,
+            leaseId,
+            profileId,
+          });
+          setLeaseDocumentError("");
+        } catch (error) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("Edit lease document sync failed", {
+              propertyId,
+              leaseId,
+              profileId,
+              fileCount: leaseDocumentFiles.length,
+              removedCount: removedExistingDocuments.length,
+              error: getSupabaseErrorMessage(error),
+            });
+          }
+
+          setStep(3);
+          setLeaseDocumentError(
+            error instanceof Error
+              ? error.message
+              : "Unable to upload lease documents. Please remove the failed file or try again."
+          );
+          throw error;
+        }
+      }
 
       await createActivity({
         profile_id: profileId,
@@ -481,14 +886,21 @@ export default function EditPropertyPage() {
       "Unable to save updates. Please try again."
   );
 } finally {
+  saveInProgressRef.current = false;
   setSaving(false);
 }
   }
 
   function handleContinue() {
-    if (!canContinue) return;
+    if (!canContinue) {
+      if (step === 2) setTenantValidationAttempted(true);
+      if (step === 3) setLeaseValidationAttempted((attempts) => attempts + 1);
+      return;
+    }
 
     if (step < 4) {
+      if (step === 2) setTenantValidationAttempted(false);
+      if (step === 3) setLeaseValidationAttempted(0);
       setStep(step + 1);
       return;
     }
@@ -564,11 +976,48 @@ export default function EditPropertyPage() {
   function handleDocumentsUpload(files?: FileList | null) {
     if (!files?.length) return;
 
-    setAttachments({
-      Documents: Array.from(files)
-        .map((file) => file.name)
-        .join(", "),
+    const pendingFiles = Array.from(files).map((file) => ({
+      id: createPendingDocumentId(file),
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      file,
+    }));
+
+    setLeaseDocumentFiles((current) => [...current, ...pendingFiles]);
+    setLeaseDocumentError("");
+    setAttachments({});
+  }
+
+  function markExistingDocumentForDeletion(document: ExistingLeaseDocument) {
+    setExistingLeaseDocuments((current) => {
+      setRemovedExistingDocuments((removed) =>
+        removed.some((item) => item.id === document.id)
+          ? removed
+          : [...removed, document]
+      );
+
+      return current.filter((item) => item.id !== document.id);
     });
+    setDocumentDeleteConfirm(null);
+    setLeaseDocumentError("");
+  }
+
+  function removeDocumentAttachment(id: string) {
+    const existingDocument = existingLeaseDocuments.find(
+      (document) => document.id === id
+    );
+
+    if (existingDocument) {
+      setDocumentDeleteConfirm(existingDocument);
+      return;
+    }
+
+    setLeaseDocumentFiles((current) =>
+      current.filter((file) => file.id !== id)
+    );
+    setAttachments({});
+    setLeaseDocumentError("");
   }
 
   if (loading) {
@@ -606,6 +1055,7 @@ export default function EditPropertyPage() {
                   additionalTenants={additionalTenants}
                   removeAdditionalTenant={removeAdditionalTenant}
                   openAdditionalTenantModal={() => setAdditionalModalOpen(true)}
+                  validationAttempted={tenantValidationAttempted}
                 />
               )}
 
@@ -618,7 +1068,12 @@ export default function EditPropertyPage() {
                   updateAdditionalAmount={updateAdditionalAmount}
                   removeAdditionalAmount={removeAdditionalAmount}
                   attachments={attachments}
+                  documentAttachments={documentAttachments}
+                  documentError={leaseDocumentError}
                   handleDocumentsUpload={handleDocumentsUpload}
+                  removeDocumentAttachment={removeDocumentAttachment}
+                  validationAttempted={leaseValidationAttempted}
+                  isEditMode
                 />
               )}
 
@@ -632,7 +1087,7 @@ export default function EditPropertyPage() {
             </div>
 
             <div className="fixed bottom-[22px] left-[285px] right-0 z-20 hidden bg-white px-8 pb-6 pt-5 lg:block">
-              <div className="mx-auto w-full max-w-[900px]">
+              <div className="mx-auto w-full max-w-[1060px] -translate-x-8">
                 <div className="mb-7">
                   <div className="flex items-center justify-between text-[13px] font-medium text-zinc-500">
                     <span>Step {step} of 4</span>
@@ -641,7 +1096,7 @@ export default function EditPropertyPage() {
 
                   <div className="mt-3 h-[10px] overflow-hidden rounded-full bg-zinc-100">
                     <div
-                      className="h-full rounded-full bg-[#B9476D] transition-all duration-300"
+                      className="h-full rounded-full bg-[#2563EB] transition-all duration-300"
                       style={{ width: step === 4 ? "90%" : `${progress}%` }}
                     />
                   </div>
@@ -657,17 +1112,19 @@ export default function EditPropertyPage() {
                     {step === 1 ? "Cancel" : "Back"}
                   </button>
 
-                  <button
-                    onClick={handleContinue}
-                    disabled={!canContinue || saving}
-                    className={`h-12 min-w-[280px] rounded-2xl px-8 text-[15px] font-semibold transition ${
-                      canContinue && !saving
-                        ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
-                        : "cursor-not-allowed bg-zinc-100 text-zinc-400"
-                    }`}
-                  >
-                    {saving ? "Saving..." : step === 4 ? "Save Updates" : "Continue"}
-                  </button>
+                  <div className="flex min-w-[440px] items-center gap-3">
+                    <button
+                      onClick={handleContinue}
+                      disabled={!canContinue || saving}
+                      className={`h-12 flex-1 rounded-xl px-8 text-[15px] font-semibold transition ${
+                        canContinue && !saving
+                          ? "bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
+                          : "cursor-not-allowed bg-zinc-100 text-zinc-400"
+                      }`}
+                    >
+                      {saving ? "Saving..." : step === 4 ? "Save Updates" : "Continue"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -684,7 +1141,7 @@ export default function EditPropertyPage() {
 
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
                 <div
-                  className="h-full rounded-full bg-[#B9476D] transition-all duration-300"
+                  className="h-full rounded-full bg-[#2563EB] transition-all duration-300"
                   style={{ width: step === 4 ? "90%" : `${progress}%` }}
                 />
               </div>
@@ -703,9 +1160,9 @@ export default function EditPropertyPage() {
               <button
                 onClick={handleContinue}
                 disabled={!canContinue || saving}
-                className={`h-12 w-full rounded-2xl px-6 text-[15px] font-semibold transition ${
+                className={`h-12 w-full rounded-xl px-6 text-[15px] font-semibold transition ${
                   canContinue && !saving
-                    ? "bg-[#B9476D] text-white hover:bg-[#A93F64]"
+                    ? "bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
                     : "cursor-not-allowed bg-zinc-100 text-zinc-400"
                 }`}
               >
@@ -729,6 +1186,37 @@ export default function EditPropertyPage() {
           onClose={() => setAdditionalModalOpen(false)}
           onAdd={addAdditionalTenant}
         />
+      )}
+
+      {documentDeleteConfirm && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-950/30 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+            <h2 className="text-[21px] font-semibold tracking-[-0.04em] text-zinc-950">
+              Delete this file?
+            </h2>
+            <p className="mt-3 text-[15px] leading-6 text-zinc-600">
+              Are you sure you want to delete "{documentDeleteConfirm.name}"?
+            </p>
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDocumentDeleteConfirm(null)}
+                className="h-11 rounded-xl border border-zinc-200 px-5 text-[15px] font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  markExistingDocumentForDeletion(documentDeleteConfirm)
+                }
+                className="h-11 rounded-xl bg-red-600 px-5 text-[15px] font-semibold text-white transition hover:bg-red-700 active:scale-[0.98]"
+              >
+                Delete File
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

@@ -4,6 +4,7 @@ import {
   detectPriority,
   detectSupportCategory,
   getAuthedSupportUser,
+  supportDebugLog,
   supportSupabaseAdmin,
   storeSupportEvent,
   type SupportCategory,
@@ -28,7 +29,7 @@ type UpdateTicketBody = {
 };
 
 export async function POST(request: Request) {
-  console.log("Support ticket API route called");
+  supportDebugLog("Support ticket API route called");
 
   const { user, profile, error } = await getAuthedSupportUser(request);
 
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    console.log("Support ticket API ticket creation requested", {
+    supportDebugLog("Support ticket API ticket creation requested", {
       userId: user.id,
       profileId: profile?.id || null,
       payload: {
@@ -157,7 +158,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  console.log("Support ticket close requested", {
+  supportDebugLog("Support ticket close requested", {
     userId: user.id,
     profileId: profile?.id || null,
     ticketId,
@@ -173,7 +174,7 @@ export async function PATCH(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  console.log("Support ticket close load result", {
+  supportDebugLog("Support ticket close load result", {
     ticketId,
     status: existingTicket?.status || null,
     error: loadError
@@ -236,7 +237,7 @@ export async function PATCH(request: Request) {
     .eq("user_id", user.id)
     .select("id, status, updated_at, metadata");
 
-  console.log("Support ticket close update result", {
+  supportDebugLog("Support ticket close update result", {
     ticketId,
     databaseStatus: databaseClosedStatus,
     rowCount: updatedRows?.length || 0,

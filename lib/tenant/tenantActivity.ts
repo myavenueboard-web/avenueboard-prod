@@ -16,6 +16,36 @@ import {
 export function mapActivityLogToTenantActivity(activity: ActivityLog): TenantActivity {
   const type = activity.activity_type;
   const description = activity.description || activity.title;
+  const loweredTitle = activity.title.toLowerCase();
+  const isUpcomingAutopay =
+    type.includes("autopay") ||
+    loweredTitle.includes("autopay") ||
+    loweredTitle.includes("auto pay");
+  const isFailedPayment =
+    type.includes("failed") ||
+    type.includes("declined") ||
+    loweredTitle.includes("failed") ||
+    loweredTitle.includes("declined");
+  const isPendingPayment =
+    type.includes("pending") ||
+    type.includes("processing") ||
+    loweredTitle.includes("pending") ||
+    loweredTitle.includes("processing");
+  const isSuccessfulPayment =
+    loweredTitle === "rent payment received" ||
+    loweredTitle.includes("payment received") ||
+    loweredTitle.includes("payment completed") ||
+    loweredTitle.includes("payment succeeded") ||
+    loweredTitle.includes("payment paid");
+  const title = isUpcomingAutopay
+    ? "Upcoming AutoPay"
+    : isFailedPayment
+    ? "Payment failed"
+    : isPendingPayment
+    ? "Payment processing"
+    : isSuccessfulPayment
+    ? "Rent payment made"
+    : activity.title;
   const isDelete = type.includes("deleted") || type.includes("delete");
   const isDocument = type.includes("document");
   const isNote = type.includes("note");
@@ -41,8 +71,16 @@ export function mapActivityLogToTenantActivity(activity: ActivityLog): TenantAct
   const iconClass = isDelete
     ? "bg-[#FFF1F2] text-[#B9476D] ring-1 ring-[#F8D7DF]"
     : isDocument
-    ? "bg-[#F4F4F5] text-zinc-700 ring-1 ring-zinc-200"
+    ? "bg-[#DCEEFF] text-[#1D5F9F] ring-1 ring-[#BFE0FF]"
     : isNote
+    ? "bg-[#DCEEFF] text-[#1D5F9F] ring-1 ring-[#BFE0FF]"
+    : isSuccessfulPayment
+    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+    : isFailedPayment
+    ? "bg-[#FFF1F2] text-[#B9476D] ring-1 ring-[#F8D7DF]"
+    : isPendingPayment
+    ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+    : isUpcomingAutopay
     ? "bg-[#DCEEFF] text-[#1D5F9F] ring-1 ring-[#BFE0FF]"
     : isAlert
     ? "bg-white text-slate-950 ring-1 ring-slate-950/15"
@@ -52,12 +90,20 @@ export function mapActivityLogToTenantActivity(activity: ActivityLog): TenantAct
     id: `activity-log-${activity.id}`,
     timestamp: activity.created_at,
     icon,
-    title: activity.title,
+    title,
     subtitle: truncateActivityText(description),
     badge: isDelete ? "Tenant" : undefined,
     badgeClass: isDelete ? "bg-[#FFF1F2] text-[#B9476D]" : undefined,
     iconClass,
-    amountClass: "text-zinc-500",
+    amountClass: isSuccessfulPayment
+      ? "text-emerald-600"
+      : isFailedPayment
+      ? "text-[#B9476D]"
+      : isPendingPayment
+      ? "text-amber-700"
+      : isUpcomingAutopay
+      ? "text-[#1D5F9F]"
+      : "text-zinc-500",
     propertyId: activity.property_id || undefined,
     leaseId: activity.lease_id || undefined,
   };
@@ -88,6 +134,7 @@ export function buildTenantActivities(
       const status = String(payment.status || "").toLowerCase();
       const isPaid = ["paid", "succeeded", "complete", "completed"].includes(status);
       const isFailed = ["failed", "declined", "canceled", "cancelled"].includes(status);
+      const isProcessing = ["processing", "pending"].includes(status);
 
       return {
         id: `payment-${payment.id}`,
@@ -98,24 +145,26 @@ export function buildTenantActivities(
           ? "payment-alert"
           : "payment-pending",
         title: isPaid
-          ? "Rent payment received"
+          ? "Rent payment made"
           : isFailed
-          ? "Rent payment issue"
-          : "Rent payment updated",
+          ? "Payment failed"
+          : isProcessing
+          ? "Payment processing"
+          : "Payment processing",
         subtitle: payment.period_label || "Rent activity",
         amount: formatCurrency(payment.amount),
         badge: !isPaid && !isFailed && status ? formatActivityStatus(status) : undefined,
         badgeClass: "bg-zinc-100 text-zinc-600",
         iconClass: isPaid
-          ? "bg-slate-950 text-white ring-1 ring-slate-950/10"
+          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
           : isFailed
           ? "bg-[#FFF1F2] text-[#B9476D] ring-1 ring-[#F8D7DF]"
-          : "bg-white text-slate-950 ring-1 ring-slate-950/15",
+          : "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
         amountClass: isPaid
           ? "text-emerald-600"
           : isFailed
           ? "text-[#B9476D]"
-          : "text-zinc-600",
+          : "text-amber-700",
       };
     })
     .filter((activity): activity is TenantActivity => Boolean(activity));
@@ -133,7 +182,7 @@ export function buildTenantActivities(
         title: tenantOwned ? "Document uploaded" : "Document shared",
         subtitle: doc.file_name,
         amount: formatDate(doc.created_at),
-        iconClass: "bg-[#F4F4F5] text-zinc-700 ring-1 ring-zinc-200",
+        iconClass: "bg-[#DCEEFF] text-[#1D5F9F] ring-1 ring-[#BFE0FF]",
         amountClass: "text-zinc-500",
       };
     })

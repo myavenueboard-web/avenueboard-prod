@@ -20,7 +20,7 @@ export async function triggerEmailEvent(input: TriggerEmailEventInput) {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
 
-    if (!token) return;
+    if (!token) return null;
 
     const response = await fetch("/api/email/trigger", {
       method: "POST",
@@ -34,8 +34,12 @@ export async function triggerEmailEvent(input: TriggerEmailEventInput) {
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       console.warn("Email trigger warning:", input.trigger, body || response.status);
+      return body || { ok: false, status: response.status };
     }
+
+    return await response.json().catch(() => ({ ok: true }));
   } catch (error) {
     console.warn("Email trigger warning:", input.trigger, error);
+    return { ok: false, error };
   }
 }

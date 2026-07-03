@@ -1,0 +1,21 @@
+.loadingLine {
+  animation: mobileSplashLine 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  transform: translateX(-100%);
+}
+
+@keyframes mobileSplashLine {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingLine {
+    animation: none;
+    transform: translateX(75%);
+  }
+}

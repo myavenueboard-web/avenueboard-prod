@@ -13,6 +13,7 @@ import {
   isCompetitorQuestion,
   isOutOfScopeMessage,
   logAvaResponseReview,
+  supportDebugLog,
   storeSupportEvent,
   storeSupportMessage,
   supportSystemPrompt,
@@ -163,7 +164,7 @@ export async function POST(request: Request) {
   );
 
   if (action) {
-    console.log("Ava chat action requested", {
+    supportDebugLog("Ava chat action requested", {
       action,
       currentTicketState: body.pendingTicketDraft?.status || "normal",
       userId: authedUser.id,

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
+import AuthOAuthButton from "@/app/components/AuthOAuthButton";
 import { supabase } from "@/lib/supabase";
 
 function getSafeInternalReturnTo(value: string | null) {
@@ -12,12 +14,20 @@ function getSafeInternalReturnTo(value: string | null) {
   return value;
 }
 
+function getFriendlyOAuthError(provider: "google" | "apple") {
+  const providerName = provider === "google" ? "Google" : "Apple";
+  return `${providerName} sign-in could not be completed. Please try again or use email and password.`;
+}
+
 export default function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const returnToPath = getSafeInternalReturnTo(searchParams.get("returnTo"));
-  const redirectPath = returnToPath || searchParams.get("redirect") || "/dashboard";
+  const redirectPath =
+    returnToPath ||
+    getSafeInternalReturnTo(searchParams.get("redirect")) ||
+    "/dashboard";
   const prefilledEmail = searchParams.get("email") || "";
 
   const [email, setEmail] = useState(prefilledEmail);
@@ -25,6 +35,9 @@ export default function LoginClient() {
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(
+    null
+  );
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
@@ -36,11 +49,17 @@ export default function LoginClient() {
         return;
       }
 
+      if (searchParams.get("error") === "oauth_failed") {
+        setMessage(
+          "Social sign-in could not be completed. Please try again or use email and password."
+        );
+      }
+
       setCheckingSession(false);
     }
 
     checkExistingSession();
-  }, [router, redirectPath]);
+  }, [router, redirectPath, searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -107,8 +126,33 @@ export default function LoginClient() {
     router.replace("/dashboard");
   }
 
+  async function handleOAuth(provider: "google" | "apple") {
+    setMessage("");
+    setOauthLoading(provider);
+
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", redirectPath);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: callbackUrl.toString(),
+        queryParams: prefilledEmail
+          ? {
+              login_hint: prefilledEmail,
+            }
+          : undefined,
+      },
+    });
+
+    if (error) {
+      setOauthLoading(null);
+      setMessage(getFriendlyOAuthError(provider));
+    }
+  }
+
   const inputClass =
-    "mt-3 h-[54px] w-full rounded-2xl border border-zinc-300 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#CA6180] focus:ring-4 focus:ring-[#CA6180]/10 sm:h-[58px] sm:px-5";
+    "mt-3 h-[52px] w-full rounded-2xl border border-zinc-200 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70 sm:h-[56px] sm:px-5";
 
   if (checkingSession) {
     return (
@@ -119,25 +163,37 @@ export default function LoginClient() {
   }
 
   return (
-  <AuthLayout>
-
-  <div className="w-full">
-
-    <h1 className="text-[36px] font-semibold tracking-[-0.05em] text-[#0F172A] sm:text-[42px]">
-      Log In
-    </h1>
+    <AuthLayout showLogo={false}>
+      <div className="w-full">
+        <h1 className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[30px] font-semibold tracking-[-0.055em] text-[#0F172A] sm:flex-nowrap sm:text-[34px]">
+          <span>Welcome back to</span>
+          <Link
+            href="/latest-landing"
+            aria-label="AvenueBoard home"
+            className="shrink-0"
+          >
+            <img
+              src="/logo.png"
+              alt="AvenueBoard"
+              className="relative -top-[2px] mt-1 h-11 w-auto object-contain sm:h-12"
+            />
+          </Link>
+        </h1>
 
         {redirectPath.includes("/tenant/accept-invite") && (
-          <div className="mt-5 rounded-2xl border border-[#F5D5DF] bg-[#FFF7FA] px-4 py-3 text-[13px] leading-6 text-[#9F3D5F] sm:mt-6">
-            Log in with the email address that received your tenant invitation
+          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-[13px] leading-6 text-blue-800">
+            Log in with the email address that received your resident invitation
             to continue.
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="mt-8 space-y-5 sm:mt-9">
+        <form
+          onSubmit={handleLogin}
+          className="mx-auto mt-7 w-full max-w-[460px] space-y-4"
+        >
           <div>
             <label className="text-[14px] font-medium text-zinc-700">
-              Email Address
+              Email
             </label>
 
             <input
@@ -156,7 +212,7 @@ export default function LoginClient() {
 
             {prefilledEmail && (
               <p className="mt-2 text-[12px] text-zinc-400">
-                This email is locked to match your tenant invitation.
+                This email is locked to match your resident invitation.
               </p>
             )}
           </div>
@@ -170,7 +226,7 @@ export default function LoginClient() {
               <button
                 type="button"
                 onClick={() => router.push("/forgot-password")}
-                className="shrink-0 text-[13px] font-medium text-[#CA6180] hover:opacity-80"
+                className="shrink-0 text-[13px] font-medium text-slate-600 transition hover:text-slate-950"
               >
                 Forgot password?
               </button>
@@ -189,9 +245,9 @@ export default function LoginClient() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-800"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-zinc-500 hover:text-zinc-800"
               >
-                {showPassword ? "🙈" : "👁"}
+                {showPassword ? "Hide" : "Show"}
               </button>
             </div>
           </div>
@@ -205,26 +261,39 @@ export default function LoginClient() {
           <button
             type="submit"
             disabled={loading}
-            className="h-[54px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:opacity-60 sm:h-[58px]"
+            className="h-[52px] w-full rounded-2xl bg-[#0F172A] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#172033] hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Logging in..." : "Log In"}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
 
-        <div className="my-6 flex items-center gap-4 sm:my-7">
+        <div className="mx-auto my-5 flex w-full max-w-[460px] items-center gap-4">
           <div className="h-px flex-1 bg-zinc-200" />
-          <span className="shrink-0 text-[12px] text-zinc-400 sm:text-[13px]">
-            Or continue with
+          <span className="shrink-0 text-[12px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+            OR
           </span>
           <div className="h-px flex-1 bg-zinc-200" />
         </div>
 
-        <button className="h-[50px] w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md sm:h-[52px]">
-          Continue with Google
-        </button>
+        <div className="mx-auto grid w-full max-w-[460px] gap-3">
+          <AuthOAuthButton
+            provider="google"
+            label="Continue with Google"
+            loading={oauthLoading === "google"}
+            disabled={loading || Boolean(oauthLoading)}
+            onClick={() => handleOAuth("google")}
+          />
+          <AuthOAuthButton
+            provider="apple"
+            label="Continue with Apple"
+            loading={oauthLoading === "apple"}
+            disabled={loading || Boolean(oauthLoading)}
+            onClick={() => handleOAuth("apple")}
+          />
+        </div>
 
-        <p className="mt-6 text-center text-[14px] leading-6 text-zinc-500 sm:mt-7">
-          Don’t have an account?{" "}
+        <p className="mt-5 text-center text-[14px] leading-6 text-zinc-500">
+          Don&apos;t have an account?{" "}
           <button
             onClick={() => {
               const params = new URLSearchParams();
@@ -239,9 +308,9 @@ export default function LoginClient() {
 
               router.push(`/signup?${params.toString()}`);
             }}
-            className="font-semibold text-[#CA6180] hover:opacity-80"
+            className="font-semibold text-[#2563EB] transition hover:text-[#1D4ED8] hover:underline hover:underline-offset-4"
           >
-            Create Now
+            Create account
           </button>
         </p>
       </div>

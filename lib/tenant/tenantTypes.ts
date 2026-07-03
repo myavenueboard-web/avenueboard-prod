@@ -12,6 +12,12 @@ export type TenantLease = {
   unit_name: string | null;
   start_date: string | null;
   end_date: string | null;
+  lease_setup_type?: "new" | "existing" | null;
+  payment_tracking_start_date?: string | null;
+  lease_created_at?: string | null;
+  tenant_access_created_at?: string | null;
+  lease_status?: string | null;
+  ended_at?: string | null;
   monthly_rent: number;
   rent_due_day: string | null;
 };
@@ -46,6 +52,11 @@ export type TenantLeaseRow = {
   id: string;
   start_date: string | null;
   end_date: string | null;
+  lease_setup_type?: "new" | "existing" | null;
+  payment_tracking_start_date?: string | null;
+  created_at?: string | null;
+  lease_status?: string | null;
+  ended_at?: string | null;
   monthly_rent: number | null;
   rent_due_day: string | null;
 };
@@ -162,4 +173,5 @@ export type TenantActivity = {
 export type UserInfo = {
   name: string;
   email: string;
+  created_at?: string | null;
 };

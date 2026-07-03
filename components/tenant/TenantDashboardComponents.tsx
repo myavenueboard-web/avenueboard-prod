@@ -2,12 +2,14 @@
 
 import type React from "react";
 import type { RefObject } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
   CircleDot,
+  FileCheck2,
   FileText,
   Home,
   Mail,
@@ -22,12 +24,12 @@ import type {
   RentPayment,
   TenantActivity,
   TenantLease,
+  UserInfo,
 } from "@/lib/tenant/tenantTypes";
 import {
   formatBrand,
   formatCurrency,
   formatDate,
-  formatDueDate,
   formatFileSize,
   getFileLabel,
   getMonthsRemaining,
@@ -39,6 +41,7 @@ type PaymentProgressRow = {
   id: string;
   month: string;
   year: number;
+  cycleDate: Date;
   amount: number;
   status: PaymentProgressStatus;
   subtext: string;
@@ -49,46 +52,80 @@ type PaymentSummaryState = {
   subtext: string;
   messageTone: "error" | "neutral";
 };
+const paymentHistoryGridTemplate = "56px 1.8fr 1fr 1.25fr 0.9fr 0.8fr";
 
 export function PaymentHero({
   lease,
   paymentMethods,
   rentPayments,
+  leaseDocuments,
+  propertyContact,
+  userInfo,
   firstName,
   paymentAction,
   paymentActionError,
   onPayNow,
   onSetupAutoPay,
+  onDisableAutoPay,
 }: {
   lease?: TenantLease;
   paymentMethods: PaymentMethod[];
   rentPayments: RentPayment[];
+  leaseDocuments: LeaseDocument[];
+  propertyContact: PropertyContact | null;
+  userInfo: UserInfo;
   firstName: string;
   paymentAction?: "pay-now" | "autopay" | null;
   paymentActionError?: string;
   onPayNow?: () => void;
   onSetupAutoPay?: () => void;
+  onDisableAutoPay?: () => Promise<boolean>;
 }) {
-  const [leaseStatusOpen, setLeaseStatusOpen] = useState(false);
+  const [leaseDetailsOpen, setLeaseDetailsOpen] = useState(false);
+  const [autoPayManagerOpen, setAutoPayManagerOpen] = useState(false);
+  const activePaymentMethods = paymentMethods.filter(
+    (method) =>
+      method.autopay_enrolled !== false &&
+      String(method.autopay_status || "").toLowerCase() !== "disabled"
+  );
   const defaultMethod =
-    paymentMethods.find((method) => method.is_default) || paymentMethods[0];
+    activePaymentMethods.find((method) => method.is_default) ||
+    activePaymentMethods[0] ||
+    paymentMethods.find((method) => method.is_default) ||
+    paymentMethods[0];
   const greeting = getTimeBasedGreeting();
   const rentUnavailable = !lease || Number(lease.monthly_rent || 0) <= 0;
-  const paymentDisabled = Boolean(paymentAction) || rentUnavailable;
-  const autoPayEnrolled = Boolean(defaultMethod);
+  const leaseEnded = isTenantLeaseEnded(lease);
+  const payNowEligibility = getPayNowEligibility(lease, rentPayments);
+  const paymentDisabled =
+    Boolean(paymentAction) ||
+    rentUnavailable ||
+    leaseEnded ||
+    !payNowEligibility.canPay;
+  const autoPayEnrolled = Boolean(
+    !leaseEnded &&
+    defaultMethod &&
+      defaultMethod.autopay_enrolled !== false &&
+      String(defaultMethod.autopay_status || "").toLowerCase() !== "disabled"
+  );
   const paymentMethodLabel = defaultMethod
     ? `${formatBrand(defaultMethod.brand)} ending in ${defaultMethod.last4 || "0000"}`
     : "Auto-pay not enrolled";
   const paymentSummary = buildPaymentSummaryState(lease, rentPayments);
   const actionMessage =
-    paymentActionError === "You have no payment due at this time."
+    leaseEnded
+      ? "Online rent payments are no longer available for this lease."
+      : paymentActionError === "You have no payment due at this time."
       ? "No payment due at this time."
-      : paymentActionError;
+      : paymentActionError || (!payNowEligibility.canPay && !rentUnavailable
+        ? "No payment due at this time."
+        : "");
   const actionMessageIsNeutral = Boolean(
-    actionMessage &&
+    leaseEnded ||
+      (actionMessage &&
       actionMessage.toLowerCase().includes("no") &&
       actionMessage.toLowerCase().includes("payment") &&
-      actionMessage.toLowerCase().includes("due")
+      actionMessage.toLowerCase().includes("due"))
   );
 
   return (
@@ -142,8 +179,8 @@ export function PaymentHero({
 
             <button
               type="button"
-              onClick={onSetupAutoPay}
-              disabled={Boolean(paymentAction) || !lease}
+              onClick={() => setAutoPayManagerOpen(true)}
+              disabled={Boolean(paymentAction) || !lease || leaseEnded}
               className="h-[48px] w-full rounded-xl border border-zinc-300 bg-white text-[13px] font-semibold text-zinc-950 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {paymentAction === "autopay"
@@ -172,37 +209,220 @@ export function PaymentHero({
         <div className="grid min-h-0 grid-cols-3 gap-4">
           <AvenuePerksCard />
           <CreditBuildingCard />
-          <LeaseStatusCard lease={lease} onClick={() => setLeaseStatusOpen(true)} />
+          <LeaseDetailsCard lease={lease} onClick={() => setLeaseDetailsOpen(true)} />
         </div>
       </div>
     </section>
 
-    {leaseStatusOpen && (
-      <LeaseStatusModal lease={lease} onClose={() => setLeaseStatusOpen(false)} />
+    {leaseDetailsOpen && (
+      <LeaseDetailsModal
+        lease={lease}
+        payments={rentPayments}
+        leaseDocuments={leaseDocuments}
+        propertyContact={propertyContact}
+        userInfo={userInfo}
+        onClose={() => setLeaseDetailsOpen(false)}
+      />
+    )}
+    {autoPayManagerOpen && (
+      <AutoPayManagementModal
+        lease={lease}
+        paymentMethod={defaultMethod}
+        autoPayActive={autoPayEnrolled}
+        nextEligiblePaymentDate={getNextEligiblePaymentDate(lease, rentPayments)}
+        replacing={paymentAction === "autopay"}
+        onClose={() => setAutoPayManagerOpen(false)}
+        onReplacePaymentMethod={() => onSetupAutoPay?.()}
+        onDisableAutoPay={onDisableAutoPay}
+      />
     )}
     </>
   );
 }
 
+function AutoPayManagementModal({
+  lease,
+  paymentMethod,
+  autoPayActive,
+  nextEligiblePaymentDate,
+  replacing,
+  onClose,
+  onReplacePaymentMethod,
+  onDisableAutoPay,
+}: {
+  lease?: TenantLease;
+  paymentMethod?: PaymentMethod;
+  autoPayActive: boolean;
+  nextEligiblePaymentDate: string;
+  replacing: boolean;
+  onClose: () => void;
+  onReplacePaymentMethod: () => void;
+  onDisableAutoPay?: () => Promise<boolean>;
+}) {
+  const [disabling, setDisabling] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const methodLabel = paymentMethod
+    ? `${formatBrand(paymentMethod.brand)} ending in ${paymentMethod.last4 || "0000"}`
+    : "No payment method saved";
+
+  async function handleDisable() {
+    if (!onDisableAutoPay || disabling) return;
+
+    setDisabling(true);
+    setMessage(null);
+    const ok = await onDisableAutoPay();
+    setDisabling(false);
+
+    setMessage(
+      ok
+        ? {
+            type: "success",
+            text: "AutoPay has been turned off for this lease.",
+          }
+        : {
+            type: "error",
+            text: "Unable to disable AutoPay right now. Please try again.",
+          }
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+        aria-label="Close AutoPay management"
+      />
+      <section className="relative w-full max-w-[560px] rounded-[28px] border border-zinc-200 bg-white p-6 shadow-[0_30px_100px_rgba(15,23,42,0.24)]">
+        <div className="flex items-start justify-between gap-5">
+          <div>
+            <h2 className="text-[25px] font-medium tracking-[-0.05em] text-zinc-950">
+              Manage AutoPay
+            </h2>
+            <p className="mt-2 text-[13px] font-medium leading-6 text-zinc-500">
+              Review payment setup for {lease?.property_label || "this rental"}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[20px] text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-900"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mt-6 divide-y divide-zinc-100 border-y border-zinc-100">
+          <AutoPayDetailRow
+            label="AutoPay status"
+            value={autoPayActive ? "Active" : "Not active"}
+            valueClass={autoPayActive ? "text-emerald-700" : "text-zinc-700"}
+          />
+          <AutoPayDetailRow label="Payment method" value={methodLabel} />
+          <AutoPayDetailRow
+            label="Next eligible payment"
+            value={nextEligiblePaymentDate}
+          />
+        </div>
+
+        {message && (
+          <p
+            className={`mt-5 rounded-2xl border px-4 py-3 text-[13px] font-medium leading-5 ${
+              message.type === "success"
+                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : "border-red-100 bg-red-50 text-red-600"
+            }`}
+          >
+            {message.text}
+          </p>
+        )}
+
+        <div className="mt-7 grid gap-3">
+          <button
+            type="button"
+            onClick={onReplacePaymentMethod}
+            disabled={replacing || !lease}
+            className="h-12 rounded-2xl bg-[#0F172A] text-[14px] font-semibold text-white transition hover:bg-[#182338] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {replacing
+              ? "Redirecting..."
+              : autoPayActive
+              ? "Replace payment method"
+              : "Enable AutoPay / Set up AutoPay"}
+          </button>
+
+          {autoPayActive && (
+            <button
+              type="button"
+              onClick={handleDisable}
+              disabled={disabling || replacing}
+              className="h-12 rounded-2xl border border-red-100 bg-white text-[14px] font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {disabling ? "Disabling..." : "Disable AutoPay"}
+            </button>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AutoPayDetailRow({
+  label,
+  value,
+  valueClass = "text-zinc-950",
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="grid grid-cols-[170px_minmax(0,1fr)] gap-5 py-4">
+      <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+        {label}
+      </p>
+      <p className={`min-w-0 truncate text-[14px] font-semibold ${valueClass}`}>
+        {value || "Not available"}
+      </p>
+    </div>
+  );
+}
+
 function AvenuePerksCard() {
+  function openAvenuePerks() {
+    window.location.href = "/avenue-perks";
+  }
+
   return (
     <button
       type="button"
+      onClick={openAvenuePerks}
       aria-label="Open Avenue Perks"
-      className="min-h-0 overflow-hidden rounded-[22px] border border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] p-4 text-left shadow-none transition-transform duration-150 active:scale-[0.99]"
+      className="group min-h-0 cursor-pointer overflow-hidden rounded-[22px] border border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] p-4 text-left shadow-none transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(15,23,42,0.08)] active:scale-[0.99]"
     >
       <div className="flex h-full flex-col">
-        <div className="flex items-start gap-3">
-          <IconBox>✦</IconBox>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <IconBox>✦</IconBox>
 
-          <div>
-            <h3 className="text-[15px] font-medium tracking-[-0.04em]">
-              Avenue Perks
-            </h3>
-            <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
-              Exclusive benefits for residents.
-            </p>
+            <div>
+              <h3 className="text-[15px] font-medium tracking-[-0.04em]">
+                Avenue Perks
+              </h3>
+              <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
+                Exclusive benefits for residents.
+              </p>
+            </div>
           </div>
+
+          <span className="shrink-0 text-[12px] font-semibold text-zinc-900 transition group-hover:text-zinc-700">
+            View →
+          </span>
         </div>
 
         <div className="mt-auto">
@@ -235,11 +455,16 @@ function AvenuePerksCard() {
 }
 
 function CreditBuildingCard() {
+  function openCreditBuilding() {
+    window.location.href = "/credit-building";
+  }
+
   return (
     <button
       type="button"
+      onClick={openCreditBuilding}
       aria-label="Open Credit Building"
-      className="min-h-0 overflow-hidden rounded-[22px] border border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] p-4 text-left shadow-none transition-transform duration-150 active:scale-[0.99]"
+      className="group min-h-0 cursor-pointer overflow-hidden rounded-[22px] border border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] p-4 text-left shadow-none transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(15,23,42,0.08)] active:scale-[0.99]"
     >
       <div className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-3">
@@ -249,8 +474,11 @@ function CreditBuildingCard() {
             </div>
 
             <div>
-              <h3 className="text-[15px] font-medium tracking-[-0.04em]">
+              <h3 className="flex items-center gap-2 text-[15px] font-medium tracking-[-0.04em]">
                 Credit Building
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold tracking-normal text-emerald-700">
+                  Active
+                </span>
               </h3>
               <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
                 Build credit with on-time rent.
@@ -258,13 +486,15 @@ function CreditBuildingCard() {
             </div>
           </div>
 
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
-            Active
+          <span className="shrink-0 text-[12px] font-semibold text-zinc-900 transition group-hover:text-zinc-700">
+            View →
           </span>
         </div>
 
         <div className="mt-auto">
-          <p className="text-[12px] font-medium leading-5 text-zinc-500">Reporting to 3 bureaus</p>
+          <p className="text-[12px] font-medium leading-5 text-zinc-500">
+            Reporting to 3 bureaus
+          </p>
 
           <div className="mt-4 flex items-center justify-between text-[11px] font-bold">
             <span className="text-indigo-700">Experian</span>
@@ -277,7 +507,7 @@ function CreditBuildingCard() {
   );
 }
 
-function LeaseStatusCard({
+function LeaseDetailsCard({
   lease,
   onClick,
 }: {
@@ -290,31 +520,26 @@ function LeaseStatusCard({
     <button
       type="button"
       onClick={onClick}
-      aria-label="Open Lease Status"
-      className="min-h-0 overflow-hidden rounded-[22px] border border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] p-4 text-left shadow-none transition-transform duration-150 active:scale-[0.99]"
+      aria-label="Open Lease Details"
+      className="group min-h-0 cursor-pointer overflow-hidden rounded-[22px] border border-zinc-200 bg-gradient-to-b from-white to-[#FAFAFA] p-4 text-left shadow-none transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(15,23,42,0.08)] active:scale-[0.99]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-[17px] text-indigo-700">
-            ⌂
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+            <FileCheck2 size={18} strokeWidth={1.9} aria-hidden="true" />
           </div>
 
           <div>
             <h3 className="text-[15px] font-medium tracking-[-0.04em]">
-              Lease Status
+              Lease Details
             </h3>
             <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">Active lease</p>
           </div>
         </div>
 
-        <div className="text-right">
-          <p className="text-[12px] font-semibold leading-5 text-zinc-900">
-            Unit {lease?.unit_name || "—"}
-          </p>
-          <p className="mt-0.5 max-w-[120px] truncate text-[11px] leading-4 text-zinc-500">
-            {lease?.property_label || "Property"}
-          </p>
-        </div>
+        <span className="shrink-0 text-[12px] font-semibold text-zinc-900 transition group-hover:text-zinc-700">
+          View →
+        </span>
       </div>
 
       <div className="mt-5">
@@ -329,87 +554,235 @@ function LeaseStatusCard({
       <div className="mt-3 h-2 rounded-full bg-zinc-100">
         <div className="h-2 w-[46%] rounded-full bg-slate-950" />
       </div>
-
-      <CardFooter label="View lease" />
     </button>
   );
 }
 
-function LeaseStatusModal({
+function LeaseDetailsModal({
   lease,
+  payments,
+  leaseDocuments,
+  propertyContact,
+  userInfo,
   onClose,
 }: {
   lease?: TenantLease;
+  payments: RentPayment[];
+  leaseDocuments: LeaseDocument[];
+  propertyContact: PropertyContact | null;
+  userInfo: UserInfo;
   onClose: () => void;
 }) {
   const monthsRemaining = getMonthsRemaining(lease?.end_date);
+  const nextEligiblePaymentDate = getNextEligiblePaymentDate(lease, payments);
+  const progressPercent = getLeaseProgressPercent(lease);
+  const propertyAddress = formatLeaseAddress(lease);
+  const primaryLeaseDocument =
+    leaseDocuments.find((doc) => doc.file_type?.includes("pdf")) ||
+    leaseDocuments[0] ||
+    null;
+  const landlordName = propertyContact?.display_name || "Not available";
+  const landlordEmail = propertyContact?.email || "Not available";
+  const tenantName = userInfo.name || "Not available";
+  const tenantEmail = userInfo.email || "Not available";
+  const optionalTimelineRows = [
+    {
+      label: "Lease added to AvenueBoard",
+      value: lease?.lease_created_at,
+    },
+    {
+      label: "Resident invite sent",
+      value: lease?.tenant_access_created_at,
+    },
+    {
+      label: "Resident Board created",
+      value: userInfo.created_at || lease?.tenant_access_created_at,
+    },
+  ].filter((row) => Boolean(row.value));
 
   return (
     <LargeTenantModal
-      title="Lease Status"
+      title="Lease Details"
       count={monthsRemaining}
-      eyebrow="Current lease details and timeline"
+      eyebrow="View your current lease, property, and access details."
+      panelClassName="h-[86vh] w-[min(1280px,94vw)] min-h-[640px] rounded-[28px]"
       onClose={onClose}
     >
-      <div className="grid gap-4">
-        <div className="rounded-3xl border border-zinc-200 bg-white p-5">
-          <div className="flex items-start justify-between gap-5">
+      <div className="space-y-7">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-6">
+          <div className="grid grid-cols-[minmax(0,1fr)_220px] gap-8">
             <div>
-              <p className="text-[13px] font-medium leading-5 text-zinc-500">
-                Active lease
+              <p className="text-[12px] font-semibold uppercase tracking-[0.13em] text-zinc-400">
+                Lease Overview
               </p>
-              <h3 className="mt-2 text-[28px] font-medium tracking-[-0.05em] text-zinc-950">
+              <h3 className="mt-3 text-[31px] font-medium leading-none tracking-[-0.06em] text-zinc-950">
                 {lease?.property_label || "Property"}
               </h3>
-              <p className="mt-2 max-w-[620px] text-[13px] font-medium leading-6 text-zinc-500">
-                {lease
-                  ? `${lease.street_address}${
-                      lease.unit_name ? `, Unit ${lease.unit_name}` : ""
-                    }, ${lease.city}, ${lease.state_name} ${lease.zip}`
-                  : "Lease details are not available yet."}
+              <p className="mt-3 max-w-[760px] text-[14px] font-medium leading-6 text-zinc-500">
+                {propertyAddress}
               </p>
             </div>
 
             <div className="text-right">
-              <p className="text-[34px] font-semibold tracking-[-0.06em] text-zinc-950">
+              <p className="text-[42px] font-semibold leading-none tracking-[-0.07em] text-zinc-950">
                 {monthsRemaining}
               </p>
-              <p className="text-[12px] text-zinc-500">months remaining</p>
+              <p className="mt-1 text-[12px] font-medium text-zinc-500">
+                months remaining
+              </p>
+              <p className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-700">
+                Active lease
+              </p>
             </div>
           </div>
 
           <div className="mt-6 h-2 rounded-full bg-zinc-100">
-            <div className="h-2 w-[46%] rounded-full bg-slate-950" />
+            <div
+              className="h-2 rounded-full bg-slate-950"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
-        </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          <LeaseDetailTile label="Unit" value={lease?.unit_name || "—"} />
-          <LeaseDetailTile
-            label="Monthly rent"
-            value={`$${Number(lease?.monthly_rent || 0).toLocaleString()}`}
-          />
-          <LeaseDetailTile
-            label="Rent due"
-            value={formatDueDate(lease?.rent_due_day)}
-          />
-          <LeaseDetailTile label="Start date" value={formatDate(lease?.start_date)} />
-          <LeaseDetailTile label="End date" value={formatDate(lease?.end_date)} />
-          <LeaseDetailTile label="Status" value="Active" />
+          <div className="mt-6 grid grid-cols-4 gap-x-8 gap-y-5 border-t border-zinc-100 pt-5">
+            <LeaseDetailField label="Unit" value={lease?.unit_name || "Not available"} />
+            <LeaseDetailField
+              label="Monthly rent"
+              value={formatCurrency(Number(lease?.monthly_rent || 0))}
+            />
+            <LeaseDetailField label="Lease status" value="Active" />
+            <LeaseDetailField
+              label="Next eligible payment"
+              value={nextEligiblePaymentDate}
+            />
+          </div>
+        </section>
+
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)] gap-8">
+          <section>
+            <LeaseSectionTitle
+              title="Lease Timeline"
+              subtitle="Important dates and payment cadence for this lease."
+            />
+            <div className="mt-4 divide-y divide-zinc-100 border-y border-zinc-100">
+              <LeaseDetailRow label="Lease start date" value={formatDate(lease?.start_date)} />
+              <LeaseDetailRow label="Lease end date" value={formatDate(lease?.end_date)} />
+              <LeaseDetailRow
+                label="Rent due day"
+                value={getRentDueDayLabel(lease?.rent_due_day)}
+              />
+              <LeaseDetailRow
+                label="Next eligible payment"
+                value={nextEligiblePaymentDate}
+              />
+              {optionalTimelineRows.map((row) => (
+                <LeaseDetailRow
+                  key={row.label}
+                  label={row.label}
+                  value={formatDate(row.value)}
+                />
+              ))}
+            </div>
+          </section>
+
+          <div className="space-y-8">
+            <section>
+              <LeaseSectionTitle
+                title="People / Access"
+                subtitle="Contacts connected to this rental workspace."
+              />
+              <div className="mt-4 divide-y divide-zinc-100 border-y border-zinc-100">
+                <LeaseDetailRow label="Tenant name" value={tenantName} />
+                <LeaseDetailRow label="Tenant email" value={tenantEmail} />
+                <LeaseDetailRow label="Landlord name" value={landlordName} />
+                <LeaseDetailRow label="Landlord email" value={landlordEmail} />
+              </div>
+            </section>
+
+            <section>
+              <LeaseSectionTitle
+                title="Documents"
+                subtitle="Lease files shared in AvenueBoard."
+              />
+              <div className="mt-4 border-y border-zinc-100 py-4">
+                {primaryLeaseDocument ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-semibold text-zinc-950">
+                        {primaryLeaseDocument.file_name || "Lease document"}
+                      </p>
+                      <p className="mt-1 text-[12px] font-medium text-zinc-500">
+                        Uploaded {formatNullableDate(primaryLeaseDocument.created_at)}
+                      </p>
+                    </div>
+                    {primaryLeaseDocument.file_url ? (
+                      <a
+                        href={primaryLeaseDocument.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-[12px] font-semibold text-zinc-950 transition hover:text-zinc-600"
+                      >
+                        View lease document →
+                      </a>
+                    ) : (
+                      <span className="shrink-0 text-[12px] font-medium text-zinc-400">
+                        File unavailable
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[13px] font-medium leading-6 text-zinc-500">
+                    No lease document uploaded yet.
+                  </p>
+                )}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </LargeTenantModal>
   );
 }
 
-function LeaseDetailTile({ label, value }: { label: string; value: string }) {
+function LeaseSectionTitle({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-4">
+    <div>
+      <h3 className="text-[18px] font-medium tracking-[-0.045em] text-zinc-950">
+        {title}
+      </h3>
+      <p className="mt-1 text-[13px] font-medium leading-6 text-zinc-500">
+        {subtitle}
+      </p>
+    </div>
+  );
+}
+
+function LeaseDetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
         {label}
       </p>
-      <p className="mt-2 truncate text-[14px] font-semibold text-zinc-950">
-        {value}
+      <p className="mt-1.5 truncate text-[14px] font-semibold text-zinc-950">
+        {value || "Not available"}
+      </p>
+    </div>
+  );
+}
+
+function LeaseDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[minmax(150px,0.62fr)_minmax(0,1fr)] gap-6 py-3.5">
+      <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+        {label}
+      </p>
+      <p className="min-w-0 truncate text-[14px] font-semibold text-zinc-950">
+        {value || "Not available"}
       </p>
     </div>
   );
@@ -852,18 +1225,24 @@ function LargeTenantModal({
   title,
   count,
   eyebrow,
+  panelClassName,
   onClose,
   children,
 }: {
   title: string;
   count: number;
   eyebrow: string;
+  panelClassName?: string;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="fixed inset-0 z-[105] flex items-center justify-center bg-black/30 px-5 py-6 backdrop-blur-sm">
-      <div className="flex h-[72vh] w-[min(1120px,92vw)] min-h-[520px] flex-col overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_34px_110px_rgba(15,23,42,0.28)]">
+      <div
+        className={`flex h-[72vh] w-[min(1120px,92vw)] min-h-[520px] flex-col overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_34px_110px_rgba(15,23,42,0.28)] ${
+          panelClassName || ""
+        }`}
+      >
         <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-200 px-7 py-6">
           <div>
             <div className="flex items-center gap-3">
@@ -948,8 +1327,49 @@ export function PaymentProgressCard({
   payments: RentPayment[];
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const progressListRef = useRef<HTMLDivElement | null>(null);
   const rows = buildPaymentProgress(lease, payments);
-  const summary = buildPaymentProgressSummary(rows);
+  const leaseEndDate = lease?.end_date || lease?.start_date || null;
+  const finalRows = rows.filter((row) => {
+    if (!leaseEndDate) return true;
+    if (!row.cycleDate) return false;
+
+    const leaseEndMonth = getLeaseCoveredEndMonthStart(
+      lease?.start_date || leaseEndDate,
+      leaseEndDate
+    );
+    const rowCycleMonth = startOfPaymentMonth(row.cycleDate);
+
+    return rowCycleMonth <= leaseEndMonth;
+  });
+  const summary = buildPaymentProgressSummary(finalRows);
+  const visibleStartIndex = getPaymentProgressVisibleStartIndex(finalRows);
+  const visibleStartRowId = finalRows[visibleStartIndex]?.id || "";
+  const rowSignature = finalRows
+    .map((row) => `${row.id}:${row.status}`)
+    .join("|");
+
+  useEffect(() => {
+    const list = progressListRef.current;
+
+    if (!list || finalRows.length <= 5 || visibleStartIndex < 0) return;
+
+    window.requestAnimationFrame(() => {
+      const visibleStartRow = list.querySelector<HTMLElement>(
+        `[data-payment-row-id="${visibleStartRowId}"]`
+      );
+
+      if (!visibleStartRow || list.scrollHeight <= list.clientHeight) return;
+
+      const listRect = list.getBoundingClientRect();
+      const rowRect = visibleStartRow.getBoundingClientRect();
+
+      list.scrollTop = Math.max(
+        0,
+        rowRect.top - listRect.top + list.scrollTop
+      );
+    });
+  }, [finalRows.length, rowSignature, visibleStartIndex, visibleStartRowId]);
 
   return (
     <>
@@ -963,16 +1383,23 @@ export function PaymentProgressCard({
           onClick={() => setHistoryOpen(true)}
           className="flex items-center gap-2 text-[13px] font-semibold leading-5 text-zinc-950 transition-transform duration-150 active:scale-[0.96]"
         >
-          All history <span>→</span>
+          All Statements <span>→</span>
         </button>
       </div>
 
-      <div className="mt-5 max-h-[304px] space-y-4 overflow-y-auto pr-1">
-        {rows.map((item, index) => {
+      <div
+        ref={progressListRef}
+        className="mt-5 max-h-[304px] space-y-4 overflow-y-auto pr-1"
+      >
+        {finalRows.map((item, index) => {
           return (
-          <div key={item.id} className="grid grid-cols-[28px_minmax(0,1fr)_minmax(42px,96px)_auto] items-center gap-3">
+          <div
+            key={item.id}
+            data-payment-row-id={item.id}
+            className="grid grid-cols-[28px_minmax(0,1fr)_minmax(42px,96px)_auto] items-center gap-3"
+          >
             <div className="relative flex justify-center">
-              {index < rows.length - 1 && (
+              {index < finalRows.length - 1 && (
                 <span className="absolute top-8 h-[42px] w-px bg-zinc-200" />
               )}
               <span
@@ -1040,7 +1467,7 @@ export function PaymentProgressCard({
     {historyOpen && (
       <PaymentHistoryModal
         lease={lease}
-        rows={rows}
+        rows={finalRows}
         summary={summary}
         onClose={() => setHistoryOpen(false)}
       />
@@ -1084,6 +1511,9 @@ function PaymentHistoryModal({
   summary: ReturnType<typeof buildPaymentProgressSummary>;
   onClose: () => void;
 }) {
+  const [unavailableStatementRowId, setUnavailableStatementRowId] = useState<
+    string | null
+  >(null);
   const nextRow =
     rows.find((row) => row.status === "upcoming") ||
     rows.find((row) => row.status === "late") ||
@@ -1095,15 +1525,25 @@ function PaymentHistoryModal({
     ? Math.round((summary.paid / rows.length) * 100)
     : 0;
 
+  useEffect(() => {
+    if (!unavailableStatementRowId) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setUnavailableStatementRowId(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [unavailableStatementRowId]);
+
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
-      <div className="flex h-[90vh] w-[min(1320px,96vw)] flex-col overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_34px_110px_rgba(15,23,42,0.28)]">
+      <div
+        className="flex h-[90vh] w-[min(1320px,96vw)] flex-col overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_34px_110px_rgba(15,23,42,0.28)]"
+        onClick={() => setUnavailableStatementRowId(null)}
+      >
         <div className="flex shrink-0 items-start justify-between gap-6 border-b border-zinc-200 px-7 py-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-              AvenueBoard Statement
-            </p>
-            <h2 className="mt-1 text-[27px] font-medium tracking-[-0.055em] text-zinc-950">
+            <h2 className="text-[27px] font-medium tracking-[-0.055em] text-zinc-950">
               Payment History Report
             </h2>
             <p className="mt-1 text-[13px] leading-6 text-zinc-500">
@@ -1114,7 +1554,10 @@ function PaymentHistoryModal({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
               aria-label="Close payment history"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[20px] text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-900"
             >
@@ -1124,7 +1567,7 @@ function PaymentHistoryModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-[#FBFBFA] px-7 py-6">
-          <div className="overflow-hidden rounded-[30px] border border-zinc-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
             <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)] gap-0">
               <div className="border-r border-zinc-200 p-7">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
@@ -1171,23 +1614,35 @@ function PaymentHistoryModal({
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-4 overflow-hidden rounded-[24px] border border-zinc-200 bg-white">
+          <div className="mt-5 grid grid-cols-4 overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <PaymentSummaryItem label="Paid" count={summary.paid} dotClass="bg-emerald-500" countClass="text-emerald-600" />
             <PaymentSummaryItem label="Upcoming" count={summary.upcoming} dotClass="bg-blue-500" countClass="text-blue-600" />
             <PaymentSummaryItem label="Late" count={summary.late} dotClass="bg-amber-500" countClass="text-amber-600" />
             <PaymentSummaryItem label="Future" count={summary.future} dotClass="bg-zinc-300" countClass="text-zinc-500" />
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-[28px] border border-zinc-200 bg-white">
-            <div className="grid grid-cols-[minmax(0,1fr)_150px_160px_130px_110px] border-b border-zinc-200 bg-zinc-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-              <span>Installment</span>
-              <span>Status</span>
-              <span>Due detail</span>
-              <span className="text-right">Amount</span>
-              <span className="text-right">Statement</span>
+          <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+            <div
+              className="grid items-center border-b border-zinc-200 bg-zinc-50/70 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400"
+              style={{ gridTemplateColumns: paymentHistoryGridTemplate }}
+            >
+              <span className="justify-self-center"> </span>
+              <span className="justify-self-start">Installment</span>
+              <span className="justify-self-start">Status</span>
+              <span className="justify-self-start">Due detail</span>
+              <span className="justify-self-start">Amount</span>
+              <span className="justify-self-start">Statement</span>
             </div>
             {rows.map((row) => (
-              <PaymentHistoryRow key={row.id} lease={lease} row={row} />
+              <PaymentHistoryRow
+                key={row.id}
+                lease={lease}
+                row={row}
+                statementNoticeOpen={unavailableStatementRowId === row.id}
+                onUnavailableStatement={() =>
+                  setUnavailableStatementRowId(row.id)
+                }
+              />
             ))}
           </div>
         </div>
@@ -1199,29 +1654,40 @@ function PaymentHistoryModal({
 function PaymentHistoryRow({
   lease,
   row,
+  statementNoticeOpen,
+  onUnavailableStatement,
 }: {
   lease?: TenantLease;
   row: PaymentProgressRow;
+  statementNoticeOpen: boolean;
+  onUnavailableStatement: () => void;
 }) {
   const detail = getPaymentProgressDetail(row);
+  const statementAvailable = row.status === "paid";
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_150px_160px_130px_110px] items-center border-b border-zinc-200 px-5 py-4 last:border-b-0">
-      <div className="flex min-w-0 items-center gap-3">
-        <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold ${
-            row.status === "paid"
-              ? "border-emerald-500 bg-emerald-500 text-white"
-              : row.status === "late"
-              ? "border-amber-500 bg-white text-amber-600"
-              : row.status === "upcoming"
-              ? "border-blue-100 bg-blue-50 text-blue-600"
-              : "border-zinc-200 bg-zinc-50 text-zinc-500"
-          }`}
-        >
-          {row.status === "paid" ? "✓" : row.status === "late" ? "!" : ""}
-        </span>
-        <div className="min-w-0">
+    <div className="border-b border-zinc-200 px-5 py-4 last:border-b-0">
+      <div
+        className="grid items-center"
+        style={{ gridTemplateColumns: paymentHistoryGridTemplate }}
+      >
+        <div className="flex justify-self-center">
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold ${
+              row.status === "paid"
+                ? "border-emerald-500 bg-emerald-500 text-white"
+                : row.status === "late"
+                ? "border-amber-500 bg-white text-amber-600"
+                : row.status === "upcoming"
+                ? "border-blue-100 bg-blue-50 text-blue-600"
+                : "border-zinc-200 bg-zinc-50 text-zinc-500"
+            }`}
+          >
+            {row.status === "paid" ? "✓" : row.status === "late" ? "!" : ""}
+          </span>
+        </div>
+
+        <div className="min-w-0 justify-self-start">
           <p className="truncate text-[14px] font-semibold text-zinc-950">
             {row.month} {row.year}
           </p>
@@ -1229,35 +1695,70 @@ function PaymentHistoryRow({
             Rent installment
           </p>
         </div>
-      </div>
 
-      <span
-        className={`w-fit rounded-full px-4 py-2 text-[12px] font-semibold ${detail.className}`}
-      >
-        {detail.label}
-      </span>
-
-      <p className="truncate text-[12px] font-medium text-zinc-500">{row.subtext}</p>
-
-      <p
-        className={`text-right text-[14px] font-semibold ${
-          row.status === "paid"
-            ? "text-emerald-600"
-            : row.status === "late"
-            ? "text-amber-700"
-            : "text-zinc-800"
-        }`}
-      >
-        {formatCurrency(row.amount)}
-      </p>
-
-      <div className="text-right">
-        <button
-          onClick={() => downloadMonthlyStatementPdf(lease, row)}
-          className="text-[12px] font-semibold text-zinc-600 transition hover:text-zinc-950"
+        <span
+          className={`w-fit justify-self-start rounded-full px-4 py-2 text-[12px] font-semibold ${detail.className}`}
         >
-          Download
-        </button>
+          {detail.label}
+        </span>
+
+        <p className="min-w-0 justify-self-start truncate text-[12px] font-medium text-zinc-500">
+          {row.subtext}
+        </p>
+
+        <p
+          className={`justify-self-start text-left text-[14px] font-semibold ${
+            row.status === "paid"
+              ? "text-emerald-600"
+              : row.status === "late"
+              ? "text-amber-700"
+              : "text-zinc-800"
+          }`}
+        >
+          {formatCurrency(row.amount)}
+        </p>
+
+        <div className="relative justify-self-start text-left">
+          {statementAvailable ? (
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!lease?.tenant_access_id) return;
+                window.open(
+                  `/tenant/statements/${lease.tenant_access_id}/${row.id}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }}
+              className="text-[12px] font-semibold text-zinc-600 transition hover:text-zinc-950"
+            >
+              Download
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onUnavailableStatement();
+              }}
+              className="text-[12px] font-semibold text-zinc-500 transition hover:text-zinc-800"
+            >
+              Download
+            </button>
+          )}
+
+          {statementNoticeOpen && !statementAvailable && (
+            <div className="absolute right-0 top-7 z-30 w-[310px] rounded-2xl border border-amber-100 bg-white px-4 py-3 text-left shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
+              <p className="text-[12px] font-semibold text-amber-800">
+                Statement not generated yet.
+              </p>
+              <p className="mt-1 text-[12px] leading-5 text-zinc-500">
+                A rent statement will be available after a completed payment is
+                recorded for this month.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1349,317 +1850,6 @@ function getPaymentTotal(rows: PaymentProgressRow[], status: PaymentProgressStat
     .reduce((total, row) => total + row.amount, 0);
 }
 
-function downloadMonthlyStatementPdf(
-  lease: TenantLease | undefined,
-  row: PaymentProgressRow
-) {
-  const printWindow = window.open("", "_blank", "noopener,noreferrer");
-
-  if (!printWindow) {
-    return;
-  }
-
-  printWindow.document.write(getMonthlyStatementPrintHtml(lease, row));
-  printWindow.document.close();
-  printWindow.focus();
-  window.setTimeout(() => {
-    printWindow.print();
-  }, 250);
-}
-
-function getMonthlyStatementPrintHtml(
-  lease: TenantLease | undefined,
-  row: PaymentProgressRow
-) {
-  const detail = getPaymentProgressDetail(row);
-  const avenueFee = 10;
-  const cardProcessingFee = 0;
-  const statementTotal = row.amount + avenueFee + cardProcessingFee;
-  const propertyAddress = [
-    lease?.street_address,
-    lease?.unit_name ? `Unit ${lease.unit_name}` : "",
-    lease?.city,
-    lease?.state_name,
-    lease?.zip,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const logoUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/logo.png`
-      : "/logo.png";
-
-  return `
-    <!doctype html>
-    <html>
-      <head>
-        <title>AvenueBoard Monthly Statement</title>
-        <style>
-          * { box-sizing: border-box; }
-          body {
-            margin: 0;
-            background: #f7f7f6;
-            color: #09090b;
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          }
-          .page {
-            width: min(860px, calc(100vw - 48px));
-            margin: 32px auto;
-            border: 1px solid #e4e4e7;
-            border-radius: 28px;
-            background: #fff;
-            overflow: hidden;
-          }
-          header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 28px;
-            padding: 34px 38px 30px;
-            border-bottom: 1px solid #efeff0;
-          }
-          .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-          }
-          .brand img {
-            width: 34px;
-            height: 34px;
-            object-fit: contain;
-          }
-          .brand strong {
-            display: block;
-            font-size: 15px;
-            letter-spacing: -.02em;
-          }
-          .eyebrow {
-            margin: 0 0 8px;
-            color: #a1a1aa;
-            font-size: 11px;
-            font-weight: 750;
-            letter-spacing: .14em;
-            text-transform: uppercase;
-          }
-          h1 {
-            margin: 0;
-            font-size: 32px;
-            line-height: 1;
-            letter-spacing: -.04em;
-          }
-          .subtitle {
-            margin: 10px 0 0;
-            color: #71717a;
-            font-size: 13px;
-            line-height: 1.6;
-          }
-          .status {
-            border-radius: 999px;
-            padding: 8px 14px;
-            background: #f4f4f5;
-            color: #52525b;
-            font-size: 12px;
-            font-weight: 750;
-            white-space: nowrap;
-          }
-          .status.paid { background: #ecfdf5; color: #047857; }
-          .status.late { background: #fffbeb; color: #b45309; }
-          .status.upcoming { background: #eff6ff; color: #1d4ed8; }
-          .statement-hero {
-            display: grid;
-            grid-template-columns: 1fr 260px;
-            border-bottom: 1px solid #efeff0;
-          }
-          .statement-main {
-            padding: 34px 38px;
-            border-right: 1px solid #efeff0;
-          }
-          .label {
-            color: #a1a1aa;
-            font-size: 11px;
-            font-weight: 750;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-          }
-          .total {
-            margin-top: 12px;
-            font-size: 46px;
-            font-weight: 750;
-            letter-spacing: -.06em;
-          }
-          .metrics {
-            display: grid;
-            grid-template-columns: 1fr;
-          }
-          .metric {
-            min-height: 94px;
-            padding: 24px;
-            border-bottom: 1px solid #efeff0;
-          }
-          .metric:last-child { border-bottom: 0; }
-          .metric strong {
-            display: block;
-            margin-top: 10px;
-            font-size: 18px;
-            letter-spacing: -.04em;
-          }
-          .green { color: #059669; }
-          .amber { color: #b45309; }
-          .content { padding: 30px 38px 38px; }
-          .details {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 14px;
-            margin-bottom: 24px;
-          }
-          .detail-card {
-            border: 1px solid #efeff0;
-            border-radius: 18px;
-            padding: 18px;
-          }
-          .detail-card p {
-            margin: 0;
-            color: #71717a;
-            font-size: 12px;
-            line-height: 1.6;
-          }
-          .detail-card strong {
-            display: block;
-            margin-bottom: 7px;
-            color: #18181b;
-            font-size: 13px;
-          }
-          table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            overflow: hidden;
-            border: 1px solid #efeff0;
-            border-radius: 20px;
-          }
-          th {
-            padding: 14px 18px;
-            background: #fafafa;
-            color: #a1a1aa;
-            font-size: 10px;
-            letter-spacing: .12em;
-            text-align: left;
-            text-transform: uppercase;
-          }
-          td {
-            padding: 16px 18px;
-            border-top: 1px solid #efeff0;
-            color: #3f3f46;
-            font-size: 13px;
-            vertical-align: middle;
-          }
-          .amount { text-align: right; color: #18181b; font-weight: 750; }
-          tfoot td {
-            background: #fafafa;
-            color: #09090b;
-            font-size: 15px;
-            font-weight: 750;
-          }
-          .note {
-            margin: 18px 0 0;
-            color: #71717a;
-            font-size: 11px;
-            line-height: 1.7;
-          }
-          @media print {
-            body { background: #fff; }
-            .page { width: 100%; margin: 0; border-radius: 0; border: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <main class="page">
-          <header>
-            <div>
-              <div class="brand">
-                <img src="${escapeHtml(logoUrl)}" alt="AvenueBoard" />
-                <strong>AvenueBoard</strong>
-              </div>
-              <p class="eyebrow" style="margin-top:24px">Monthly Statement</p>
-              <h1>${escapeHtml(`${row.month} ${row.year}`)}</h1>
-              <p class="subtitle">${escapeHtml(lease?.property_label || "Property")} · ${escapeHtml(row.subtext)}</p>
-            </div>
-            <span class="status ${row.status}">${escapeHtml(detail.label)}</span>
-          </header>
-          <section class="statement-hero">
-            <div class="statement-main">
-              <div class="label">Statement total</div>
-              <div class="total">${escapeHtml(formatCurrency(statementTotal))}</div>
-              <p class="subtitle">Includes monthly rent and AvenueBoard service line items. Card or bank processing fees will populate here when Stripe fee data is available.</p>
-            </div>
-            <div class="metrics">
-              <div class="metric"><span class="label">Monthly rent</span><strong>${escapeHtml(formatCurrency(row.amount))}</strong></div>
-              <div class="metric"><span class="label">Due date</span><strong>${escapeHtml(row.subtext.replace("Due on ", ""))}</strong></div>
-              <div class="metric"><span class="label">Status</span><strong>${escapeHtml(detail.label)}</strong></div>
-            </div>
-          </section>
-          <section class="content">
-            <div class="details">
-              <div class="detail-card">
-                <strong>Property details</strong>
-                <p>${escapeHtml(propertyAddress || "Property address unavailable")}</p>
-                <p>Lease: ${escapeHtml(formatDate(lease?.start_date))} to ${escapeHtml(formatDate(lease?.end_date))}</p>
-              </div>
-              <div class="detail-card">
-                <strong>Landlord details</strong>
-                <p>Property owner / manager</p>
-                <p>Managed through AvenueBoard</p>
-              </div>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Type</th>
-                  <th style="text-align:right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Monthly rent</td>
-                  <td>Rent</td>
-                  <td class="amount">${escapeHtml(formatCurrency(row.amount))}</td>
-                </tr>
-                <tr>
-                  <td>AvenueBoard service fee</td>
-                  <td>Platform fee</td>
-                  <td class="amount">${escapeHtml(formatCurrency(avenueFee))}</td>
-                </tr>
-                <tr>
-                  <td>Card / bank processing</td>
-                  <td>Dynamic fee</td>
-                  <td class="amount">${escapeHtml(formatCurrency(cardProcessingFee))}</td>
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="2">Statement total</td>
-                  <td class="amount">${escapeHtml(formatCurrency(statementTotal))}</td>
-                </tr>
-              </tfoot>
-            </table>
-            <p class="note">This statement is generated from the current AvenueBoard lease schedule. Processing fees are shown as dynamic line items and will update once Stripe fee details are available.</p>
-          </section>
-        </main>
-      </body>
-    </html>
-  `;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
 export function QuickAccessCard({
   propertyContact,
 }: {
@@ -1679,9 +1869,17 @@ export function QuickAccessCard({
 
   return (
     <section className="rounded-[24px] border border-zinc-200 bg-white p-5 shadow-none">
-      <h2 className="text-[18px] font-medium tracking-[-0.045em] text-slate-950">
-        Property Contact
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[18px] font-medium tracking-[-0.045em] text-slate-950">
+          Property Contact
+        </h2>
+        <Link
+          href="/help-center?section=faq"
+          className="text-[12px] font-semibold text-zinc-500 transition hover:text-zinc-900 hover:underline hover:underline-offset-4"
+        >
+          Need Help?
+        </Link>
+      </div>
 
       <div className="mt-4 flex items-center gap-4">
         <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] border border-white bg-gradient-to-br from-slate-950 to-slate-700 text-white shadow-[0_14px_32px_rgba(15,23,42,0.16)] ring-1 ring-slate-950/10">
@@ -1985,20 +2183,19 @@ function buildPaymentProgress(
   payments: RentPayment[] = []
 ): PaymentProgressRow[] {
   const rent = Number(lease?.monthly_rent || 0);
-  const start = getFirstRentCycleMonthStart(
-    lease?.start_date || new Date().toISOString()
-  );
-  const end = getMonthStart(lease?.end_date || lease?.start_date || new Date().toISOString());
+  const leaseStartValue =
+    getLeasePaymentCycleStartValue(lease) || new Date().toISOString();
+  const leaseEndValue = lease?.end_date || lease?.start_date || new Date().toISOString();
+  const cycles = getLeaseRentCycleMonths(leaseStartValue, leaseEndValue);
+  const start = cycles[0] || getLeaseFirstRentCycleMonthStart(leaseStartValue);
+  const end =
+    cycles[cycles.length - 1] || getLeaseLastRentCycleMonthStart(leaseEndValue);
   const dueDay = getRentDueDayNumber(lease?.rent_due_day);
   const today = new Date();
   const firstUpcomingKey = getFirstUpcomingPaymentKey(start, end, dueDay, payments);
   const rows: PaymentProgressRow[] = [];
 
-  for (
-    let cursor = new Date(start);
-    cursor <= end;
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-  ) {
+  for (const cursor of cycles) {
     const month = cursor.toLocaleDateString("en-US", { month: "long" });
     const year = cursor.getFullYear();
     const dueDate = new Date(year, cursor.getMonth(), dueDay);
@@ -2017,12 +2214,15 @@ function buildPaymentProgress(
       id: paymentKey,
       month,
       year,
+      cycleDate: new Date(cursor),
       amount: Number(paidPayment?.amount || rent),
       status,
       subtext:
         status === "paid"
-          ? `Paid on ${formatDate(paidPayment?.paid_at || paidPayment?.created_at)}`
-          : `Due on ${month} ${dueDay}`,
+          ? `Paid on ${formatPaymentProgressDate(
+              paidPayment?.paid_at || paidPayment?.created_at
+            )}`
+          : `Due on ${formatPaymentProgressDate(dueDate)}`,
     });
   }
 
@@ -2046,11 +2246,201 @@ function buildPaymentProgressSummary(
   );
 }
 
+function getNextEligiblePaymentDate(
+  lease?: TenantLease,
+  payments: RentPayment[] = []
+) {
+  if (isTenantLeaseEnded(lease)) {
+    return "Lease ended";
+  }
+
+  const rows = filterPaymentProgressRowsByLeaseEnd(
+    buildPaymentProgress(lease, payments),
+    lease
+  );
+
+  if (rows.length === 0) {
+    return "No upcoming payment";
+  }
+
+  const nextPaymentRow =
+    rows.find((row) => row.status === "late") ||
+    rows.find((row) => row.status === "upcoming") ||
+    rows.find((row) => row.status === "future");
+
+  if (!nextPaymentRow) {
+    return "No upcoming payment";
+  }
+
+  return formatPaymentProgressDate(
+    new Date(
+      nextPaymentRow.cycleDate.getFullYear(),
+      nextPaymentRow.cycleDate.getMonth(),
+      getRentDueDayNumber(lease?.rent_due_day)
+    )
+  );
+}
+
+function getPayNowEligibility(
+  lease?: TenantLease,
+  payments: RentPayment[] = []
+) {
+  if (!lease || Number(lease.monthly_rent || 0) <= 0 || isTenantLeaseEnded(lease)) {
+    return {
+      canPay: false,
+      row: null as PaymentProgressRow | null,
+    };
+  }
+
+  const rows = filterPaymentProgressRowsByLeaseEnd(
+    buildPaymentProgress(lease, payments),
+    lease
+  );
+  const today = new Date();
+  const currentCycle = new Date(today.getFullYear(), today.getMonth(), 1);
+  const maxEarlyCycle = new Date(
+    currentCycle.getFullYear(),
+    currentCycle.getMonth() + 1,
+    1
+  );
+  const payableRow =
+    rows.find(
+      (row) =>
+        row.status !== "paid" &&
+        startOfPaymentMonth(row.cycleDate) <= currentCycle
+    ) ||
+    rows.find(
+      (row) =>
+        row.status !== "paid" &&
+        getPaymentMonthKey(row.cycleDate) === getPaymentMonthKey(maxEarlyCycle)
+    ) ||
+    null;
+
+  return {
+    canPay: Boolean(payableRow),
+    row: payableRow,
+  };
+}
+
+function formatLeaseAddress(lease?: TenantLease) {
+  if (!lease) return "Not available";
+
+  const address = [
+    lease.street_address,
+    lease.unit_name ? `Unit ${lease.unit_name}` : "",
+    lease.city,
+    lease.state_name,
+    lease.zip,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return address || "Not available";
+}
+
+function formatNullableDate(value?: string | null) {
+  return value ? formatDate(value) : "Not available";
+}
+
+function getRentDueDayLabel(value?: string | null) {
+  const day = getRentDueDayNumber(value);
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+      ? "nd"
+      : day % 10 === 3 && day !== 13
+      ? "rd"
+      : "th";
+
+  return `${day}${suffix} of each month`;
+}
+
+function getLeaseProgressPercent(lease?: TenantLease) {
+  if (!lease?.start_date || !lease?.end_date) return 0;
+
+  const start = new Date(lease.start_date).getTime();
+  const end = new Date(lease.end_date).getTime();
+  const today = Date.now();
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, ((today - start) / (end - start)) * 100));
+}
+
+function filterPaymentProgressRowsByLeaseEnd(
+  rows: PaymentProgressRow[],
+  lease?: TenantLease
+) {
+  const leaseEndValue = lease?.end_date || lease?.start_date;
+  const leaseStartValue = getLeasePaymentCycleStartValue(lease) || leaseEndValue;
+
+  if (!leaseEndValue || !leaseStartValue) return rows;
+
+  const leaseEndMonth = getLeaseCoveredEndMonthStart(
+    leaseStartValue,
+    leaseEndValue
+  );
+
+  return rows.filter((row) => row.cycleDate <= leaseEndMonth);
+}
+
+function getLeasePaymentCycleStartValue(lease?: TenantLease) {
+  return lease?.payment_tracking_start_date || lease?.start_date || null;
+}
+
+function isTenantLeaseEnded(lease?: TenantLease | null) {
+  return (
+    Boolean(lease?.ended_at) ||
+    ["ended", "inactive", "terminated"].includes(
+      String(lease?.lease_status || "").toLowerCase()
+    )
+  );
+}
+
+function getPaymentProgressVisibleStartIndex(rows: PaymentProgressRow[]) {
+  if (rows.length <= 5) return 0;
+
+  const currentCycleKey = getPaymentMonthKey(new Date());
+  const firstUpcomingIndex = rows.findIndex((row) => row.status === "upcoming");
+  if (firstUpcomingIndex >= 0) {
+    return Math.max(0, firstUpcomingIndex - 3);
+  }
+
+  const firstLateIndex = rows.findIndex((row) => row.status === "late");
+  if (firstLateIndex >= 0) {
+    return Math.max(0, firstLateIndex - 3);
+  }
+
+  const currentMonthIndex = rows.findIndex((row) => row.id === currentCycleKey);
+  if (currentMonthIndex >= 0) {
+    return Math.max(0, currentMonthIndex - 3);
+  }
+
+  const latestPaidIndex = rows.findLastIndex((row) => row.status === "paid");
+  if (latestPaidIndex >= 0) {
+    return Math.max(0, latestPaidIndex - 4);
+  }
+
+  return Math.max(0, rows.length - 5);
+}
+
 function buildPaymentSummaryState(
   lease?: TenantLease,
   payments: RentPayment[] = []
 ): PaymentSummaryState {
   const rent = Number(lease?.monthly_rent || 0);
+
+  if (isTenantLeaseEnded(lease)) {
+    return {
+      label: "Lease ended",
+      amount: "Ended",
+      subtext: "Online rent payments are no longer available for this lease.",
+      messageTone: "neutral",
+    };
+  }
 
   if (!lease || rent <= 0) {
     return {
@@ -2061,10 +2451,10 @@ function buildPaymentSummaryState(
     };
   }
 
-  const start = getFirstRentCycleMonthStart(
-    lease.start_date || new Date().toISOString()
-  );
-  const end = getMonthStart(lease.end_date || lease.start_date || new Date().toISOString());
+  const leaseStartValue =
+    getLeasePaymentCycleStartValue(lease) || new Date().toISOString();
+  const leaseEndValue = lease.end_date || lease.start_date || new Date().toISOString();
+  const allCycles = getLeaseRentCycleMonths(leaseStartValue, leaseEndValue);
   const today = new Date();
   const currentCycle = new Date(today.getFullYear(), today.getMonth(), 1);
   const maxEarlyCycle = new Date(
@@ -2072,16 +2462,7 @@ function buildPaymentSummaryState(
     currentCycle.getMonth() + 1,
     1
   );
-  const cycleEnd = end < maxEarlyCycle ? end : maxEarlyCycle;
-  const cycles: Date[] = [];
-
-  for (
-    let cursor = new Date(start);
-    cursor <= cycleEnd;
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-  ) {
-    cycles.push(cursor);
-  }
+  const cycles = allCycles.filter((cycle) => cycle <= maxEarlyCycle);
 
   const oldestUnpaidCurrentOrPast = cycles.find(
     (cycle) => cycle <= currentCycle && !findPaymentForMonth(payments, cycle)
@@ -2132,14 +2513,85 @@ function buildPaymentSummaryState(
   };
 }
 
-function getMonthStart(value: string) {
+function getLeaseFirstRentCycleMonthStart(value: string) {
+  const { year, monthIndex, day } = getLocalDateParts(value);
+  return new Date(year, day === 1 ? monthIndex : monthIndex + 1, 1);
+}
+
+function getLeaseLastRentCycleMonthStart(value: string) {
   const { year, monthIndex } = getLocalDateParts(value);
   return new Date(year, monthIndex, 1);
 }
 
-function getFirstRentCycleMonthStart(value: string) {
-  const { year, monthIndex, day } = getLocalDateParts(value);
-  return new Date(year, day === 1 ? monthIndex : monthIndex + 1, 1);
+function getLeaseRentCycleMonths(startValue: string, endValue: string) {
+  const firstCycleMonth = getLeaseFirstRentCycleMonthStart(startValue);
+  const leaseEndMonth = getLeaseCoveredEndMonthStart(startValue, endValue);
+  const cycles: Date[] = [];
+
+  for (
+    let cursor = new Date(firstCycleMonth);
+    cursor <= leaseEndMonth;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+  ) {
+    if (cursor <= leaseEndMonth) {
+      cycles.push(new Date(cursor));
+    }
+  }
+
+  return cycles;
+}
+
+function getLeaseCoveredEndMonthStart(startValue: string, endValue: string) {
+  const startParts = getLocalDateParts(startValue);
+  const endParts = getLocalDateParts(endValue);
+  const endMonth = new Date(endParts.year, endParts.monthIndex, 1);
+  const firstCycleMonth = getLeaseFirstRentCycleMonthStart(startValue);
+  const isAnniversaryBoundary =
+    startParts.day === 1 &&
+    endParts.day === 1 &&
+    endMonth > firstCycleMonth;
+
+  if (isAnniversaryBoundary) {
+    return new Date(endParts.year, endParts.monthIndex - 1, 1);
+  }
+
+  return endMonth;
+}
+
+function startOfPaymentMonth(value: Date | string) {
+  if (value instanceof Date) {
+    return new Date(value.getFullYear(), value.getMonth(), 1);
+  }
+
+  const { year, monthIndex } = getLocalDateParts(value);
+  return new Date(year, monthIndex, 1);
+}
+
+function formatPaymentProgressDate(value?: Date | string | null) {
+  if (!value) return "—";
+
+  const date =
+    value instanceof Date
+      ? value
+      : (() => {
+          const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+          if (match) {
+            return new Date(
+              Number(match[1]),
+              Number(match[2]) - 1,
+              Number(match[3])
+            );
+          }
+
+          return new Date(value);
+        })();
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function getLocalDateParts(value: string) {

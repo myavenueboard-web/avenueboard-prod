@@ -278,7 +278,7 @@ export function EmailFooter({ note }: { note?: string }) {
               <div style="font-weight:800;color:${SLATE};font-size:15px;letter-spacing:-0.03em;">AvenueBoard</div>
               <div style="margin-top:10px;">
                 ${escapeHtml(
-                  note || "Built for landlords. Designed for tenants."
+                  note || "Built for landlords. Designed for residents."
                 )}
               </div>
               <div style="margin-top:16px;color:#94a3b8;">
@@ -853,7 +853,7 @@ We're excited to have you here.
     },
     add_first_property_reminder: {
       subject: "Create your first AvenueBoard property",
-      text: `${landlordName}, your AvenueBoard workspace is ready. Add your first property to start organizing leases, tenant access, documents, and rent activity in one place. ${addPropertyUrl()}`,
+      text: `${landlordName}, your AvenueBoard workspace is ready. Add your first property to start organizing leases, resident access, documents, and rent activity in one place. ${addPropertyUrl()}`,
       html: EmailActionNotice({
         preview: "Add your first property to start organizing your rental workspace.",
         title: "Create your first property",
@@ -861,7 +861,7 @@ We're excited to have you here.
         headline: "Your workspace is ready.",
         paragraphs: [
           `${landlordName}, add your first property to create the center of your rental record.`,
-          "Once your property is added, AvenueBoard can help keep leases, tenant access, documents, and rent activity organized in one place.",
+          "Once your property is added, AvenueBoard can help keep leases, resident access, documents, and rent activity organized in one place.",
         ],
         ctaLabel: "Create Your First Property",
         ctaHref: addPropertyUrl(),
@@ -869,15 +869,15 @@ We're excited to have you here.
     },
     tenant_invitation: {
       subject: `You’ve been invited to AvenueBoard`,
-      text: `${tenantName}, your landlord invited you to join ${propertyName} on AvenueBoard. Accept your invitation to access your tenant workspace and keep lease information, documents, and payment records organized. ${inviteLink}`,
+      text: `${tenantName}, your landlord invited you to join ${propertyName} on AvenueBoard. Accept your invitation to access your resident workspace and keep lease information, documents, and payment records organized. ${inviteLink}`,
       html: EmailActionNotice({
         preview: `Your landlord invited you to join ${propertyName} on AvenueBoard.`,
         title: "AvenueBoard invitation",
         eyebrow: "Invitation",
-        headline: "Your tenant workspace is ready.",
+        headline: "Your resident workspace is ready.",
         paragraphs: [
           `${tenantName}, your landlord invited you to join ${propertyName} on AvenueBoard.`,
-          "Accept your invitation to access your tenant workspace and keep lease information, documents, payment records, and property updates organized in one place.",
+          "Accept your invitation to access your resident workspace and keep lease information, documents, payment records, and property updates organized in one place.",
         ],
         ctaLabel: "Accept Invitation",
         ctaHref: inviteLink,
@@ -886,7 +886,7 @@ We're excited to have you here.
     },
     tenant_invite_reminder_24h: {
       subject: "Your AvenueBoard invitation is ready",
-      text: `A friendly reminder that your AvenueBoard invitation for ${propertyName} is ready when you are. Accept to access your tenant workspace. ${inviteLink}`,
+      text: `A friendly reminder that your AvenueBoard invitation for ${propertyName} is ready when you are. Accept to access your resident workspace. ${inviteLink}`,
       html: EmailActionNotice({
         preview: "Your AvenueBoard invite is ready when you are.",
         title: "Accept your invite",
@@ -894,7 +894,7 @@ We're excited to have you here.
         headline: "Your invite is ready.",
         paragraphs: [
           `A friendly note that your AvenueBoard invitation for ${propertyName} is still available.`,
-          "Accept when convenient to access your tenant workspace and keep important rental information organized.",
+          "Accept when convenient to access your resident workspace and keep important rental information organized.",
         ],
         ctaLabel: "Accept Invitation",
         ctaHref: inviteLink,
@@ -903,7 +903,7 @@ We're excited to have you here.
     },
     tenant_invite_reminder_48h: {
       subject: "Your AvenueBoard invite is still open",
-      text: `Your AvenueBoard invite for ${propertyName} is still open. Accept whenever you are ready to access your tenant workspace. ${inviteLink}`,
+      text: `Your AvenueBoard invite for ${propertyName} is still open. Accept whenever you are ready to access your resident workspace. ${inviteLink}`,
       html: EmailActionNotice({
         preview: "Your AvenueBoard invite is still open.",
         title: "Your invite is still open",
@@ -911,7 +911,7 @@ We're excited to have you here.
         headline: "A quick note.",
         paragraphs: [
           `Your invitation for ${propertyName} is still open.`,
-          "When you're ready, you can accept it to access your tenant workspace and keep rental records in one place.",
+          "When you're ready, you can accept it to access your resident workspace and keep rental records in one place.",
         ],
         ctaLabel: "Accept Invitation",
         ctaHref: inviteLink,
@@ -920,7 +920,7 @@ We're excited to have you here.
     },
     tenant_invite_reminder_72h: {
       subject: "Final reminder: AvenueBoard invitation",
-      text: `Final reminder: your AvenueBoard invitation for ${propertyName} is still available. Accept to access your tenant workspace when you're ready. ${inviteLink}`,
+      text: `Final reminder: your AvenueBoard invitation for ${propertyName} is still available. Accept to access your resident workspace when you're ready. ${inviteLink}`,
       html: EmailActionNotice({
         preview: "Your AvenueBoard invitation is still available.",
         title: "Final invite reminder",
@@ -928,7 +928,7 @@ We're excited to have you here.
         headline: "Your invitation is still available.",
         paragraphs: [
           `This is a final reminder that your AvenueBoard invitation for ${propertyName} is still open.`,
-          "Accept when you're ready to access your tenant workspace and keep important rental information organized.",
+          "Accept when you're ready to access your resident workspace and keep important rental information organized.",
         ],
         ctaLabel: "Accept Invitation",
         ctaHref: inviteLink,
@@ -937,7 +937,7 @@ We're excited to have you here.
     },
     lease_activated: {
       subject: "Your lease is active on AvenueBoard",
-      text: `Your lease for ${propertyName} is active on AvenueBoard. You can now view lease details, documents, payment information, and property updates in your tenant portal. ${tenantUrl()}`,
+      text: `Your lease for ${propertyName} is active on AvenueBoard. You can now view lease details, documents, payment information, and property updates in your Resident Board. ${tenantUrl()}`,
       html: EmailActionNotice({
         preview: "Your lease workspace is now active.",
         title: "Lease activated",
@@ -945,32 +945,32 @@ We're excited to have you here.
         headline: "Your lease is active.",
         paragraphs: [
           `Good news: your lease for ${propertyName} is active in AvenueBoard.`,
-          "You can now view lease details, documents, payment information, and property updates in your tenant portal.",
+          "You can now view lease details, documents, payment information, and property updates in your Resident Board.",
         ],
         ctaLabel: "View Lease",
         ctaHref: tenantUrl(),
         details: [
           { label: "Property", value: propertyName },
-          { label: "Tenant", value: tenantName },
+          { label: "Resident", value: tenantName },
         ],
       }),
     },
     tenant_accepted_landlord_notification: {
       subject: `${tenantName} accepted your AvenueBoard invite`,
-      text: `${tenantName} accepted the AvenueBoard invitation for ${propertyName}. Their tenant workspace is now active. ${dashboardUrl()}`,
+      text: `${tenantName} accepted the AvenueBoard invitation for ${propertyName}. Their resident workspace is now active. ${dashboardUrl()}`,
       html: EmailActionNotice({
-        preview: "Tenant onboarding is complete.",
-        title: "Tenant invite accepted",
+        preview: "Resident onboarding is complete.",
+        title: "Resident invite accepted",
         eyebrow: "Invite Accepted",
-        headline: "Tenant onboarding is complete.",
+        headline: "Resident onboarding is complete.",
         paragraphs: [
           `${tenantName} accepted the AvenueBoard invitation for ${propertyName}.`,
-          "Their tenant workspace is active, and both sides can stay aligned around lease information, documents, and rental activity.",
+          "Their resident workspace is active, and both sides can stay aligned around lease information, documents, and rental activity.",
         ],
         ctaLabel: "View Lease",
         ctaHref: dashboardUrl(),
         details: [
-          { label: "Tenant", value: tenantName },
+          { label: "Resident", value: tenantName },
           { label: "Property", value: propertyName },
         ],
       }),
