@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import {
   ArrowRight,
+  BarChart3,
   Bell,
   Camera,
   CheckCircle2,
@@ -42,7 +43,7 @@ import type {
 } from "@/lib/tenant/tenantTypes";
 
 type MobileState = "signed-out" | "tenant" | "dual" | "landlord-only";
-type MobileTab = "home" | "rent" | "perks" | "hub" | "activity";
+type MobileTab = "home" | "rent" | "perks" | "hub" | "activity" | "ava" | "reports";
 type MobilePerksSection = "avenue-perks" | "credit-building";
 type MobileAccountDrawerTab = "profile" | "notifications";
 type MobileAvaMessage = {
@@ -65,6 +66,8 @@ type MobileResolution = {
   nextHomeData?: MobileHomeData;
   nextRentals?: MobileRental[];
   nextSelectedRentalId?: string;
+  nextLandlordProperties?: MobileLandlordProperty[];
+  nextSelectedLandlordPropertyId?: string;
 };
 
 type MobileContext = {
@@ -170,18 +173,35 @@ type MobileRental = {
   homeData: MobileHomeData;
 };
 
+type MobileLandlordProperty = {
+  id: string;
+  propertyName: string;
+  propertyAddress: string;
+  unitName: string;
+};
+
 type MobileTabIcon = (props: {
   size?: number;
   strokeWidth?: number;
   className?: string;
 }) => ReactNode;
 
-const mobileTabs: { id: MobileTab; label: string; Icon: MobileTabIcon }[] = [
+type MobileNavTab = { id: MobileTab; label: string; Icon: MobileTabIcon };
+
+const mobileTabs: MobileNavTab[] = [
   { id: "home", label: "Home", Icon: Home },
   { id: "rent", label: "Rent", Icon: ReceiptText },
   { id: "perks", label: "Perks", Icon: Sparkles },
   { id: "hub", label: "Ava", Icon: MessageSquare },
   { id: "activity", label: "Activity", Icon: FileText },
+];
+
+const landlordMobileTabs: MobileNavTab[] = [
+  { id: "home", label: "Home", Icon: Home },
+  { id: "rent", label: "Rent", Icon: ReceiptText },
+  { id: "perks", label: "Perks", Icon: Sparkles },
+  { id: "ava", label: "Ava", Icon: MessageSquare },
+  { id: "reports", label: "Reports", Icon: BarChart3 },
 ];
 
 const emptyHomeData: MobileHomeData = {
@@ -299,6 +319,7 @@ export default function MobileAppClient() {
   const [splashExpired, setSplashExpired] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const [dualResidentSelected, setDualResidentSelected] = useState(false);
+  const [dualLandlordSelected, setDualLandlordSelected] = useState(false);
   const [context, setContext] = useState<MobileContext>({
     profileId: null,
     firstName: "there",
@@ -314,6 +335,11 @@ export default function MobileAppClient() {
   const [homeData, setHomeData] = useState<MobileHomeData>(emptyHomeData);
   const [rentals, setRentals] = useState<MobileRental[]>([]);
   const [selectedRentalId, setSelectedRentalId] = useState<string | null>(null);
+  const [landlordProperties, setLandlordProperties] = useState<
+    MobileLandlordProperty[]
+  >([]);
+  const [selectedLandlordPropertyId, setSelectedLandlordPropertyId] =
+    useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<MobileTab>("home");
 
   useEffect(() => {
@@ -332,7 +358,10 @@ export default function MobileAppClient() {
         setHomeData,
         setRentals,
         setSelectedRentalId,
+        setLandlordProperties,
+        setSelectedLandlordPropertyId,
         setDualResidentSelected,
+        setDualLandlordSelected,
       });
       setAuthResolved(true);
     }
@@ -355,7 +384,10 @@ export default function MobileAppClient() {
           setHomeData,
           setRentals,
           setSelectedRentalId,
+          setLandlordProperties,
+          setSelectedLandlordPropertyId,
           setDualResidentSelected,
+          setDualLandlordSelected,
         });
         setAuthResolved(true);
         return;
@@ -370,7 +402,10 @@ export default function MobileAppClient() {
             setHomeData,
             setRentals,
             setSelectedRentalId,
+            setLandlordProperties,
+            setSelectedLandlordPropertyId,
             setDualResidentSelected,
+            setDualLandlordSelected,
           });
           setAuthResolved(true);
         })
@@ -423,6 +458,8 @@ export default function MobileAppClient() {
   const showSplash =
     !splashTimedOut && (!minimumSplashDone || !authResolved || splashElapsedMs < 900);
   const showTenantShell = state === "tenant" || (state === "dual" && dualResidentSelected);
+  const showLandlordShell =
+    state === "landlord-only" || (state === "dual" && dualLandlordSelected);
 
   return (
     <main className="min-h-screen bg-[#F5F6F8] text-[#0F172A]">
@@ -446,10 +483,36 @@ export default function MobileAppClient() {
             onRentalsChange={setRentals}
             onTabChange={setActiveTab}
           />
+        ) : showLandlordShell ? (
+          <LandlordMobileShell
+            activeTab={activeTab}
+            context={context}
+            properties={landlordProperties}
+            selectedPropertyId={selectedLandlordPropertyId}
+            onSelectProperty={(property) => {
+              setSelectedLandlordPropertyId(property.id);
+              setContext((current) => ({
+                ...current,
+                propertyAddress: property.propertyAddress,
+                unitName: property.unitName,
+              }));
+            }}
+            onContextChange={setContext}
+            onTabChange={setActiveTab}
+          />
         ) : (
           <MobilePlaceholder
             state={state}
-            onResidentApp={() => setDualResidentSelected(true)}
+            onResidentApp={() => {
+              setDualResidentSelected(true);
+              setDualLandlordSelected(false);
+              setActiveTab("home");
+            }}
+            onLandlordApp={() => {
+              setDualResidentSelected(false);
+              setDualLandlordSelected(true);
+              setActiveTab("home");
+            }}
           />
         )}
       </div>
@@ -488,6 +551,9 @@ async function resolveMobileSession(): Promise<MobileResolution> {
     validAccessRows.map((access) => loadMobileRental(access, profile))
   );
   const availableRentals = rentals.filter(Boolean) as MobileRental[];
+  const landlordProperties = hasLandlordRole
+    ? await loadMobileLandlordProperties(profile.id)
+    : [];
   const selectedRental = availableRentals[0];
   const fallbackContext: MobileContext = {
     profileId: profile.id,
@@ -509,6 +575,8 @@ async function resolveMobileSession(): Promise<MobileResolution> {
       nextHomeData: selectedRental?.homeData || emptyHomeData,
       nextRentals: availableRentals,
       nextSelectedRentalId: selectedRental?.accessId,
+      nextLandlordProperties: landlordProperties,
+      nextSelectedLandlordPropertyId: landlordProperties[0]?.id,
     };
   }
 
@@ -523,9 +591,25 @@ async function resolveMobileSession(): Promise<MobileResolution> {
   }
 
   if (hasLandlordRole) {
+    const selectedLandlordProperty = landlordProperties[0];
+    const landlordPropertyAddress =
+      selectedLandlordProperty?.propertyAddress ||
+      "101 Main St, Unit 2B, Chicago, IL";
+
     return {
       nextState: "landlord-only",
-      nextContext: fallbackContext,
+      nextContext: {
+        ...fallbackContext,
+        tenantName: profile.display_name || "Landlord",
+        tenantEmail: profile.email || "Not available",
+        tenantPhone: profile.phone || "Not available",
+        propertyAddress: landlordPropertyAddress,
+        unitName: selectedLandlordProperty?.unitName || "Not available",
+        landlordName: profile.display_name || "Landlord",
+        landlordEmail: profile.email || "Not available",
+      },
+      nextLandlordProperties: landlordProperties,
+      nextSelectedLandlordPropertyId: selectedLandlordProperty?.id,
     };
   }
 
@@ -543,7 +627,10 @@ function applyMobileResolution(
     setHomeData: (homeData: MobileHomeData) => void;
     setRentals: (rentals: MobileRental[]) => void;
     setSelectedRentalId: (id: string | null) => void;
+    setLandlordProperties: (properties: MobileLandlordProperty[]) => void;
+    setSelectedLandlordPropertyId: (id: string | null) => void;
     setDualResidentSelected: (selected: boolean) => void;
+    setDualLandlordSelected: (selected: boolean) => void;
   }
 ) {
   if (result.nextContext) setters.setContext(result.nextContext);
@@ -554,14 +641,60 @@ function applyMobileResolution(
   } else {
     setters.setSelectedRentalId(null);
   }
+  if (result.nextLandlordProperties) {
+    setters.setLandlordProperties(result.nextLandlordProperties);
+  }
+  if (result.nextSelectedLandlordPropertyId) {
+    setters.setSelectedLandlordPropertyId(result.nextSelectedLandlordPropertyId);
+  } else {
+    setters.setSelectedLandlordPropertyId(null);
+  }
 
-  if (result.nextState !== "dual") setters.setDualResidentSelected(false);
+  if (result.nextState !== "dual") {
+    setters.setDualResidentSelected(false);
+    setters.setDualLandlordSelected(false);
+  }
   if (result.nextState === "signed-out") {
     setters.setHomeData(emptyHomeData);
     setters.setRentals([]);
+    setters.setLandlordProperties([]);
   }
 
   setters.setState(result.nextState);
+}
+
+async function loadMobileLandlordProperties(
+  profileId: string
+): Promise<MobileLandlordProperty[]> {
+  const { data } = await supabase
+    .from("properties")
+    .select("id, property_label, street_address, city, state_name, zip, unit_name")
+    .eq("owner_profile_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  return (data || [])
+    .filter((property): property is {
+      id: string;
+      property_label: string | null;
+      street_address: string | null;
+      city: string | null;
+      state_name: string | null;
+      zip: string | null;
+      unit_name: string | null;
+    } => Boolean(property.id))
+    .map((property) => {
+      const propertyAddress = formatPropertyAddress(property);
+      return {
+        id: property.id,
+        propertyName: property.property_label || "Rental property",
+        propertyAddress:
+          propertyAddress === "Resident workspace"
+            ? "101 Main St, Unit 2B, Chicago, IL"
+            : propertyAddress,
+        unitName: property.unit_name || "Not available",
+      };
+    });
 }
 
 async function loadMobileRental(
@@ -952,6 +1085,113 @@ function MobileShell({
           onChangeTab={setAccountDrawerTab}
           onClose={() => setAccountDrawerOpen(false)}
           onProfileSaved={updateCurrentContext}
+        />
+      )}
+    </>
+  );
+}
+
+function LandlordMobileShell({
+  activeTab,
+  context,
+  properties,
+  selectedPropertyId,
+  onSelectProperty,
+  onContextChange,
+  onTabChange,
+}: {
+  activeTab: MobileTab;
+  context: MobileContext;
+  properties: MobileLandlordProperty[];
+  selectedPropertyId: string | null;
+  onSelectProperty: (property: MobileLandlordProperty) => void;
+  onContextChange: (context: MobileContext) => void;
+  onTabChange: (tab: MobileTab) => void;
+}) {
+  const activeLabel =
+    landlordMobileTabs.find((tab) => tab.id === activeTab)?.label || "Home";
+  const selectedProperty =
+    properties.find((property) => property.id === selectedPropertyId) || properties[0];
+  const displayContext = {
+    ...context,
+    propertyAddress:
+      selectedProperty?.propertyAddress ||
+      (context.propertyAddress !== "Resident workspace"
+        ? context.propertyAddress
+        : "101 Main St, Unit 2B, Chicago, IL"),
+    unitName: selectedProperty?.unitName || context.unitName,
+  };
+  const [propertySelectorOpen, setPropertySelectorOpen] = useState(false);
+  const [dealsOpen, setDealsOpen] = useState(false);
+  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+  const [accountDrawerTab, setAccountDrawerTab] =
+    useState<MobileAccountDrawerTab>("profile");
+  const perksTabActive = activeTab === "perks";
+
+  const openAccountDrawer = (tab: MobileAccountDrawerTab) => {
+    setAccountDrawerTab(tab);
+    setAccountDrawerOpen(true);
+  };
+
+  return (
+    <>
+      <section className="scrollbar-hide min-h-0 flex-1 overflow-y-auto bg-white pb-[calc(env(safe-area-inset-bottom)+104px)]">
+        {perksTabActive ? (
+          <LandlordPerksHeader />
+        ) : (
+          <>
+            <MobileHeader
+              context={displayContext}
+              onOpenNotifications={() => openAccountDrawer("notifications")}
+              onOpenProfile={() => openAccountDrawer("profile")}
+            />
+            <WorkspaceRow
+              address={displayContext.propertyAddress}
+              label="Landlord"
+              multipleProperties={properties.length > 1}
+              onOpenContext={() =>
+                properties.length > 1 ? setPropertySelectorOpen(true) : undefined
+              }
+            />
+          </>
+        )}
+        <div className="px-5 pt-7">
+          {perksTabActive ? (
+            <LandlordPerksTab
+              onViewAllDeals={() => setDealsOpen(true)}
+            />
+          ) : (
+            <MobileTabPlaceholder label={activeLabel} />
+          )}
+        </div>
+      </section>
+      <MobileBottomNav
+        activeTab={activeTab}
+        tabs={landlordMobileTabs}
+        onTabChange={onTabChange}
+      />
+      {propertySelectorOpen && (
+        <LandlordPropertySelectorSheet
+          properties={properties}
+          selectedPropertyId={selectedProperty?.id || null}
+          onSelect={(property) => {
+            onSelectProperty(property);
+            setPropertySelectorOpen(false);
+          }}
+          onClose={() => setPropertySelectorOpen(false)}
+        />
+      )}
+      {dealsOpen && (
+        <MobileDealsSheet deals={mobilePartnerDeals} onClose={() => setDealsOpen(false)} />
+      )}
+      {accountDrawerOpen && (
+        <MobileAccountDrawer
+          activeTab={accountDrawerTab}
+          context={displayContext}
+          homeData={emptyHomeData}
+          onChangeTab={setAccountDrawerTab}
+          onClose={() => setAccountDrawerOpen(false)}
+          onProfileSaved={onContextChange}
         />
       )}
     </>
@@ -1468,6 +1708,26 @@ function PerksTab({
         ))}
       </section>
     </div>
+  );
+}
+
+function LandlordPerksHeader() {
+  return (
+    <div className="sticky top-0 z-20 bg-white">
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+14px)]">
+        <div className="relative flex h-12 items-center text-[14px] font-semibold text-[#0F172A]">
+          Avenue Perks
+          <span className="absolute bottom-0 left-0 h-[2px] w-24 bg-[#0F172A]" />
+        </div>
+      </div>
+      <div className="h-px bg-zinc-200" />
+    </div>
+  );
+}
+
+function LandlordPerksTab({ onViewAllDeals }: { onViewAllDeals: () => void }) {
+  return (
+    <PerksTab activeSection="avenue-perks" onViewAllDeals={onViewAllDeals} />
   );
 }
 
@@ -2036,6 +2296,60 @@ function PropertySelectorSheet({
                   </p>
                   <p className="mt-2 text-[11px] font-semibold text-zinc-400">
                     Unit {rental.unitName || "Not available"}
+                  </p>
+                </div>
+                {active ? (
+                  <span className="shrink-0 rounded-full bg-[#0F172A] px-2.5 py-1 text-[10px] font-semibold text-white">
+                    Current
+                  </span>
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </MobileSheet>
+  );
+}
+
+function LandlordPropertySelectorSheet({
+  properties,
+  selectedPropertyId,
+  onSelect,
+  onClose,
+}: {
+  properties: MobileLandlordProperty[];
+  selectedPropertyId: string | null;
+  onSelect: (property: MobileLandlordProperty) => void;
+  onClose: () => void;
+}) {
+  return (
+    <MobileSheet title="Landlord properties" count={properties.length} onClose={onClose}>
+      <div className="space-y-3">
+        {properties.map((property) => {
+          const active = property.id === selectedPropertyId;
+
+          return (
+            <button
+              key={property.id}
+              type="button"
+              onClick={() => onSelect(property)}
+              className={`w-full rounded-2xl border px-4 py-4 text-left transition active:scale-[0.99] ${
+                active
+                  ? "border-[#0F172A] bg-[#F8FAFC]"
+                  : "border-zinc-200 bg-white hover:border-zinc-300"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold text-[#050B1F]">
+                    {property.propertyName}
+                  </p>
+                  <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
+                    {property.propertyAddress || "Not available"}
+                  </p>
+                  <p className="mt-2 text-[11px] font-semibold text-zinc-400">
+                    Unit {property.unitName || "Not available"}
                   </p>
                 </div>
                 {active ? (
@@ -2797,16 +3111,18 @@ function HeaderIcon({
 
 function MobileBottomNav({
   activeTab,
+  tabs = mobileTabs,
   onTabChange,
 }: {
   activeTab: MobileTab;
+  tabs?: MobileNavTab[];
   onTabChange: (tab: MobileTab) => void;
 }) {
   return (
     <div className="fixed bottom-0 left-1/2 z-30 w-full max-w-[440px] -translate-x-1/2 bg-white pb-[max(env(safe-area-inset-bottom),12px)]">
       <nav className="w-full max-w-[440px] border-t border-zinc-200 bg-white px-2 pb-3 pt-2">
         <div className="grid grid-cols-5">
-          {mobileTabs.map(({ id, label, Icon }) => {
+          {tabs.map(({ id, label, Icon }) => {
             const active = activeTab === id;
 
             return (
@@ -2836,9 +3152,11 @@ function MobileBottomNav({
 function MobilePlaceholder({
   state,
   onResidentApp,
+  onLandlordApp,
 }: {
   state: MobileState;
   onResidentApp: () => void;
+  onLandlordApp: () => void;
 }) {
   if (state === "signed-out") {
     return (
@@ -2854,7 +3172,7 @@ function MobilePlaceholder({
     return (
       <CenteredPlaceholder
         title="Choose your workspace"
-        text="Open the resident mobile app or continue to the Landlord Board."
+        text="Open your resident or landlord mobile workspace."
         action={
           <div className="space-y-3">
             <button
@@ -2864,9 +3182,13 @@ function MobilePlaceholder({
             >
               Resident App
             </button>
-            <MobileButton href="/dashboard" variant="secondary">
-              Landlord Board
-            </MobileButton>
+            <button
+              type="button"
+              onClick={onLandlordApp}
+              className="flex h-12 w-full items-center justify-center rounded-xl border border-zinc-200 bg-white text-[14px] font-semibold text-[#0F172A] transition active:scale-[0.99]"
+            >
+              Landlord App
+            </button>
           </div>
         }
       />
@@ -2875,9 +3197,17 @@ function MobilePlaceholder({
 
   return (
     <CenteredPlaceholder
-      title="Resident app"
-      text="The mobile app is currently optimized for residents."
-      action={<MobileButton href="/dashboard">Open Landlord Board</MobileButton>}
+      title="Mobile app"
+      text="Choose a mobile workspace to continue."
+      action={
+        <button
+          type="button"
+          onClick={onLandlordApp}
+          className="flex h-12 w-full items-center justify-center rounded-xl bg-[#0F172A] text-[14px] font-semibold text-white transition active:scale-[0.99]"
+        >
+          Landlord App
+        </button>
+      }
     />
   );
 }
