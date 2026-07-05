@@ -9,16 +9,20 @@ import {
 } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   ArrowRight,
   BarChart3,
   Bell,
   Camera,
+  AlertCircle,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
   Download,
   FileText,
   Headphones,
   Home,
+  Landmark,
   LogOut,
   Mail,
   MessageSquare,
@@ -68,6 +72,16 @@ type MobileResolution = {
   nextSelectedRentalId?: string;
   nextLandlordProperties?: MobileLandlordProperty[];
   nextSelectedLandlordPropertyId?: string;
+};
+type LandlordMobileHomeProperty = {
+  name: string;
+  address: string;
+  rent: string;
+  tenant: string;
+  due: string;
+  bank: string;
+  status: string;
+  needsConnection: boolean;
 };
 
 type MobileContext = {
@@ -1005,7 +1019,7 @@ function MobileShell({
             }
           />
         )}
-        <div className="px-5 pt-7">
+        <div className={`px-5 ${activeTab === "home" ? "pt-5" : "pt-7"}`}>
           {activeTab === "home" ? (
             <HomeTab
               context={context}
@@ -1123,10 +1137,23 @@ function LandlordMobileShell({
   };
   const [propertySelectorOpen, setPropertySelectorOpen] = useState(false);
   const [dealsOpen, setDealsOpen] = useState(false);
+  const [detailProperty, setDetailProperty] =
+    useState<LandlordMobileHomeProperty | null>(null);
+  const [landlordAvaMessages, setLandlordAvaMessages] = useState<MobileAvaMessage[]>([
+    {
+      id: "landlord-ava-welcome",
+      role: "assistant",
+      content:
+        "Hi, I'm Ava 👋\n\nI'm here to help with your properties, rent collection, tenants, and setup tasks.\n\nHow can I help today?",
+    },
+  ]);
   const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
   const [accountDrawerTab, setAccountDrawerTab] =
     useState<MobileAccountDrawerTab>("profile");
   const perksTabActive = activeTab === "perks";
+  const avaTabActive = activeTab === "ava";
+  const rentTabActive = activeTab === "rent";
+  const propertyDetailOpen = activeTab === "home" && detailProperty;
 
   const openAccountDrawer = (tab: MobileAccountDrawerTab) => {
     setAccountDrawerTab(tab);
@@ -1138,37 +1165,84 @@ function LandlordMobileShell({
       <section className="scrollbar-hide min-h-0 flex-1 overflow-y-auto bg-white pb-[calc(env(safe-area-inset-bottom)+104px)]">
         {perksTabActive ? (
           <LandlordPerksHeader />
+        ) : propertyDetailOpen ? (
+          <LandlordPropertyDetailScreen
+            property={propertyDetailOpen}
+            onBack={() => setDetailProperty(null)}
+          />
         ) : (
           <>
-            <MobileHeader
-              context={displayContext}
-              onOpenNotifications={() => openAccountDrawer("notifications")}
-              onOpenProfile={() => openAccountDrawer("profile")}
-            />
+            {!avaTabActive ? (
+              <MobileHeader
+                context={displayContext}
+                onOpenNotifications={() => openAccountDrawer("notifications")}
+                onOpenProfile={() => openAccountDrawer("profile")}
+              />
+            ) : null}
             <WorkspaceRow
               address={displayContext.propertyAddress}
-              label="Landlord"
-              multipleProperties={properties.length > 1}
+              label={
+                avaTabActive
+                  ? "Ava"
+                  : rentTabActive
+                    ? "Rent"
+                    : "Landlord"
+              }
+              value={
+                avaTabActive
+                  ? "AI Assistant"
+                  : rentTabActive
+                    ? "Performance"
+                    : undefined
+              }
+              interactive={false}
+              singleLabel={!avaTabActive && !rentTabActive}
+              multipleProperties={false}
+              trailingAction={!avaTabActive && !rentTabActive ? (
+                <button
+                  type="button"
+                  className="h-8 rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-[#0F172A] transition active:scale-[0.99]"
+                >
+                  + Add Property
+                </button>
+              ) : undefined}
               onOpenContext={() =>
                 properties.length > 1 ? setPropertySelectorOpen(true) : undefined
               }
             />
           </>
         )}
-        <div className="px-5 pt-7">
-          {perksTabActive ? (
-            <LandlordPerksTab
-              onViewAllDeals={() => setDealsOpen(true)}
-            />
-          ) : (
-            <MobileTabPlaceholder label={activeLabel} />
-          )}
-        </div>
+        {!propertyDetailOpen && (
+          <div className={`px-5 ${activeTab === "home" ? "pt-5" : "pt-7"}`}>
+            {perksTabActive ? (
+              <LandlordPerksTab
+                onViewAllDeals={() => setDealsOpen(true)}
+              />
+            ) : activeTab === "home" ? (
+              <LandlordHomeTab
+                context={displayContext}
+                onOpenProperty={setDetailProperty}
+              />
+            ) : activeTab === "ava" ? (
+              <LandlordAvaTab
+                messages={landlordAvaMessages}
+                onMessagesChange={setLandlordAvaMessages}
+              />
+            ) : activeTab === "rent" ? (
+              <LandlordRentTab />
+            ) : (
+              <MobileTabPlaceholder label={activeLabel} />
+            )}
+          </div>
+        )}
       </section>
       <MobileBottomNav
         activeTab={activeTab}
         tabs={landlordMobileTabs}
-        onTabChange={onTabChange}
+        onTabChange={(tab) => {
+          setDetailProperty(null);
+          onTabChange(tab);
+        }}
       />
       {propertySelectorOpen && (
         <LandlordPropertySelectorSheet
@@ -1240,7 +1314,7 @@ function HomeTab({
   onViewAllDocuments: () => void;
 }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <section>
         <p className="text-[24px] font-semibold tracking-[-0.06em] text-[#050B1F]">
           {getMobileGreeting()}, {context.firstName}
@@ -1256,6 +1330,429 @@ function HomeTab({
       <PropertyContactCard context={context} />
     </div>
   );
+}
+
+function LandlordHomeTab({
+  context,
+  onOpenProperty,
+}: {
+  context: MobileContext;
+  onOpenProperty: (property: LandlordMobileHomeProperty) => void;
+}) {
+  const properties: LandlordMobileHomeProperty[] = [
+    {
+      name: "Wind Energy",
+      address: "1531 Wind Energy Pass, Naperville",
+      rent: "$100",
+      tenant: "Patrik Hester",
+      due: "Next: Jul 1",
+      bank: "Bank pending",
+      status: "Action Needed",
+      needsConnection: true,
+    },
+    {
+      name: "Aneela's Home",
+      address: "Sri ramana Enclave, Hyderabad",
+      rent: "$2,550",
+      tenant: "Aneela M",
+      due: "Next: Jul 1",
+      bank: "Verified",
+      status: "Active",
+      needsConnection: false,
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <section>
+        <p className="text-[24px] font-semibold tracking-[-0.06em] text-[#050B1F]">
+          {getMobileGreeting()}, {context.firstName}
+        </p>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+            Properties
+          </h2>
+          <p className="text-[12px] font-semibold text-zinc-400">2 active</p>
+        </div>
+
+        {properties.map((property) => (
+          <article
+            key={property.name}
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpenProperty(property)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpenProperty(property);
+              }
+            }}
+            className="-mx-1 relative overflow-hidden rounded-2xl border border-zinc-200 bg-white px-4 py-3.5"
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute inset-y-0 left-0 w-1 ${
+                property.status === "Active" ? "bg-emerald-500" : "bg-blue-500"
+              }`}
+            />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="truncate text-[18px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+                    {property.name}
+                  </h3>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${
+                      property.status === "Active"
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "bg-blue-50 text-blue-600"
+                    }`}
+                  >
+                    {property.status}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-[12px] font-medium leading-5 text-zinc-500">
+                  {property.address}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenProperty(property);
+                }}
+                className="h-8 shrink-0 px-1 text-[12px] font-semibold text-[#0F172A] transition hover:opacity-75 active:scale-[0.99]"
+              >
+                View
+              </button>
+            </div>
+
+            <div className="mt-3 border-t border-zinc-100 pt-3">
+              <div className="grid grid-cols-4 divide-x divide-zinc-100">
+                <div className="min-w-0 pr-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    Rent
+                  </p>
+                  <p className="mt-1 truncate text-[16px] font-semibold tracking-[-0.05em] text-emerald-600">
+                    {property.rent}
+                    <span className="ml-0.5 text-[12px] font-medium tracking-[-0.02em] text-zinc-500">
+                      /mo
+                    </span>
+                  </p>
+                </div>
+                <div className="min-w-0 px-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    Tenant
+                  </p>
+                  <p className="mt-1 truncate text-[12px] font-semibold text-[#050B1F]">
+                    {property.tenant}
+                  </p>
+                </div>
+                <div className="min-w-0 px-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    Due
+                  </p>
+                  <p className="mt-1 truncate text-[12px] font-semibold text-[#050B1F]">
+                    {property.due}
+                  </p>
+                </div>
+                <div className="min-w-0 pl-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    Bank
+                  </p>
+                  <p
+                    className={`mt-1 truncate text-[12px] font-semibold ${
+                      property.needsConnection ? "text-amber-600" : "text-emerald-600"
+                    }`}
+                  >
+                    {property.bank}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+
+        <button
+          type="button"
+          className="-mx-1 flex h-12 w-[calc(100%+0.5rem)] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-[14px] font-semibold text-[#0F172A] transition active:scale-[0.99]"
+        >
+          + Add Property
+        </button>
+      </section>
+
+      <section className="-mx-1 mt-2 rounded-2xl border border-zinc-200 bg-white p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[18px] font-semibold tracking-[-0.055em] text-[#050B1F]">
+            Portfolio Summary
+          </h2>
+          <span className="flex h-9 items-center rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-[#0F172A]">
+            This Month
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-[1fr_auto_1fr] gap-4">
+          <div className="min-w-0">
+            <p className="text-[14px] font-medium tracking-[-0.035em] text-zinc-500">
+              Monthly Rent
+            </p>
+            <p className="mt-1 text-[30px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+              $2,650
+            </p>
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Stable
+            </div>
+          </div>
+
+          <div className="my-2 w-px bg-zinc-200" />
+
+          <div className="min-w-0">
+            <p className="text-[14px] font-medium tracking-[-0.035em] text-zinc-500">
+              Total Properties
+            </p>
+            <p className="mt-1 text-[30px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+              2
+            </p>
+            <div className="mt-3 flex items-center gap-2 text-[13px] font-medium leading-5 text-zinc-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Active 2
+            </div>
+          </div>
+        </div>
+
+        <div className="my-4 h-px bg-zinc-100" />
+
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-[17px] font-semibold tracking-[-0.05em] text-[#050B1F]">
+              Payout Performance
+            </h3>
+            <span className="flex h-8 items-center rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-[#0F172A]">
+              12 Months
+            </span>
+          </div>
+
+          <div className="mt-3 rounded-2xl border border-zinc-100 bg-white p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[13px] font-semibold text-zinc-500">
+                  Collection Rate
+                </p>
+                <p className="mt-1 text-[34px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+                  0%
+                </p>
+              </div>
+              <div className="space-y-2 text-[12px] font-medium text-zinc-500">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  0 paid
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-orange-500" />
+                  0 late
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-end justify-between gap-2">
+                {Array.from({ length: 12 }).map((_, index) => (
+                  <span
+                    key={index}
+                    className="h-12 w-3 rounded-full bg-zinc-200"
+                  />
+                ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-zinc-400">
+                <span>Jan</span>
+                <span>Dec</span>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 divide-x divide-zinc-100 border-t border-zinc-100 pt-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-500">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Paid
+                </p>
+                <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.06em] text-emerald-600">
+                  0
+                </p>
+              </div>
+              <div className="px-3">
+                <p className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-500">
+                  <span className="h-2 w-2 rounded-full bg-zinc-400" />
+                  Upcoming
+                </p>
+                <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.06em] text-zinc-500">
+                  0
+                </p>
+              </div>
+              <div className="pl-3">
+                <p className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-500">
+                  <span className="h-2 w-2 rounded-full bg-orange-500" />
+                  Late
+                </p>
+                <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.06em] text-orange-600">
+                  0
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="my-4 h-px bg-zinc-100" />
+
+        <div>
+          <h3 className="text-[17px] font-semibold tracking-[-0.05em] text-[#050B1F]">
+            At a Glance
+          </h3>
+          <div className="mt-2 divide-y divide-zinc-100">
+            {[
+              {
+                icon: AlertCircle,
+                title: "Action Needed",
+                text: "Setup, lease, or payment review",
+                value: "1",
+                className: "text-blue-600",
+              },
+              {
+                icon: Landmark,
+                title: "Bank Status",
+                text: "Connection needed",
+                value: "1 not connected",
+                className: "text-amber-600",
+              },
+              {
+                icon: CalendarDays,
+                title: "Next Due",
+                text: "Upcoming rent cycle",
+                value: "1st",
+                className: "text-zinc-500",
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  type="button"
+                  key={item.title}
+                  className="flex w-full items-center gap-3 py-2.5 text-left"
+                >
+                  <Icon className={`h-5 w-5 shrink-0 ${item.className}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-[#050B1F]">
+                      {item.title}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[12px] font-medium text-zinc-500">
+                      {item.text}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[14px] font-semibold text-[#050B1F]">
+                    {item.value}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-zinc-400" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function LandlordPropertyDetailScreen({
+  property,
+  onBack,
+}: {
+  property: LandlordMobileHomeProperty;
+  onBack: () => void;
+}) {
+  return (
+    <div className="min-h-full bg-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] landlord-mobile-detail-slide">
+      <style>{`
+        @keyframes landlordMobileDetailSlide {
+          from { transform: translateX(100%); opacity: 0.98; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .landlord-mobile-detail-slide {
+          animation: landlordMobileDetailSlide 220ms ease-out;
+        }
+      `}</style>
+      <button
+        type="button"
+        onClick={onBack}
+        className="-ml-1 flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition active:scale-[0.98]"
+        aria-label="Back to landlord home"
+      >
+        <ArrowLeft className="h-5 w-5" />
+      </button>
+
+      <h1 className="mt-4 text-[31px] font-semibold leading-[1.05] tracking-[-0.075em] text-[#050B1F]">
+        {property.name}
+      </h1>
+
+      <div className="mt-8 rounded-2xl border border-zinc-200 bg-white px-5 py-6">
+        <p className="text-[15px] font-medium leading-6 text-zinc-500">
+          Property dashboard will be built here.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function LandlordAvaTab({
+  messages,
+  onMessagesChange,
+}: {
+  messages: MobileAvaMessage[];
+  onMessagesChange: (messages: MobileAvaMessage[]) => void;
+}) {
+  const promptChips = [
+    "Summarize my properties",
+    "Which tenant needs attention?",
+    "Help me understand rent collection",
+    "Create a support request",
+  ];
+
+  async function sendLandlordAvaMessage(messageText: string) {
+    const trimmed = messageText.trim();
+    if (!trimmed) return;
+
+    const userMessage: MobileAvaMessage = {
+      id: `landlord-mobile-user-${Date.now()}`,
+      role: "user",
+      content: trimmed,
+    };
+
+    onMessagesChange([
+      ...messages,
+      userMessage,
+      {
+        id: `landlord-mobile-ava-${Date.now()}`,
+        role: "assistant",
+        content:
+          "I can help with landlord workflows here soon. For now, this preview keeps the Ava experience ready for property, tenant, and rent collection support.",
+      },
+    ]);
+  }
+
+  return (
+    <AvaChatPanel
+      className="min-h-[calc(100vh-170px)]"
+      messages={messages}
+      prompts={promptChips}
+      onSend={sendLandlordAvaMessage}
+    />
+  );
+}
+
+function LandlordRentTab() {
+  return <div className="min-h-[calc(100vh-220px)] bg-white" />;
 }
 
 function RentTab({ homeData }: { homeData: MobileHomeData }) {
@@ -1714,11 +2211,12 @@ function PerksTab({
 function LandlordPerksHeader() {
   return (
     <div className="sticky top-0 z-20 bg-white">
-      <div className="px-5 pt-[calc(env(safe-area-inset-top)+14px)]">
-        <div className="relative flex h-12 items-center text-[14px] font-semibold text-[#0F172A]">
+      <div className="grid grid-cols-2 px-5 pt-[calc(env(safe-area-inset-top)+14px)]">
+        <div className="relative flex h-12 items-center justify-center whitespace-nowrap text-[14px] font-semibold text-[#0F172A]">
           Avenue Perks
-          <span className="absolute bottom-0 left-0 h-[2px] w-24 bg-[#0F172A]" />
+          <span className="absolute bottom-0 left-0 h-[2px] w-full bg-[#0F172A]" />
         </div>
+        <div aria-hidden="true" className="h-12" />
       </div>
       <div className="h-px bg-zinc-200" />
     </div>
@@ -2569,6 +3067,8 @@ function WorkspaceRow({
   label = "Resident",
   value,
   singleLabel = false,
+  interactive = true,
+  trailingAction,
   multipleProperties,
   onOpenContext,
 }: {
@@ -2576,18 +3076,33 @@ function WorkspaceRow({
   label?: string;
   value?: string;
   singleLabel?: boolean;
+  interactive?: boolean;
+  trailingAction?: ReactNode;
   multipleProperties: boolean;
   onOpenContext: () => void;
 }) {
   const displayAddress =
     value || (address && address !== "Resident workspace" ? address : "Rent workspace");
   const propertySwitcherEnabled = multipleProperties && !value;
+  const rowContent = (
+    <>
+      <span className="shrink-0 font-semibold text-[#0F172A]">{label}</span>
+      <span className="h-4 w-px shrink-0 bg-zinc-200" />
+      <span className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-medium text-zinc-500 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {displayAddress}
+      </span>
+      {propertySwitcherEnabled ? (
+        <span className="shrink-0 text-[12px] font-semibold text-zinc-400">Switch</span>
+      ) : null}
+    </>
+  );
 
   if (singleLabel) {
     return (
       <div className="sticky top-0 z-20 bg-white">
-        <div className="flex w-full min-w-0 items-center px-5 py-3 text-left text-[15px]">
+        <div className="flex w-full min-w-0 items-center justify-between gap-3 px-5 py-3 text-left text-[15px]">
           <span className="font-semibold text-[#0F172A]">{label}</span>
+          {trailingAction ? <div className="shrink-0">{trailingAction}</div> : null}
         </div>
         <div className="h-px bg-zinc-200" />
       </div>
@@ -2596,21 +3111,20 @@ function WorkspaceRow({
 
   return (
     <div className="sticky top-0 z-20 bg-white">
-      <button
-        type="button"
-        onClick={onOpenContext}
-        className="flex w-full min-w-0 cursor-pointer items-center gap-3 px-5 py-3 text-left text-[15px] transition active:scale-[0.995]"
-        aria-label={propertySwitcherEnabled ? "Switch resident property" : "Open resident and property details"}
-      >
-        <span className="shrink-0 font-semibold text-[#0F172A]">{label}</span>
-        <span className="h-4 w-px shrink-0 bg-zinc-200" />
-        <span className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-medium text-zinc-500 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {displayAddress}
-        </span>
-        {propertySwitcherEnabled ? (
-          <span className="shrink-0 text-[12px] font-semibold text-zinc-400">Switch</span>
-        ) : null}
-      </button>
+      {interactive ? (
+        <button
+          type="button"
+          onClick={onOpenContext}
+          className="flex w-full min-w-0 cursor-pointer items-center gap-3 px-5 py-3 text-left text-[15px] transition active:scale-[0.995]"
+          aria-label={propertySwitcherEnabled ? "Switch resident property" : "Open resident and property details"}
+        >
+          {rowContent}
+        </button>
+      ) : (
+        <div className="flex w-full min-w-0 items-center gap-3 px-5 py-3 text-left text-[15px]">
+          {rowContent}
+        </div>
+      )}
       <div className="h-px bg-zinc-200" />
     </div>
   );
