@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -18,23 +19,32 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  ClipboardCheck,
+  DollarSign,
   Download,
   FileText,
   Headphones,
   Home,
+  House,
   Landmark,
   LogOut,
   Mail,
+  MapPin,
   MessageSquare,
+  MoreHorizontal,
   Phone,
   ShieldCheck,
   ReceiptText,
   Sparkles,
   Trash2,
+  User,
+  UserPlus,
   UserRound,
   X,
 } from "lucide-react";
 import AvaChatPanel from "@/app/components/ava/AvaChatPanel";
+import { createActivity } from "@/lib/createActivity";
+import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { supabase } from "@/lib/supabase";
 import { buildTenantActivities } from "@/lib/tenant/tenantActivity";
@@ -82,6 +92,13 @@ type LandlordMobileHomeProperty = {
   bank: string;
   status: string;
   needsConnection: boolean;
+};
+type MobileAdditionalTenant = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
 };
 
 type MobileContext = {
@@ -1139,6 +1156,7 @@ function LandlordMobileShell({
   const [dealsOpen, setDealsOpen] = useState(false);
   const [detailProperty, setDetailProperty] =
     useState<LandlordMobileHomeProperty | null>(null);
+  const [addPropertyOpen, setAddPropertyOpen] = useState(false);
   const [landlordAvaMessages, setLandlordAvaMessages] = useState<MobileAvaMessage[]>([
     {
       id: "landlord-ava-welcome",
@@ -1150,9 +1168,12 @@ function LandlordMobileShell({
   const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
   const [accountDrawerTab, setAccountDrawerTab] =
     useState<MobileAccountDrawerTab>("profile");
+  const [landlordReportsSection, setLandlordReportsSection] =
+    useState<"reports" | "expenses">("reports");
   const perksTabActive = activeTab === "perks";
   const avaTabActive = activeTab === "ava";
   const rentTabActive = activeTab === "rent";
+  const reportsTabActive = activeTab === "reports";
   const propertyDetailOpen = activeTab === "home" && detailProperty;
 
   const openAccountDrawer = (tab: MobileAccountDrawerTab) => {
@@ -1162,9 +1183,25 @@ function LandlordMobileShell({
 
   return (
     <>
-      <section className="scrollbar-hide min-h-0 flex-1 overflow-y-auto bg-white pb-[calc(env(safe-area-inset-bottom)+104px)]">
-        {perksTabActive ? (
+      <section
+        className={`scrollbar-hide min-h-0 flex-1 bg-white ${
+          addPropertyOpen
+            ? "overflow-hidden pb-0"
+            : "overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+104px)]"
+        }`}
+      >
+        {addPropertyOpen ? (
+          <LandlordAddPropertyScreen
+            context={displayContext}
+            onBack={() => setAddPropertyOpen(false)}
+          />
+        ) : perksTabActive ? (
           <LandlordPerksHeader />
+        ) : reportsTabActive ? (
+          <LandlordReportsHeader
+            activeSection={landlordReportsSection}
+            onSectionChange={setLandlordReportsSection}
+          />
         ) : propertyDetailOpen ? (
           <LandlordPropertyDetailScreen
             property={propertyDetailOpen}
@@ -1201,6 +1238,7 @@ function LandlordMobileShell({
               trailingAction={!avaTabActive && !rentTabActive ? (
                 <button
                   type="button"
+                  onClick={() => setAddPropertyOpen(true)}
                   className="h-8 rounded-xl border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-[#0F172A] transition active:scale-[0.99]"
                 >
                   + Add Property
@@ -1212,16 +1250,19 @@ function LandlordMobileShell({
             />
           </>
         )}
-        {!propertyDetailOpen && (
+        {!addPropertyOpen && !propertyDetailOpen && (
           <div className={`px-5 ${activeTab === "home" ? "pt-5" : "pt-7"}`}>
             {perksTabActive ? (
               <LandlordPerksTab
                 onViewAllDeals={() => setDealsOpen(true)}
               />
+            ) : reportsTabActive ? (
+              <LandlordReportsTab activeSection={landlordReportsSection} />
             ) : activeTab === "home" ? (
               <LandlordHomeTab
                 context={displayContext}
                 onOpenProperty={setDetailProperty}
+                onOpenAddProperty={() => setAddPropertyOpen(true)}
               />
             ) : activeTab === "ava" ? (
               <LandlordAvaTab
@@ -1236,14 +1277,17 @@ function LandlordMobileShell({
           </div>
         )}
       </section>
-      <MobileBottomNav
-        activeTab={activeTab}
-        tabs={landlordMobileTabs}
-        onTabChange={(tab) => {
-          setDetailProperty(null);
-          onTabChange(tab);
-        }}
-      />
+      {!addPropertyOpen && (
+        <MobileBottomNav
+          activeTab={activeTab}
+          tabs={landlordMobileTabs}
+          onTabChange={(tab) => {
+            setDetailProperty(null);
+            setAddPropertyOpen(false);
+            onTabChange(tab);
+          }}
+        />
+      )}
       {propertySelectorOpen && (
         <LandlordPropertySelectorSheet
           properties={properties}
@@ -1335,9 +1379,11 @@ function HomeTab({
 function LandlordHomeTab({
   context,
   onOpenProperty,
+  onOpenAddProperty,
 }: {
   context: MobileContext;
   onOpenProperty: (property: LandlordMobileHomeProperty) => void;
+  onOpenAddProperty: () => void;
 }) {
   const properties: LandlordMobileHomeProperty[] = [
     {
@@ -1478,6 +1524,7 @@ function LandlordHomeTab({
 
         <button
           type="button"
+          onClick={onOpenAddProperty}
           className="-mx-1 flex h-12 w-[calc(100%+0.5rem)] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white text-[14px] font-semibold text-[#0F172A] transition active:scale-[0.99]"
         >
           + Add Property
@@ -1665,6 +1712,1014 @@ function LandlordHomeTab({
   );
 }
 
+function LandlordAddPropertyScreen({
+  context,
+  onBack,
+}: {
+  context: MobileContext;
+  onBack: () => void;
+}) {
+  const steps = [
+    { label: "Property", Icon: House },
+    { label: "Tenant", Icon: User },
+    { label: "Lease", Icon: FileText },
+    { label: "Review", Icon: ClipboardCheck || CheckCircle2 },
+  ];
+  const submitInProgressRef = useRef(false);
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [validationAttempted, setValidationAttempted] = useState(false);
+  const [submissionId] = useState(() => createMobileSubmissionId());
+  const [createdPropertyId, setCreatedPropertyId] = useState("");
+  const [createdLeaseId, setCreatedLeaseId] = useState("");
+  const [propertyCreatedEventSent, setPropertyCreatedEventSent] = useState(false);
+  const [tenantRowsCreated, setTenantRowsCreated] = useState(false);
+  const [preferencesCreated, setPreferencesCreated] = useState(false);
+  const [propertyForm, setPropertyForm] = useState({
+    streetAddress: "",
+    city: "",
+    stateName: "",
+    zip: "",
+    propertyType: "Apartment",
+    units: "1 Unit",
+    unitName: "",
+    propertyLabel: "",
+  });
+  const [tenantForm, setTenantForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
+  const [additionalTenants, setAdditionalTenants] = useState<MobileAdditionalTenant[]>(
+    []
+  );
+  const [additionalTenantDraft, setAdditionalTenantDraft] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
+  const [additionalTenantOpen, setAdditionalTenantOpen] = useState(false);
+  const [leaseSetupType, setLeaseSetupType] = useState<"new" | "existing">(
+    "new"
+  );
+  const [paymentTrackingStartDate, setPaymentTrackingStartDate] = useState(
+    getMobileNextFirstOfMonthDate()
+  );
+  const [leaseForm, setLeaseForm] = useState({
+    startDate: "",
+    endDate: "",
+    monthlyRent: "",
+    securityDeposit: "",
+    rentDueDay: "1st of the Month",
+  });
+  const [preferencesForm, setPreferencesForm] = useState({
+    phone: "",
+    landlordAbsorbsFee: false,
+    authorizedAgreement: false,
+    termsAgreement: false,
+  });
+  const propertyValid =
+    propertyForm.streetAddress.trim() &&
+    propertyForm.city.trim() &&
+    propertyForm.stateName.trim() &&
+    propertyForm.zip.trim() &&
+    propertyForm.propertyLabel.trim();
+  const tenantValid =
+    tenantForm.firstName.trim() &&
+    tenantForm.lastName.trim() &&
+    isMobileValidEmail(tenantForm.email) &&
+    isMobileValidOptionalPhone(tenantForm.phone);
+  const leaseValid =
+    leaseForm.startDate.trim() &&
+    leaseForm.endDate.trim() &&
+    leaseForm.monthlyRent.trim() &&
+    Number(leaseForm.monthlyRent) > 0 &&
+    leaseForm.rentDueDay.trim() &&
+    (leaseSetupType === "new"
+      ? isMobileNewLeaseStartAllowed(leaseForm.startDate)
+      : paymentTrackingStartDate.trim());
+  const reviewValid =
+    preferencesForm.authorizedAgreement &&
+    preferencesForm.termsAgreement &&
+    isMobileValidOptionalPhone(preferencesForm.phone);
+  const canContinue =
+    step === 1
+      ? Boolean(propertyValid)
+      : step === 2
+        ? Boolean(tenantValid)
+        : step === 3
+          ? Boolean(leaseValid)
+          : Boolean(reviewValid);
+  const progress = step === 4 ? 90 : step * 25;
+
+  function updatePropertyForm(field: keyof typeof propertyForm, value: string) {
+    setPropertyForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateTenantForm(field: keyof typeof tenantForm, value: string) {
+    setTenantForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateAdditionalTenantDraft(
+    field: keyof typeof additionalTenantDraft,
+    value: string
+  ) {
+    setAdditionalTenantDraft((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateLeaseForm(field: keyof typeof leaseForm, value: string) {
+    setLeaseForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function addAdditionalTenant() {
+    if (
+      !additionalTenantDraft.firstName.trim() ||
+      !additionalTenantDraft.lastName.trim()
+    ) {
+      return;
+    }
+
+    setAdditionalTenants((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        firstName: additionalTenantDraft.firstName.trim(),
+        lastName: additionalTenantDraft.lastName.trim(),
+        email: additionalTenantDraft.email.trim(),
+        phone: additionalTenantDraft.phone.trim(),
+      },
+    ]);
+    setAdditionalTenantDraft({
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+    });
+    setAdditionalTenantOpen(false);
+  }
+
+  function removeAdditionalTenant(id: number) {
+    setAdditionalTenants((prev) => prev.filter((tenant) => tenant.id !== id));
+  }
+
+  function updatePreferencesForm(
+    field: keyof typeof preferencesForm,
+    value: string | boolean
+  ) {
+    setPreferencesForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function validationMessage() {
+    if (!validationAttempted) return "";
+    if (step === 1) return "Complete the required property details to continue.";
+    if (step === 2) {
+      if (tenantForm.email.trim() && !isMobileValidEmail(tenantForm.email)) {
+        return "Enter a valid resident email address.";
+      }
+      if (!isMobileValidOptionalPhone(tenantForm.phone)) {
+        return "Enter a valid phone number or leave it blank.";
+      }
+      return "Add the primary resident's name and email to continue.";
+    }
+    if (step === 3) {
+      if (
+        leaseSetupType === "new" &&
+        leaseForm.startDate &&
+        !isMobileNewLeaseStartAllowed(leaseForm.startDate)
+      ) {
+        return "This looks like an existing lease. Use a recent start date for a new lease.";
+      }
+      return "Complete lease dates, rent amount, and due date to continue.";
+    }
+    if (!isMobileValidOptionalPhone(preferencesForm.phone)) {
+      return "Enter a valid phone number or leave it blank.";
+    }
+    return "Confirm both agreement checkboxes to submit.";
+  }
+
+  function handleContinue() {
+    setErrorMessage("");
+    if (!canContinue) {
+      setValidationAttempted(true);
+      return;
+    }
+
+    setValidationAttempted(false);
+    if (step < 4) {
+      setStep((current) => current + 1);
+      return;
+    }
+
+    savePropertySetup();
+  }
+
+  function handleBack() {
+    setErrorMessage("");
+    if (step > 1) {
+      setValidationAttempted(false);
+      setStep((current) => current - 1);
+      return;
+    }
+
+    onBack();
+  }
+
+  async function savePropertySetup() {
+    if (!canContinue || saving || submitInProgressRef.current) return;
+
+    submitInProgressRef.current = true;
+    setSaving(true);
+    setErrorMessage("");
+
+    try {
+      const profile =
+        context.profileId && context.landlordEmail
+          ? { id: context.profileId, email: context.landlordEmail }
+          : await getOrCreateProfile();
+      const profileId = profile.id;
+      const notificationEmail = profile.email || context.landlordEmail || "";
+
+      const property = await createOrReuseMobileProperty({
+        profileId,
+        submissionId,
+        propertyForm,
+        existingPropertyId: createdPropertyId,
+      });
+      setCreatedPropertyId(property.id);
+
+      if (!propertyCreatedEventSent) {
+        await triggerEmailEvent({
+          trigger: "property_created",
+          propertyId: property.id,
+        });
+        setPropertyCreatedEventSent(true);
+      }
+
+      const lease = await createOrReuseMobileLease({
+        propertyId: property.id,
+        leaseForm,
+        leaseSetupType,
+        paymentTrackingStartDate,
+        existingLeaseId: createdLeaseId,
+      });
+      setCreatedLeaseId(lease.id);
+
+      await ensureMobileStarterPropertyNotes({
+        propertyId: property.id,
+        leaseId: lease.id,
+        profileId,
+      });
+
+      if (!tenantRowsCreated) {
+        const { data: existingTenants, error: existingTenantsError } = await supabase
+          .from("lease_tenants")
+          .select("id")
+          .eq("lease_id", lease.id)
+          .limit(1);
+
+        if (existingTenantsError) throw existingTenantsError;
+
+        if (!existingTenants?.length) {
+          const tenantRows = [
+            {
+              lease_id: lease.id,
+              first_name: tenantForm.firstName.trim(),
+              last_name: tenantForm.lastName.trim(),
+              email: tenantForm.email.trim(),
+              phone: tenantForm.phone.trim() || null,
+              tenant_role: "primary",
+              invite_status: "not_sent",
+            },
+            ...additionalTenants.map((tenant) => ({
+              lease_id: lease.id,
+              first_name: tenant.firstName.trim(),
+              last_name: tenant.lastName.trim(),
+              email: tenant.email.trim() || null,
+              phone: tenant.phone.trim() || null,
+              tenant_role: "secondary",
+              invite_status: "not_sent",
+            })),
+          ];
+
+          const { error: tenantError } = await supabase
+            .from("lease_tenants")
+            .insert(tenantRows);
+
+          if (tenantError) throw tenantError;
+        }
+
+        setTenantRowsCreated(true);
+      }
+
+      if (!preferencesCreated) {
+        const now = new Date().toISOString();
+        const { error: preferencesError } = await supabase
+          .from("lease_preferences")
+          .upsert(
+            {
+              lease_id: lease.id,
+              notification_email: notificationEmail,
+              notification_phone: preferencesForm.phone.trim() || null,
+              whatsapp_enabled: false,
+              sms_enabled: false,
+              landlord_absorbs_fee: preferencesForm.landlordAbsorbsFee === true,
+              authorized_agreement: preferencesForm.authorizedAgreement,
+              terms_agreement: preferencesForm.termsAgreement,
+              authorized_agreed_at: preferencesForm.authorizedAgreement ? now : null,
+              terms_agreed_at: preferencesForm.termsAgreement ? now : null,
+            },
+            { onConflict: "lease_id" }
+          );
+
+        if (preferencesError) throw preferencesError;
+        setPreferencesCreated(true);
+      }
+
+      await Promise.allSettled([
+        createActivity({
+          profile_id: profileId,
+          property_id: property.id,
+          lease_id: lease.id,
+          activity_type: "property_added",
+          title: "Property added",
+          description: `${propertyForm.propertyLabel.trim()} was added to your board.`,
+        }),
+        createActivity({
+          profile_id: profileId,
+          property_id: property.id,
+          lease_id: lease.id,
+          activity_type: "tenant_added",
+          title: "Resident record added",
+          description: `${tenantForm.firstName.trim()} ${tenantForm.lastName.trim()} was added as the primary resident.`,
+        }),
+        createActivity({
+          profile_id: profileId,
+          property_id: property.id,
+          lease_id: lease.id,
+          activity_type: "bank_pending",
+          title: "Bank setup pending",
+          description: "Connect your bank account to activate rent collection.",
+        }),
+      ]);
+
+      onBack();
+    } catch (error) {
+      console.error("Mobile property setup save error:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while saving. Please try again."
+      );
+    } finally {
+      submitInProgressRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  const currentValidationMessage = validationMessage();
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white landlord-mobile-detail-slide">
+      <style>{`
+        @keyframes landlordMobileDetailSlide {
+          from { transform: translateX(100%); opacity: 0.98; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .landlord-mobile-detail-slide {
+          animation: landlordMobileDetailSlide 220ms ease-out;
+        }
+      `}</style>
+
+      <header className="shrink-0 bg-white px-5 pt-[calc(env(safe-area-inset-top)+14px)]">
+        <div className="grid h-12 grid-cols-[44px_1fr_44px] items-center">
+          <button
+            type="button"
+            onClick={onBack}
+            className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition active:scale-[0.98]"
+            aria-label="Back to landlord home"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-center text-[17px] font-semibold tracking-[-0.04em] text-[#050B1F]">
+            Add Property
+          </h1>
+        </div>
+      </header>
+
+      <main className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+        <div className="pt-4">
+          <div className="flex items-center">
+            {steps.map((stepItem, index) => {
+              const active = index + 1 === step;
+              const completed = index + 1 < step;
+              const StepIcon = stepItem.Icon;
+              return (
+                <Fragment key={stepItem.label}>
+                  <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-semibold ${
+                        active || completed
+                          ? "bg-blue-600 text-white"
+                          : "bg-zinc-100 text-zinc-400"
+                      }`}
+                    >
+                      <StepIcon className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    </span>
+                    <span
+                      className={`truncate text-[11px] font-semibold ${
+                        active ? "text-blue-600" : "text-zinc-400"
+                      }`}
+                    >
+                      {stepItem.label}
+                    </span>
+                  </div>
+                  {index < steps.length - 1 ? (
+                    <div className="-mx-2 mb-6 h-px w-7 shrink-0 bg-zinc-200" />
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </div>
+
+          <section className="mt-8">
+            <h2 className="text-[26px] font-semibold leading-[1.08] tracking-[-0.07em] text-[#050B1F]">
+              {step === 1
+                ? "Enter property details and continue."
+                : step === 2
+                  ? "Add the primary resident."
+                  : step === 3
+                    ? "Set up the lease details."
+                    : "Review and confirm."}
+            </h2>
+
+            {step === 1 && (
+              <div className="mt-6 space-y-4">
+                <MobileAddPropertyInput
+                  label="Street Address"
+                  placeholder="e.g. 12 Oak Street"
+                  value={propertyForm.streetAddress}
+                  onChange={(value) => updatePropertyForm("streetAddress", value)}
+                  error={validationAttempted && !propertyForm.streetAddress.trim()}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <MobileAddPropertyInput
+                    label="City"
+                    placeholder="San Francisco"
+                    value={propertyForm.city}
+                    onChange={(value) => updatePropertyForm("city", value)}
+                    error={validationAttempted && !propertyForm.city.trim()}
+                  />
+                  <MobileAddPropertyInput
+                    label="State"
+                    placeholder="CA"
+                    value={propertyForm.stateName}
+                    onChange={(value) => updatePropertyForm("stateName", value)}
+                    error={validationAttempted && !propertyForm.stateName.trim()}
+                  />
+                </div>
+                <MobileAddPropertyInput
+                  label="ZIP"
+                  placeholder="94102"
+                  value={propertyForm.zip}
+                  onChange={(value) => updatePropertyForm("zip", value)}
+                  error={validationAttempted && !propertyForm.zip.trim()}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <MobileAddPropertySelect
+                    label="Property Type"
+                    value={propertyForm.propertyType}
+                    onChange={(value) => updatePropertyForm("propertyType", value)}
+                    options={["Apartment", "House", "Condo", "Townhome", "Other"]}
+                  />
+                  <MobileAddPropertySelect
+                    label="Number Of Units"
+                    value={propertyForm.units}
+                    onChange={(value) => updatePropertyForm("units", value)}
+                    options={["1 Unit", "2 Units", "3 Units", "4 Units", "5+ Units"]}
+                  />
+                </div>
+                <MobileAddPropertyInput
+                  label="Unit Name / Identifier"
+                  optional
+                  placeholder="e.g. Apt 2B"
+                  value={propertyForm.unitName}
+                  onChange={(value) => updatePropertyForm("unitName", value)}
+                />
+                <MobileAddPropertyInput
+                  label="Property Label"
+                  placeholder="Name this property for your board"
+                  value={propertyForm.propertyLabel}
+                  onChange={(value) => updatePropertyForm("propertyLabel", value)}
+                  error={validationAttempted && !propertyForm.propertyLabel.trim()}
+                />
+                <p className="-mt-1 text-[13px] font-medium leading-5 text-zinc-500">
+                  Examples: Willow's Apartment, Downtown Apartment, Unit 2B
+                </p>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="mt-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <MobileAddPropertyInput
+                    label="First Name"
+                    placeholder="Aneela"
+                    value={tenantForm.firstName}
+                    onChange={(value) => updateTenantForm("firstName", value)}
+                    error={validationAttempted && !tenantForm.firstName.trim()}
+                  />
+                  <MobileAddPropertyInput
+                    label="Last Name"
+                    placeholder="M"
+                    value={tenantForm.lastName}
+                    onChange={(value) => updateTenantForm("lastName", value)}
+                    error={validationAttempted && !tenantForm.lastName.trim()}
+                  />
+                </div>
+                <MobileAddPropertyInput
+                  label="Email"
+                  placeholder="resident@email.com"
+                  value={tenantForm.email}
+                  onChange={(value) => updateTenantForm("email", value)}
+                  error={validationAttempted && !isMobileValidEmail(tenantForm.email)}
+                  inputMode="email"
+                />
+                <MobileAddPropertyInput
+                  label="Phone"
+                  optional
+                  placeholder="(415) 555-0000"
+                  value={tenantForm.phone}
+                  onChange={(value) => updateTenantForm("phone", value)}
+                  error={validationAttempted && !isMobileValidOptionalPhone(tenantForm.phone)}
+                  inputMode="tel"
+                />
+                <p className="text-[13px] font-medium leading-5 text-zinc-500">
+                  Resident invites are sent after bank setup is complete.
+                </p>
+                {additionalTenants.length > 0 && (
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[14px] font-semibold text-[#050B1F]">
+                        Additional Tenants
+                      </h3>
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[12px] font-semibold text-zinc-500">
+                        {additionalTenants.length} added
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {additionalTenants.map((tenant) => (
+                        <div
+                          key={tenant.id}
+                          className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 px-3 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[13px] font-semibold text-[#050B1F]">
+                              {tenant.firstName} {tenant.lastName}
+                            </p>
+                            <p className="mt-0.5 truncate text-[12px] font-medium text-zinc-500">
+                              {tenant.email || "No email"}
+                              {tenant.phone ? ` • ${tenant.phone}` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAdditionalTenant(tenant.id)}
+                            className="shrink-0 text-[12px] font-semibold text-red-500"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {additionalTenantOpen ? (
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-[15px] font-semibold text-[#050B1F]">
+                          Add Additional Tenant
+                        </h3>
+                        <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
+                          Optional contacts only. No board invite will be sent.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAdditionalTenantOpen(false)}
+                        className="text-[12px] font-semibold text-zinc-400"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <MobileAddPropertyInput
+                          label="First Name"
+                          placeholder="John"
+                          value={additionalTenantDraft.firstName}
+                          onChange={(value) =>
+                            updateAdditionalTenantDraft("firstName", value)
+                          }
+                        />
+                        <MobileAddPropertyInput
+                          label="Last Name"
+                          placeholder="Doe"
+                          value={additionalTenantDraft.lastName}
+                          onChange={(value) =>
+                            updateAdditionalTenantDraft("lastName", value)
+                          }
+                        />
+                      </div>
+                      <MobileAddPropertyInput
+                        label="Email"
+                        placeholder="additional@email.com"
+                        value={additionalTenantDraft.email}
+                        onChange={(value) =>
+                          updateAdditionalTenantDraft("email", value)
+                        }
+                        inputMode="email"
+                      />
+                      <MobileAddPropertyInput
+                        label="Phone"
+                        placeholder="(415) 555-0000"
+                        value={additionalTenantDraft.phone}
+                        onChange={(value) =>
+                          updateAdditionalTenantDraft("phone", value)
+                        }
+                        inputMode="tel"
+                      />
+                      <button
+                        type="button"
+                        onClick={addAdditionalTenant}
+                        disabled={
+                          !additionalTenantDraft.firstName.trim() ||
+                          !additionalTenantDraft.lastName.trim()
+                        }
+                        className="h-11 w-full rounded-2xl bg-blue-600 text-[14px] font-semibold text-white transition disabled:bg-zinc-100 disabled:text-zinc-400"
+                      >
+                        Add Tenant
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalTenantOpen(true)}
+                    className="h-12 w-full rounded-2xl border border-zinc-200 bg-white text-[14px] font-semibold text-blue-600 transition active:scale-[0.99]"
+                  >
+                    + Add Additional Tenant
+                  </button>
+                )}
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="mt-6 space-y-4">
+                <div className="space-y-3">
+                  <p className="text-[14px] font-semibold text-[#0F172A]">
+                    Lease Type
+                  </p>
+                  {[
+                    {
+                      value: "new" as const,
+                      label: "New Lease",
+                      helper:
+                        "For residents starting soon, today, or within the past 15 days.",
+                    },
+                    {
+                      value: "existing" as const,
+                      label: "Existing Lease",
+                      helper:
+                        "For active leases that started more than 15 days ago.",
+                    },
+                  ].map((option) => {
+                    const active = leaseSetupType === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setLeaseSetupType(option.value)}
+                        className={`w-full rounded-2xl border p-4 text-left transition active:scale-[0.99] ${
+                          active
+                            ? "border-blue-600 bg-blue-50"
+                            : "border-zinc-200 bg-white"
+                        }`}
+                      >
+                        <span
+                          className={`text-[14px] font-semibold ${
+                            active ? "text-blue-700" : "text-[#050B1F]"
+                          }`}
+                        >
+                          {option.label}
+                        </span>
+                        <span className="mt-1 block text-[12px] font-medium leading-5 text-zinc-500">
+                          {option.helper}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <MobileAddPropertyInput
+                    label="Start Date"
+                    value={leaseForm.startDate}
+                    onChange={(value) => updateLeaseForm("startDate", value)}
+                    error={
+                      validationAttempted &&
+                      (!leaseForm.startDate.trim() ||
+                        !isMobileNewLeaseStartAllowed(leaseForm.startDate))
+                    }
+                    type="date"
+                  />
+                  <MobileAddPropertyInput
+                    label="End Date"
+                    value={leaseForm.endDate}
+                    onChange={(value) => updateLeaseForm("endDate", value)}
+                    error={validationAttempted && !leaseForm.endDate.trim()}
+                    type="date"
+                  />
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold tracking-[-0.025em] text-[#0F172A]">
+                    Rent Due Day
+                  </p>
+                  <div className="mt-2 flex h-12 items-center rounded-2xl border border-zinc-200 bg-white px-4 text-[15px] font-medium text-[#0F172A]">
+                    1st of the Month
+                  </div>
+                  <p className="mt-2 text-[12px] font-medium leading-5 text-zinc-500">
+                    AvenueBoard currently supports monthly rent payments due on
+                    the 1st of each month.
+                  </p>
+                </div>
+                <MobileAddPropertyInput
+                  label="Monthly Rent"
+                  placeholder="2650"
+                  value={leaseForm.monthlyRent}
+                  onChange={(value) => updateLeaseForm("monthlyRent", value)}
+                  error={
+                    validationAttempted &&
+                    (!leaseForm.monthlyRent.trim() ||
+                      Number(leaseForm.monthlyRent) <= 0)
+                  }
+                  inputMode="decimal"
+                />
+                {leaseSetupType === "new" ? (
+                  <MobileAddPropertyInput
+                    label="Security Deposit"
+                    optional
+                    placeholder="2650"
+                    value={leaseForm.securityDeposit}
+                    onChange={(value) =>
+                      updateLeaseForm("securityDeposit", value)
+                    }
+                    inputMode="decimal"
+                  />
+                ) : (
+                  <MobileAddPropertyInput
+                    label="Rent payments will begin from"
+                    value={paymentTrackingStartDate}
+                    onChange={setPaymentTrackingStartDate}
+                    type="date"
+                  />
+                )}
+                <p className="text-[13px] font-medium leading-5 text-zinc-500">
+                  {leaseSetupType === "new"
+                    ? "For mid-month starts, AvenueBoard can calculate prorated rent on the full desktop setup."
+                    : "Previous rent payments won't be recreated. AvenueBoard begins tracking from this payment cycle."}
+                </p>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="mt-6 space-y-4">
+                <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                  <h3 className="text-[15px] font-semibold text-[#050B1F]">
+                    Property
+                  </h3>
+                  <p className="mt-2 text-[14px] font-medium leading-5 text-zinc-500">
+                    {propertyForm.propertyLabel || "Property label"}
+                    <br />
+                    {propertyForm.streetAddress || "Street address"}
+                    {propertyForm.unitName ? `, ${propertyForm.unitName}` : ""}
+                    <br />
+                    {propertyForm.city || "City"}, {propertyForm.stateName || "State"} {propertyForm.zip || "ZIP"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                  <h3 className="text-[15px] font-semibold text-[#050B1F]">
+                    Resident & Lease
+                  </h3>
+                  <p className="mt-2 text-[14px] font-medium leading-5 text-zinc-500">
+                    {tenantForm.firstName} {tenantForm.lastName}
+                    <br />
+                    {tenantForm.email}
+                    <br />
+                    {leaseSetupType === "new" ? "New Lease" : "Existing Lease"} • $
+                    {leaseForm.monthlyRent || "0"} / month • {leaseForm.rentDueDay}
+                    {additionalTenants.length > 0 ? (
+                      <>
+                        <br />
+                        {additionalTenants.length} additional tenant
+                        {additionalTenants.length === 1 ? "" : "s"}
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+                <label className="block">
+                  <span className="text-[14px] font-semibold tracking-[-0.025em] text-[#0F172A]">
+                    Phone Number <span className="font-medium text-zinc-400">(Optional)</span>
+                  </span>
+                  <input
+                    type="tel"
+                    placeholder="(415) 555-0000"
+                    value={preferencesForm.phone}
+                    onChange={(event) =>
+                      updatePreferencesForm("phone", event.target.value)
+                    }
+                    className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-[15px] font-medium text-[#0F172A] outline-none placeholder:text-zinc-400 focus:border-blue-500 ${
+                      validationAttempted &&
+                      !isMobileValidOptionalPhone(preferencesForm.phone)
+                        ? "border-red-300"
+                        : "border-zinc-200"
+                    }`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updatePreferencesForm(
+                      "landlordAbsorbsFee",
+                      !preferencesForm.landlordAbsorbsFee
+                    )
+                  }
+                  className={`flex h-12 w-full items-center justify-center rounded-2xl border text-[14px] font-semibold transition active:scale-[0.99] ${
+                    preferencesForm.landlordAbsorbsFee
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-zinc-200 bg-white text-[#0F172A]"
+                  }`}
+                >
+                  {preferencesForm.landlordAbsorbsFee ? "Absorbed" : "Absorb Fee"}
+                </button>
+                <MobileAddPropertyCheckbox
+                  checked={preferencesForm.authorizedAgreement}
+                  onChange={(checked) =>
+                    updatePreferencesForm("authorizedAgreement", checked)
+                  }
+                  label="I confirm that I am authorized to collect rent for this property as the owner or property manager."
+                />
+                <MobileAddPropertyCheckbox
+                  checked={preferencesForm.termsAgreement}
+                  onChange={(checked) =>
+                    updatePreferencesForm("termsAgreement", checked)
+                  }
+                  label="I have read and agree to the Terms of Service and Privacy Policy."
+                />
+              </div>
+            )}
+
+            {(currentValidationMessage || errorMessage) && (
+              <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-[13px] font-medium leading-5 text-red-600">
+                {errorMessage || currentValidationMessage}
+              </p>
+            )}
+          </section>
+        </div>
+      </main>
+
+      <footer className="shrink-0 border-t border-zinc-100 bg-white px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4">
+        <div className="flex items-center justify-between text-[12px] font-semibold text-zinc-500">
+          <span>Step {step} of 4</span>
+          <span>{progress}%</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+          <div
+            className="h-full rounded-full bg-blue-600 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={saving}
+            className="h-11 rounded-2xl px-4 text-[14px] font-semibold text-zinc-500 transition active:scale-[0.99]"
+          >
+            {step === 1 ? "Cancel" : "Back"}
+          </button>
+          <button
+            type="button"
+            onClick={handleContinue}
+            disabled={saving}
+            className="h-11 rounded-2xl bg-blue-600 px-6 text-[14px] font-semibold text-white transition active:scale-[0.99] disabled:opacity-50"
+          >
+            {saving ? "Saving..." : step === 4 ? "Submit" : "Continue"}
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function MobileAddPropertyInput({
+  label,
+  optional,
+  placeholder,
+  value,
+  onChange,
+  error,
+  type = "text",
+  inputMode,
+}: {
+  label: string;
+  optional?: boolean;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: boolean;
+  type?: string;
+  inputMode?: "text" | "email" | "tel" | "decimal" | "numeric";
+}) {
+  return (
+    <label className="block">
+      <span className="text-[14px] font-semibold tracking-[-0.025em] text-[#0F172A]">
+        {label}
+        {optional ? (
+          <span className="ml-1 font-medium text-zinc-400">(Optional)</span>
+        ) : null}
+      </span>
+      <input
+        type={type}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-[15px] font-medium text-[#0F172A] outline-none placeholder:text-zinc-400 focus:border-blue-500 ${
+          error ? "border-red-300" : "border-zinc-200"
+        }`}
+      />
+    </label>
+  );
+}
+
+function MobileAddPropertySelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="block">
+      <span className="text-[14px] font-semibold tracking-[-0.025em] text-[#0F172A]">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-12 w-full appearance-none rounded-2xl border border-zinc-200 bg-white px-4 text-[15px] font-medium text-[#0F172A] outline-none focus:border-blue-500"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function MobileAddPropertyCheckbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex gap-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 h-5 w-5 rounded border-zinc-300 accent-blue-600"
+      />
+      <span className="text-[14px] font-medium leading-5 text-[#0F172A]">
+        {label}
+      </span>
+    </label>
+  );
+}
+
 function LandlordPropertyDetailScreen({
   property,
   onBack,
@@ -1672,8 +2727,10 @@ function LandlordPropertyDetailScreen({
   property: LandlordMobileHomeProperty;
   onBack: () => void;
 }) {
+  const [actionsOpen, setActionsOpen] = useState(false);
+
   return (
-    <div className="min-h-full bg-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] landlord-mobile-detail-slide">
+    <div className="min-h-full bg-white px-5 pb-8 pt-[calc(env(safe-area-inset-top)+18px)] landlord-mobile-detail-slide">
       <style>{`
         @keyframes landlordMobileDetailSlide {
           from { transform: translateX(100%); opacity: 0.98; }
@@ -1692,14 +2749,309 @@ function LandlordPropertyDetailScreen({
         <ArrowLeft className="h-5 w-5" />
       </button>
 
-      <h1 className="mt-4 text-[31px] font-semibold leading-[1.05] tracking-[-0.075em] text-[#050B1F]">
-        {property.name}
-      </h1>
+      <div className="mt-1">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h1 className="min-w-0 truncate text-[20px] font-semibold leading-[1.08] tracking-[-0.055em] text-[#050B1F]">
+            {property.name}
+          </h1>
+          <span className="h-4 w-px shrink-0 bg-zinc-200" />
+          <span className="shrink-0 text-[13px] font-medium tracking-[-0.02em] text-zinc-500">
+            Workspace
+          </span>
+        </div>
 
-      <div className="mt-8 rounded-2xl border border-zinc-200 bg-white px-5 py-6">
-        <p className="text-[15px] font-medium leading-6 text-zinc-500">
-          Property dashboard will be built here.
-        </p>
+        <div className="mt-1.5 flex items-start gap-2 text-[13px] font-medium leading-5 text-[#6B7280]">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.9} />
+          <span>1531 Wind Energy Pass, Naperville, IL 60563</span>
+        </div>
+
+        <div className="mt-4 h-px bg-zinc-100" />
+      </div>
+
+      <section className="mt-5 border-b border-zinc-100 pb-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+              Monthly Rent
+            </p>
+          </div>
+
+          <div className="relative flex items-center gap-2">
+            <button
+              type="button"
+              className="h-8 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-semibold text-[#0F172A] transition active:scale-[0.99]"
+            >
+              Edit Lease
+            </button>
+            <button
+              type="button"
+              onClick={() => setActionsOpen((open) => !open)}
+              className="flex h-8 w-6 items-center justify-center text-zinc-500 transition active:scale-[0.98]"
+              aria-label="Property actions"
+              aria-expanded={actionsOpen}
+            >
+              <span className="text-[20px] font-medium leading-none">⋮</span>
+            </button>
+
+            {actionsOpen ? (
+              <div className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-2xl border border-zinc-200 bg-white py-1 shadow-[0_14px_34px_rgba(15,23,42,0.12)]">
+                <button
+                  type="button"
+                  onClick={() => setActionsOpen(false)}
+                  className="flex w-full px-4 py-3 text-left text-[13px] font-semibold text-[#0F172A] transition hover:bg-zinc-50"
+                >
+                  End Lease
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActionsOpen(false)}
+                  className="flex w-full px-4 py-3 text-left text-[13px] font-semibold text-red-600 transition hover:bg-red-50"
+                >
+                  Delete Property
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-2 flex items-center gap-3">
+          <h2 className="text-[34px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+            {property.rent}
+          </h2>
+          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-600">
+            Active
+          </span>
+        </div>
+
+        <div className="mt-4">
+          <p className="text-[13px] font-semibold text-[#0F172A]">
+            Lease ends on May 30, 2027
+          </p>
+          <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
+            Bank status: {property.needsConnection ? "Pending" : "Connected"}
+          </p>
+        </div>
+
+        <div className="mt-5">
+          <button
+            type="button"
+            className="flex h-12 w-full items-center justify-center rounded-xl bg-[#0F172A] text-[13px] font-semibold text-white active:scale-[0.99]"
+          >
+            {property.needsConnection ? "Connect Bank" : "Manage Payout Settings"}
+          </button>
+        </div>
+      </section>
+
+      <section className="mt-6 border-b border-zinc-100 pb-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[16px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+              Tenant
+            </h2>
+            <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-zinc-100 px-2 text-[12px] font-semibold text-zinc-500">
+              1
+            </span>
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0F172A]"
+          >
+            Manage Tenant
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.1} />
+          </button>
+        </div>
+
+        <article className="rounded-2xl border border-[#E5E7EB] bg-white p-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_1px_auto] items-center gap-x-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#050B1F] text-[14px] font-semibold text-white">
+                PH
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-[13px] font-semibold tracking-[-0.035em] text-[#111827]">
+                  Patrik Hester
+                </h3>
+                <p className="mt-0.5 truncate text-[11px] font-medium text-[#6B7280]">
+                  Pat@Hes.com
+                </p>
+                <div className="mt-1.5 flex items-center gap-1 overflow-visible">
+                  <span className="whitespace-nowrap rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+                    Primary
+                  </span>
+                  <span className="whitespace-nowrap rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+                    Bank setup required
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <span className="h-14 w-px bg-zinc-100" />
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="h-9 whitespace-nowrap rounded-[10px] bg-[#1F2937] px-3.5 text-[11px] font-medium text-white transition active:scale-[0.99]"
+              >
+                Connect Bank
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-4 items-center justify-center text-[#6B7280] transition active:scale-[0.98]"
+                aria-label="Tenant actions"
+              >
+                <span className="text-[17px] font-medium leading-none">⋮</span>
+              </button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <div className="mt-6 space-y-6">
+        <MobileHomeSection
+          title="Notes"
+          count={3}
+          action={
+            <button className="text-[12px] font-semibold text-[#B9476D]">
+              + Add
+            </button>
+          }
+          onViewAll={() => undefined}
+          viewAllLabel="View all"
+        >
+          <article className="rounded-2xl border border-[#D4E9FF] bg-[#EFF7FF] px-4 py-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-semibold leading-5 text-[#111827]">
+                  Shared Note Test - Jashwanth
+                </p>
+                <p className="mt-3 text-[12px] font-medium text-[#6B7280]">
+                  Jun 2, 2026
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-[#DCEEFF] px-2.5 py-1 text-[10px] font-semibold leading-none text-[#1D5F9F]">
+                Shared Note
+              </span>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-[#FFE1A8] bg-[#FFF8EA] px-4 py-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-semibold leading-5 text-[#111827]">
+                  test
+                </p>
+                <p className="mt-3 text-[12px] font-medium text-[#6B7280]">
+                  Jun 2, 2026
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-[#FFE8B8] px-2.5 py-1 text-[10px] font-semibold leading-none text-[#8A5A00]">
+                Private Note
+              </span>
+            </div>
+          </article>
+        </MobileHomeSection>
+
+        <MobileHomeSection
+          title="Property Documents"
+          count={1}
+          action={
+            <button className="text-[12px] font-semibold text-[#B9476D]">
+              Upload
+            </button>
+          }
+          onViewAll={() => undefined}
+          viewAllLabel="View all"
+        >
+          <article className="rounded-2xl border border-zinc-100 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F3F4F6] text-[10px] font-semibold uppercase text-zinc-500">
+                FILE
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-medium text-[#050B1F]">
+                  avenueboard-payment-history.csv
+                </p>
+                <p className="mt-1 text-[12px] font-medium text-[#6B7280]">
+                  Jul 2, 2026 · 832 B
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[13px] font-medium text-zinc-600">
+              <button type="button">View</button>
+              <span className="text-zinc-300">/</span>
+              <button type="button" className="inline-flex items-center gap-1">
+                <Download size={16} />
+                Download
+              </button>
+            </div>
+          </article>
+        </MobileHomeSection>
+
+        <MobileHomeSection
+          title="Recent Activity"
+          count={5}
+          onViewAll={() => undefined}
+          viewAllLabel="View more activity"
+        >
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+            {[
+              {
+                title: "Property updated",
+                description: "Wind Energy details were updated.",
+                date: "Jun 30, 2026",
+                Icon: Home,
+              },
+              {
+                title: "Document uploaded",
+                description: "authBG.png",
+                date: "Jun 30, 2026",
+                Icon: FileText,
+              },
+              {
+                title: "Bank setup pending",
+                description: "Connect your bank account to receive payouts.",
+                date: "Jun 29, 2026",
+                Icon: DollarSign,
+              },
+              {
+                title: "Lease updated",
+                description: "Lease details were updated.",
+                date: "Jun 29, 2026",
+                Icon: CheckCircle2,
+              },
+              {
+                title: "Tenant added",
+                description: "Patrik Hester was added as a tenant.",
+                date: "Jun 28, 2026",
+                Icon: UserPlus,
+              },
+            ].map(({ title, description, date, Icon }, index) => (
+              <button
+                key={title}
+                type="button"
+                className={`flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left transition active:bg-zinc-50 ${
+                  index === 0 ? "" : "border-t border-zinc-100"
+                }`}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-[#F3F4F6] text-[#0F172A]">
+                  <Icon className="h-4 w-4" strokeWidth={1.9} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-medium tracking-[-0.025em] text-[#111827]">
+                    {title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12px] font-medium text-[#6B7280]">
+                    {description}
+                  </span>
+                </span>
+                <span className="ml-3 shrink-0 self-start pt-1 text-right text-[12px] font-medium text-[#6B7280]">
+                  {date}
+                </span>
+              </button>
+            ))}
+          </div>
+        </MobileHomeSection>
       </div>
     </div>
   );
@@ -1753,6 +3105,411 @@ function LandlordAvaTab({
 
 function LandlordRentTab() {
   return <div className="min-h-[calc(100vh-220px)] bg-white" />;
+}
+
+function LandlordReportsHeader({
+  activeSection,
+  onSectionChange,
+}: {
+  activeSection: "reports" | "expenses";
+  onSectionChange: (section: "reports" | "expenses") => void;
+}) {
+  const tabs: Array<{ id: "reports" | "expenses"; label: string }> = [
+    { id: "reports", label: "Reports" },
+    { id: "expenses", label: "Expenses" },
+  ];
+
+  return (
+    <div className="sticky top-0 z-20 bg-white">
+      <div className="grid grid-cols-2 px-5 pt-[calc(env(safe-area-inset-top)+14px)]">
+        {tabs.map((tab) => {
+          const active = activeSection === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onSectionChange(tab.id)}
+              className={`relative flex h-12 items-center justify-center whitespace-nowrap text-[14px] font-semibold transition ${
+                active ? "text-[#0F172A]" : "text-zinc-500"
+              }`}
+            >
+              {tab.label}
+              {active ? (
+                <span className="absolute bottom-0 left-0 h-[2px] w-full bg-[#0F172A]" />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="h-px bg-zinc-200" />
+    </div>
+  );
+}
+
+function LandlordReportsTab({
+  activeSection,
+}: {
+  activeSection: "reports" | "expenses";
+}) {
+  if (activeSection === "expenses") {
+    return (
+      <section className="rounded-2xl border border-zinc-200 bg-white px-5 py-6">
+        <h2 className="text-[18px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+          Expenses
+        </h2>
+        <p className="mt-2 text-[13px] font-medium leading-5 text-zinc-500">
+          Mobile expense management will appear here soon.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[18px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+            Financial Overview
+          </h2>
+          <div className="flex rounded-full border border-zinc-200 bg-white p-0.5">
+            {["This Month", "YTD", "Custom"].map((label, index) => (
+              <button
+                key={label}
+                type="button"
+                className={`h-8 rounded-full px-3 text-[10px] font-semibold transition ${
+                  index === 0
+                    ? "bg-[#0F172A] text-white"
+                    : "text-zinc-500 active:bg-zinc-50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+              Rent Collected YTD
+            </p>
+            <p className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+              $186,450
+            </p>
+            <p className="mt-2 text-[13px] font-medium text-[#42526B]">
+              of $245,000 expected
+            </p>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-100">
+              <div className="h-full w-[76%] rounded-full bg-emerald-500" />
+            </div>
+            <div className="mt-3 flex items-center justify-between text-[12px] font-semibold">
+              <span className="text-emerald-600">76% collected</span>
+              <span className="text-[#42526B]">$58,550 remaining</span>
+            </div>
+          </div>
+
+          <div className="h-px bg-zinc-100" />
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+              Total Expenses YTD
+            </p>
+            <p className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+              $48,230
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="rounded-xl bg-red-50 px-2.5 py-1.5 text-[12px] font-semibold text-red-500">
+                ↑ 12.4%
+              </span>
+              <span className="text-[12px] font-semibold text-[#42526B]">
+                vs last year
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[18px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+              Expense Breakdown
+            </h2>
+            <p className="mt-1 text-[13px] font-medium text-[#6B7280]">
+              See where your money is going.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="h-9 shrink-0 rounded-xl bg-[#0F172A] px-3 text-[12px] font-semibold text-white active:scale-[0.99]"
+          >
+            + Add Expense
+          </button>
+        </div>
+
+        <div className="mt-5 flex flex-col items-center">
+          <div
+            className="relative h-48 w-48 rounded-full"
+            style={{
+              background:
+                "conic-gradient(#17477F 0deg 181deg, #61C7C1 181deg 242deg, #8DBEF2 242deg 283deg, #A879E5 283deg 314deg, #F4B13D 314deg 338deg, #A7D77B 338deg 354deg, #CBD0D8 354deg 360deg)",
+            }}
+          >
+            <div className="absolute inset-[38px] flex flex-col items-center justify-center rounded-full bg-white text-center">
+              <span className="text-[12px] font-medium text-[#6B7280]">
+                Total Expenses
+              </span>
+              <span className="mt-1 text-[26px] font-semibold tracking-[-0.07em] text-[#050B1F]">
+                $2,480
+              </span>
+              <span className="mt-1 text-[12px] font-medium text-[#6B7280]">
+                May 2026
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2.5">
+          {[
+            ["Mortgage", "$1,250", "#17477F"],
+            ["Property Tax", "$420", "#61C7C1"],
+            ["Insurance", "$280", "#8DBEF2"],
+            ["Maintenance", "$210", "#A879E5"],
+            ["HOA / PM", "$160", "#F4B13D"],
+            ["Utilities", "$110", "#A7D77B"],
+            ["Other", "$50", "#CBD0D8"],
+          ].map(([label, value, color]) => (
+            <div key={label} className="flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-[4px]"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="truncate text-[13px] font-semibold text-[#111827]">
+                  {label}
+                </span>
+              </div>
+              <span className="shrink-0 text-[13px] font-semibold text-[#111827]">
+                {value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function isMobileValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+}
+
+function isMobileValidOptionalPhone(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+function createMobileSubmissionId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `mobile-add-property-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+function getMobileNextFirstOfMonthDate() {
+  const today = new Date();
+  const nextFirst = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
+  return `${nextFirst.getFullYear()}-${String(
+    nextFirst.getMonth() + 1
+  ).padStart(2, "0")}-${String(nextFirst.getDate()).padStart(2, "0")}`;
+}
+
+function isMobileNewLeaseStartAllowed(value: string) {
+  const start = parseLocalDate(value);
+  if (!start) return false;
+
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const earliestAllowed = new Date(todayStart);
+  earliestAllowed.setDate(todayStart.getDate() - 15);
+
+  return start >= earliestAllowed;
+}
+
+async function createOrReuseMobileProperty({
+  profileId,
+  submissionId,
+  propertyForm,
+  existingPropertyId,
+}: {
+  profileId: string;
+  submissionId: string;
+  propertyForm: {
+    streetAddress: string;
+    city: string;
+    stateName: string;
+    zip: string;
+    propertyType: string;
+    units: string;
+    unitName: string;
+    propertyLabel: string;
+  };
+  existingPropertyId?: string;
+}) {
+  if (existingPropertyId) {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("id")
+      .eq("id", existingPropertyId)
+      .eq("owner_profile_id", profileId)
+      .single();
+
+    if (error) throw error;
+    return data as { id: string };
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("properties")
+    .select("id")
+    .eq("owner_profile_id", profileId)
+    .eq("creation_submission_id", submissionId)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing) return existing as { id: string };
+
+  const { data, error } = await supabase
+    .from("properties")
+    .insert({
+      owner_profile_id: profileId,
+      creation_submission_id: submissionId,
+      street_address: propertyForm.streetAddress.trim(),
+      city: propertyForm.city.trim(),
+      state_name: propertyForm.stateName.trim(),
+      zip: propertyForm.zip.trim(),
+      property_type: propertyForm.propertyType,
+      units: propertyForm.units,
+      unit_name: propertyForm.unitName.trim() || null,
+      property_label: propertyForm.propertyLabel.trim(),
+      bank_status: "pending",
+      status: "active",
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data as { id: string };
+}
+
+async function createOrReuseMobileLease({
+  propertyId,
+  leaseForm,
+  leaseSetupType,
+  paymentTrackingStartDate,
+  existingLeaseId,
+}: {
+  propertyId: string;
+  leaseForm: {
+    startDate: string;
+    endDate: string;
+    monthlyRent: string;
+    securityDeposit: string;
+    rentDueDay: string;
+  };
+  leaseSetupType: "new" | "existing";
+  paymentTrackingStartDate: string;
+  existingLeaseId?: string;
+}) {
+  if (existingLeaseId) {
+    const { data, error } = await supabase
+      .from("leases")
+      .select("id")
+      .eq("id", existingLeaseId)
+      .eq("property_id", propertyId)
+      .single();
+
+    if (error) throw error;
+    return data as { id: string };
+  }
+
+  const { data: existingLeases, error: existingLeaseError } = await supabase
+    .from("leases")
+    .select("id")
+    .eq("property_id", propertyId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (existingLeaseError) throw existingLeaseError;
+  if (existingLeases?.[0]) return existingLeases[0] as { id: string };
+
+  const { data, error } = await supabase
+    .from("leases")
+    .insert({
+      property_id: propertyId,
+      start_date: leaseForm.startDate,
+      end_date: leaseForm.endDate,
+      monthly_rent: Number(leaseForm.monthlyRent),
+      security_deposit: leaseSetupType === "new" && leaseForm.securityDeposit
+        ? Number(leaseForm.securityDeposit)
+        : null,
+      rent_due_day: leaseForm.rentDueDay,
+      lease_setup_type: leaseSetupType,
+      payment_tracking_start_date:
+        leaseSetupType === "existing" ? paymentTrackingStartDate : null,
+      lease_status: "active",
+      payment_status: "bank_pending",
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data as { id: string };
+}
+
+async function ensureMobileStarterPropertyNotes({
+  propertyId,
+  leaseId,
+  profileId,
+}: {
+  propertyId: string;
+  leaseId: string;
+  profileId: string;
+}) {
+  const { data: existingNotes, error: existingNotesError } = await supabase
+    .from("property_notes")
+    .select("id")
+    .eq("property_id", propertyId)
+    .limit(1);
+
+  if (existingNotesError) throw existingNotesError;
+  if (existingNotes?.length) return;
+
+  const now = Date.now();
+  const { error } = await supabase.from("property_notes").insert([
+    {
+      property_id: propertyId,
+      lease_id: leaseId,
+      profile_id: profileId,
+      note_type: "shared",
+      text: "Welcome to AvenueBoard\n\nUse shared notes to communicate important information with your resident, such as move-in instructions, maintenance updates, reminders, or lease-related notices.",
+      created_by_role: "landlord",
+      created_at: new Date(now).toISOString(),
+    },
+    {
+      property_id: propertyId,
+      lease_id: leaseId,
+      profile_id: profileId,
+      note_type: "private",
+      text: "Save reminders, updates, and important property notes.\n\nGetting Started • AvenueBoard",
+      created_by_role: "landlord",
+      created_at: new Date(now - 1000).toISOString(),
+    },
+  ]);
+
+  if (error) throw error;
 }
 
 function RentTab({ homeData }: { homeData: MobileHomeData }) {
