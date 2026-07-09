@@ -60,6 +60,7 @@ type MobileState = "signed-out" | "tenant" | "dual" | "landlord-only";
 type MobileTab = "home" | "rent" | "perks" | "hub" | "activity" | "ava" | "reports";
 type MobilePerksSection = "avenue-perks" | "credit-building";
 type MobileAccountDrawerTab = "profile" | "notifications";
+type MobileWorkspaceRole = "resident" | "landlord";
 type MobileAvaMessage = {
   id: string;
   role: "assistant" | "user";
@@ -246,6 +247,117 @@ const emptyHomeData: MobileHomeData = {
   documents: [],
   activities: [],
 };
+
+const landlordMobileRentPreviewData: MobileHomeData = {
+  tenantAccessId: "landlord-mobile-preview",
+  propertyId: "landlord-mobile-property",
+  leaseId: "landlord-mobile-lease",
+  lease: {
+    id: "landlord-mobile-lease",
+    start_date: "2026-01-01",
+    end_date: "2027-05-30",
+    payment_tracking_start_date: null,
+    monthly_rent: 2650,
+    rent_due_day: "1st of the Month",
+  },
+  paymentMethods: [
+    {
+      id: "landlord-mobile-method",
+      autopay_status: "active",
+      autopay_enrolled: true,
+      brand: "visa",
+      last4: "0000",
+      is_default: true,
+    },
+  ],
+  rentPayments: [
+    {
+      id: "landlord-mobile-payment-june",
+      amount: 2650,
+      rent_cycle_key: "2026-06",
+      rent_cycle_month_label: "June 2026",
+      period_label: "June 2026",
+      status: "paid",
+      paid_at: "2026-06-01T12:00:00.000Z",
+      created_at: "2026-06-01T12:00:00.000Z",
+    },
+    {
+      id: "landlord-mobile-payment-july",
+      amount: 2650,
+      rent_cycle_key: "2026-07",
+      rent_cycle_month_label: "July 2026",
+      period_label: "July 2026",
+      status: "upcoming",
+      paid_at: null,
+      created_at: "2026-07-01T12:00:00.000Z",
+    },
+    {
+      id: "landlord-mobile-payment-august",
+      amount: 2650,
+      rent_cycle_key: "2026-08",
+      rent_cycle_month_label: "August 2026",
+      period_label: "August 2026",
+      status: "future",
+      paid_at: null,
+      created_at: "2026-08-01T12:00:00.000Z",
+    },
+  ],
+  notes: [],
+  documents: [],
+  activities: [],
+};
+
+const landlordMobileRentProperties: Array<{
+  id: string;
+  name: string;
+  address: string;
+  rent: string;
+  status: string;
+  nextDue: string;
+  bankStatus: string;
+  homeData: MobileHomeData;
+}> = [
+  {
+    id: "wind-energy",
+    name: "Wind Energy",
+    address: "1531 Wind Energy Pass, Naperville",
+    rent: "$120/mo",
+    status: "Payment setup pending",
+    nextDue: "Next due Jul 1",
+    bankStatus: "Bank pending",
+    homeData: {
+      ...landlordMobileRentPreviewData,
+      lease: {
+        ...landlordMobileRentPreviewData.lease!,
+        monthly_rent: 120,
+      },
+      rentPayments: landlordMobileRentPreviewData.rentPayments.map((payment) => ({
+        ...payment,
+        amount: 120,
+      })),
+    },
+  },
+  {
+    id: "aneelas-home",
+    name: "Aneela's Home",
+    address: "Sri ramana Enclave, Hyderabad",
+    rent: "$2,550/mo",
+    status: "Rent collection active",
+    nextDue: "Paid through July 2026",
+    bankStatus: "Payout connected",
+    homeData: {
+      ...landlordMobileRentPreviewData,
+      lease: {
+        ...landlordMobileRentPreviewData.lease!,
+        monthly_rent: 2550,
+      },
+      rentPayments: landlordMobileRentPreviewData.rentPayments.map((payment) => ({
+        ...payment,
+        amount: 2550,
+      })),
+    },
+  },
+];
 
 const mobilePerksCategories = [
   "All Deals",
@@ -491,6 +603,15 @@ export default function MobileAppClient() {
   const showTenantShell = state === "tenant" || (state === "dual" && dualResidentSelected);
   const showLandlordShell =
     state === "landlord-only" || (state === "dual" && dualLandlordSelected);
+  const dualWorkspaceRoles: MobileWorkspaceRole[] =
+    state === "dual" ? ["resident", "landlord"] : [];
+
+  const handleWorkspaceSwitch = (role: MobileWorkspaceRole) => {
+    if (state !== "dual") return;
+    setDualResidentSelected(role === "resident");
+    setDualLandlordSelected(role === "landlord");
+    setActiveTab("home");
+  };
 
   return (
     <main className="min-h-screen bg-[#F5F6F8] text-[#0F172A]">
@@ -513,6 +634,11 @@ export default function MobileAppClient() {
             onContextChange={setContext}
             onRentalsChange={setRentals}
             onTabChange={setActiveTab}
+            availableWorkspaces={
+              dualWorkspaceRoles.length > 0 ? dualWorkspaceRoles : ["resident"]
+            }
+            currentWorkspace="resident"
+            onSwitchWorkspace={handleWorkspaceSwitch}
           />
         ) : showLandlordShell ? (
           <LandlordMobileShell
@@ -530,6 +656,11 @@ export default function MobileAppClient() {
             }}
             onContextChange={setContext}
             onTabChange={setActiveTab}
+            availableWorkspaces={
+              dualWorkspaceRoles.length > 0 ? dualWorkspaceRoles : ["landlord"]
+            }
+            currentWorkspace="landlord"
+            onSwitchWorkspace={handleWorkspaceSwitch}
           />
         ) : (
           <MobilePlaceholder
@@ -866,22 +997,28 @@ function MobileShell({
   homeData,
   rentals,
   selectedRentalId,
+  availableWorkspaces,
+  currentWorkspace,
   onSelectRental,
   onHomeDataChange,
   onContextChange,
   onRentalsChange,
   onTabChange,
+  onSwitchWorkspace,
 }: {
   activeTab: MobileTab;
   context: MobileContext;
   homeData: MobileHomeData;
   rentals: MobileRental[];
   selectedRentalId: string | null;
+  availableWorkspaces: MobileWorkspaceRole[];
+  currentWorkspace: MobileWorkspaceRole;
   onSelectRental: (rental: MobileRental) => void;
   onHomeDataChange: (homeData: MobileHomeData) => void;
   onContextChange: (context: MobileContext) => void;
   onRentalsChange: (rentals: MobileRental[]) => void;
   onTabChange: (tab: MobileTab) => void;
+  onSwitchWorkspace: (role: MobileWorkspaceRole) => void;
 }) {
   const activeLabel = mobileTabs.find((tab) => tab.id === activeTab)?.label || "Home";
   const rentTabActive = activeTab === "rent";
@@ -1113,9 +1250,12 @@ function MobileShell({
           activeTab={accountDrawerTab}
           context={context}
           homeData={homeData}
+          availableWorkspaces={availableWorkspaces}
+          currentWorkspace={currentWorkspace}
           onChangeTab={setAccountDrawerTab}
           onClose={() => setAccountDrawerOpen(false)}
           onProfileSaved={updateCurrentContext}
+          onSwitchWorkspace={onSwitchWorkspace}
         />
       )}
     </>
@@ -1127,17 +1267,23 @@ function LandlordMobileShell({
   context,
   properties,
   selectedPropertyId,
+  availableWorkspaces,
+  currentWorkspace,
   onSelectProperty,
   onContextChange,
   onTabChange,
+  onSwitchWorkspace,
 }: {
   activeTab: MobileTab;
   context: MobileContext;
   properties: MobileLandlordProperty[];
   selectedPropertyId: string | null;
+  availableWorkspaces: MobileWorkspaceRole[];
+  currentWorkspace: MobileWorkspaceRole;
   onSelectProperty: (property: MobileLandlordProperty) => void;
   onContextChange: (context: MobileContext) => void;
   onTabChange: (tab: MobileTab) => void;
+  onSwitchWorkspace: (role: MobileWorkspaceRole) => void;
 }) {
   const activeLabel =
     landlordMobileTabs.find((tab) => tab.id === activeTab)?.label || "Home";
@@ -1307,9 +1453,12 @@ function LandlordMobileShell({
           activeTab={accountDrawerTab}
           context={displayContext}
           homeData={emptyHomeData}
+          availableWorkspaces={availableWorkspaces}
+          currentWorkspace={currentWorkspace}
           onChangeTab={setAccountDrawerTab}
           onClose={() => setAccountDrawerOpen(false)}
           onProfileSaved={onContextChange}
+          onSwitchWorkspace={onSwitchWorkspace}
         />
       )}
     </>
@@ -3104,7 +3253,176 @@ function LandlordAvaTab({
 }
 
 function LandlordRentTab() {
-  return <div className="min-h-[calc(100vh-220px)] bg-white" />;
+  const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-4">
+      {landlordMobileRentProperties.map((property) => {
+        const expanded = expandedPropertyId === property.id;
+        return (
+          <section
+            key={property.id}
+            className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"
+          >
+            <button
+              type="button"
+              onClick={() => setExpandedPropertyId(expanded ? null : property.id)}
+              className="w-full px-4 py-4 text-left active:bg-zinc-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-[17px] font-semibold tracking-[-0.045em] text-[#050B1F]">
+                    {property.name}
+                  </h2>
+                  <p className="mt-1 truncate text-[12px] font-medium text-zinc-500">
+                    {property.address}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                    property.bankStatus === "Payout connected"
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-orange-50 text-orange-600"
+                  }`}
+                >
+                  {property.bankStatus}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                    Monthly Rent
+                  </p>
+                  <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.07em] text-[#050B1F]">
+                    {property.rent}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                    Status
+                  </p>
+                  <p className="mt-1 text-[13px] font-semibold leading-5 text-[#0F172A]">
+                    {property.status}
+                  </p>
+                  <p className="mt-0.5 text-[12px] font-medium text-zinc-500">
+                    {property.nextDue}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-end">
+                <span className="text-[12px] font-semibold text-[#0F172A]">
+                  {expanded ? "Hide details ↑" : "View details ↓"}
+                </span>
+              </div>
+            </button>
+
+            {expanded ? (
+              <div className="border-t border-zinc-100 px-4 pb-4 pt-5">
+                <LandlordRentDetail homeData={property.homeData} />
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function LandlordRentDetail({ homeData }: { homeData: MobileHomeData }) {
+  const rows = buildMobilePaymentRows(homeData);
+  const progress = buildMobilePaymentSummary(rows);
+  const nextStatement =
+    rows.find((row) => row.status === "upcoming") ||
+    rows.find((row) => row.status === "late");
+
+  return (
+    <div className="space-y-5">
+      <LandlordRentStatusCard homeData={homeData} />
+
+      <section>
+        <div className="grid grid-cols-2 gap-3">
+          <RentSummaryTile
+            label="Next Statement"
+            value={nextStatement?.label || "Not available"}
+          />
+          <RentSummaryTile label="Progress" value={`${progress.percent}% complete`} />
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-[width]"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            <PaymentLegendItem label="Paid" count={progress.paid} className="bg-emerald-500" />
+            <PaymentLegendItem label="Upcoming" count={progress.upcoming} className="bg-blue-500" />
+            <PaymentLegendItem label="Late" count={progress.late} className="bg-orange-500" />
+            <PaymentLegendItem label="Future" count={progress.future} className="bg-zinc-300" />
+          </div>
+        </div>
+
+        <div className="divide-y divide-zinc-100 border-y border-zinc-100">
+          {rows.length === 0 ? (
+            <div className="py-5">
+              <EmptyMobileText text="Payment history will appear after the lease schedule is ready." />
+            </div>
+          ) : (
+            rows.map((row) => <MobilePaymentHistoryRow key={row.id} row={row} />)
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function LandlordRentStatusCard({ homeData }: { homeData: MobileHomeData }) {
+  const summary = getMobileRentSummary(homeData);
+  const method = getDefaultPaymentMethod(homeData.paymentMethods);
+  const methodLabel = method?.last4
+    ? `${formatBrand(method.brand)} ending in ${method.last4}`
+    : "No saved payout method";
+
+  return (
+    <section>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+            Rent paid through
+          </p>
+          <h2 className="mt-2 text-[34px] font-semibold leading-none tracking-[-0.08em] text-[#050B1F]">
+            {summary.paidThrough}
+          </h2>
+        </div>
+        <div className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-semibold text-zinc-600">
+          Payout Ready
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-[13px] font-semibold text-[#0F172A]">
+          {summary.message}
+        </p>
+        <p className="mt-1 text-[12px] font-medium leading-5 text-zinc-500">
+          {methodLabel}
+        </p>
+      </div>
+
+      <div className="mt-5">
+        <button
+          type="button"
+          className="flex h-12 w-full items-center justify-center rounded-xl bg-[#0F172A] text-[13px] font-semibold text-white active:scale-[0.99]"
+        >
+          Manage Payout
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function LandlordReportsHeader({
@@ -3236,7 +3554,7 @@ function LandlordReportsTab({
               Expense Breakdown
             </h2>
             <p className="mt-1 text-[13px] font-medium text-[#6B7280]">
-              See where your money is going.
+              See where your money is going monthly.
             </p>
           </div>
           <button
@@ -4931,16 +5249,22 @@ function MobileAccountDrawer({
   activeTab,
   context,
   homeData,
+  availableWorkspaces,
+  currentWorkspace,
   onChangeTab,
   onClose,
   onProfileSaved,
+  onSwitchWorkspace,
 }: {
   activeTab: MobileAccountDrawerTab;
   context: MobileContext;
   homeData: MobileHomeData;
+  availableWorkspaces: MobileWorkspaceRole[];
+  currentWorkspace: MobileWorkspaceRole;
   onChangeTab: (tab: MobileAccountDrawerTab) => void;
   onClose: () => void;
   onProfileSaved: (context: MobileContext) => void;
+  onSwitchWorkspace: (role: MobileWorkspaceRole) => void;
 }) {
   const [displayName, setDisplayName] = useState(context.tenantName);
   const [phone, setPhone] = useState(
@@ -4990,6 +5314,12 @@ function MobileAccountDrawer({
   async function handleSignOut() {
     await supabase.auth.signOut();
     window.location.href = "/login?returnTo=%2Fmobile";
+  }
+
+  function handleSwitchWorkspace(role: MobileWorkspaceRole) {
+    if (role === currentWorkspace) return;
+    onSwitchWorkspace(role);
+    onClose();
   }
 
   return (
@@ -5047,12 +5377,15 @@ function MobileAccountDrawer({
               context={context}
               displayName={displayName}
               phone={phone}
+              availableWorkspaces={availableWorkspaces}
+              currentWorkspace={currentWorkspace}
               saving={saving}
               status={status}
               onDisplayNameChange={setDisplayName}
               onPhoneChange={setPhone}
               onSave={handleSave}
               onSignOut={handleSignOut}
+              onSwitchWorkspace={handleSwitchWorkspace}
             />
           ) : (
             <MobileNotificationsPanel activities={homeData.activities} />
@@ -5077,22 +5410,28 @@ function MobileProfileSettingsPanel({
   context,
   displayName,
   phone,
+  availableWorkspaces,
+  currentWorkspace,
   saving,
   status,
   onDisplayNameChange,
   onPhoneChange,
   onSave,
   onSignOut,
+  onSwitchWorkspace,
 }: {
   context: MobileContext;
   displayName: string;
   phone: string;
+  availableWorkspaces: MobileWorkspaceRole[];
+  currentWorkspace: MobileWorkspaceRole;
   saving: boolean;
   status: string;
   onDisplayNameChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
   onSave: () => void;
   onSignOut: () => void;
+  onSwitchWorkspace: (role: MobileWorkspaceRole) => void;
 }) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -5128,12 +5467,47 @@ function MobileProfileSettingsPanel({
             {context.tenantName}
           </h3>
           <p className="mt-1 truncate text-[13px] font-medium text-zinc-500">
-            Resident profile
+            {currentWorkspace === "landlord" ? "Landlord profile" : "Resident profile"}
           </p>
           <p className="mt-1 text-[11px] font-medium text-zinc-400">
             Photo upload preview only for now.
           </p>
         </div>
+      </section>
+
+      <section className="space-y-2.5">
+        <h4 className="text-[12px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          Workspace
+        </h4>
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+          {availableWorkspaces.map((role, index) => {
+            const selected = role === currentWorkspace;
+            const singleWorkspace = availableWorkspaces.length === 1;
+            return (
+              <button
+                key={role}
+                type="button"
+                disabled={selected || singleWorkspace}
+                onClick={() => onSwitchWorkspace(role)}
+                className={`flex h-12 w-full items-center justify-between px-4 text-[14px] font-semibold transition ${
+                  selected
+                    ? "bg-[#F8FAFC] text-[#0F172A]"
+                    : "bg-white text-zinc-500 active:bg-zinc-50"
+                } ${index > 0 ? "border-t border-zinc-100" : ""}`}
+              >
+                <span>{role === "landlord" ? "Landlord" : "Resident"}</span>
+                {selected ? (
+                  <CheckCircle2 size={17} className="text-[#2563EB]" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+        {availableWorkspaces.length > 1 ? (
+          <p className="text-[12px] font-medium leading-5 text-zinc-400">
+            Switch between your AvenueBoard workspaces.
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-4">

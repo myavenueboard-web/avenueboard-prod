@@ -473,7 +473,7 @@ export default function DashboardLayoutClient({
       : isAllPropertiesPage
       ? landlordGreeting
       : isReportsArea
-      ? "Analytics"
+      ? "Reports"
       : isPerksPage
       ? "Avenue Perks"
       : isAddPropertyPage

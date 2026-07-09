@@ -23,10 +23,33 @@ import {
   AVENUEBOARD_PLATFORM_FEE_CENTS,
   parseLandlordAbsorbsResidentPlatformFee,
 } from "@/lib/fees/residentPlatformFee";
+import {
+  getLeaseFirstPaymentCycleDate,
+  getLeasePaymentAmountForCycle,
+  type LeaseAmountLike,
+} from "@/lib/leasePaymentAmounts";
+import {
+  getCollectedRentPayments,
+} from "@/lib/rentPaymentClassification";
 
 type PropertyItem = {
   id: string;
   property_label: string;
+  street_address?: string | null;
+  unit_name?: string | null;
+  city?: string | null;
+  state_name?: string | null;
+  zip?: string | null;
+  bank_status?: string | null;
+};
+
+type LeaseTenantItem = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  tenant_role?: string | null;
 };
 
 type LeaseItem = {
@@ -35,13 +58,21 @@ type LeaseItem = {
   monthly_rent: number;
   start_date: string | null;
   end_date: string | null;
+  rent_due_day?: string | null;
+  lease_setup_type?: string | null;
+  payment_tracking_start_date?: string | null;
+  lease_status?: string | null;
+  ended_at?: string | null;
   properties?: { property_label: string } | null;
+  lease_tenants?: LeaseTenantItem[];
+  lease_amounts?: Array<LeaseAmountLike & { id?: string }>;
 };
 
 type RentPaymentItem = {
   id: string;
   property_id: string;
   lease_id: string | null;
+  tenant_access_id?: string | null;
   amount: number | null;
   rent_cycle_key?: string | null;
   rent_amount_cents?: number | null;
@@ -51,6 +82,10 @@ type RentPaymentItem = {
   due_date?: string | null;
   paid_at?: string | null;
   created_at?: string | null;
+  stripe_payment_intent_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  source?: string | null;
+  receipt_url?: string | null;
   properties?: { property_label: string } | null;
 };
 
@@ -78,18 +113,69 @@ type ExpenseItem = {
   category: string | null;
   amount: number;
   paid_date: string;
+  expense_frequency?: string | null;
   created_at?: string;
   properties?: { property_label: string } | null;
 };
 
+type ExpenseKind = "one_time" | "recurring";
+
+type ExpenseManagementRow = {
+  id: string;
+  sourceExpenseId?: string;
+  type: ExpenseKind;
+  category: string;
+  description: string;
+  propertyId: string;
+  property: string;
+  createdOn: string;
+  amount: number;
+};
+
 type ExpenseForm = {
   propertyId: string;
+  expenseType: ExpenseKind;
   category: string;
   amount: string;
   paidDate: string;
   description: string;
-  recurring: boolean;
-  receiptName: string;
+};
+
+type PropertyLeaseOverviewRow = {
+  propertyId: string;
+  propertyName: string;
+  address: string;
+  leaseStatus: string;
+  leaseStatusTone: "green" | "blue" | "red" | "gray";
+  hasLease: boolean;
+  leaseStart: string;
+  leaseEnd: string;
+  leaseLength: string;
+  rent: string;
+  nextDue: string;
+  nextDueTone: "green" | "orange" | "red" | "gray";
+  tenantName: string;
+  tenantEmail: string;
+  tenantPhone: string;
+};
+
+type FinancialOverviewMetrics = {
+  rentLabel: string;
+  expenseLabel: string;
+  rentCollected: number;
+  expectedRent: number;
+  remainingRent: number;
+  progressPercent: number;
+  totalExpenses: number;
+  expenseRatioLabel?: string;
+  expenseRatioPercent?: string;
+  expenseRatioText?: string;
+  expenseRatioAccent: boolean;
+};
+
+type AppliedCustomRange = {
+  start: string;
+  end: string;
 };
 
 type TabId = "overview" | "expenses";
@@ -99,13 +185,9 @@ const expenseCategories = [
   "Mortgage",
   "Property Tax",
   "Insurance",
-  "HOA",
   "Utilities",
-  "Repairs",
   "Maintenance",
-  "Supplies",
-  "Cleaning",
-  "Legal / Professional",
+  "HOA / PM",
   "Other",
 ];
 
@@ -113,21 +195,31 @@ const breakdownCategories = [
   "Mortgage",
   "Property Tax",
   "Insurance",
-  "HOA",
-  "Utilities",
-  "Repairs",
   "Maintenance",
+  "HOA / PM",
+  "Utilities",
   "Other",
 ];
 
+const expenseBreakdownPalette = [
+  "#113E78",
+  "#63C6BF",
+  "#91C1F5",
+  "#A979E4",
+  "#F3B23D",
+  "#B7DB8B",
+  "#C9CED6",
+];
+
+const fixedRecurringExpenseCategories = ["Mortgage", "Property Tax", "Insurance"];
+
 const emptyExpenseForm: ExpenseForm = {
   propertyId: "",
+  expenseType: "one_time",
   category: "Maintenance",
   amount: "",
   paidDate: new Date().toISOString().slice(0, 10),
   description: "",
-  recurring: false,
-  receiptName: "",
 };
 
 export default function ReportsPage() {
@@ -145,18 +237,26 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedProperty, setSelectedProperty] = useState("all");
-  const [selectedRange, setSelectedRange] = useState<RangeId>("this_month");
+  const [selectedRange, setSelectedRange] = useState<RangeId>("ytd");
+  const [customFinancialRange, setCustomFinancialRange] =
+    useState<AppliedCustomRange | null>(null);
   const [statementMenu, setStatementMenu] = useState("");
   const [selectedStatementYear, setSelectedStatementYear] = useState(
     new Date().getFullYear()
   );
 
   const [expenseOpen, setExpenseOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
-  const [deleteExpense, setDeleteExpense] = useState<ExpenseItem | null>(null);
+  const [editingExpense, setEditingExpense] =
+    useState<ExpenseManagementRow | null>(null);
+  const [deleteExpense, setDeleteExpense] =
+    useState<ExpenseManagementRow | null>(null);
   const [savingExpense, setSavingExpense] = useState(false);
   const [deletingExpense, setDeletingExpense] = useState(false);
   const [expenseForm, setExpenseForm] = useState<ExpenseForm>(emptyExpenseForm);
+  const [expenseRows, setExpenseRows] = useState<ExpenseManagementRow[]>([]);
+  const [expenseFilter, setExpenseFilter] = useState<ExpensePreviewFilter>("all");
+  const [expenseErrors, setExpenseErrors] = useState<Record<string, string>>({});
+  const [propertyOverviewError, setPropertyOverviewError] = useState(false);
 
   useEffect(() => {
     async function loadReportsPage() {
@@ -170,15 +270,17 @@ export default function ReportsPage() {
 
         const profile = await getOrCreateProfile();
         setProfileId(profile.id);
+        setPropertyOverviewError(false);
 
         const { data: propertyData, error: propertyError } = await supabase
           .from("properties")
-          .select("id, property_label")
+          .select("id, property_label, street_address, unit_name, city, state_name, zip, bank_status")
           .eq("owner_profile_id", profile.id)
           .order("created_at", { ascending: false });
 
         if (propertyError) {
           console.warn("Reports properties load warning:", propertyError);
+          setPropertyOverviewError(true);
         }
 
         const loadedProperties = (propertyData || []) as PropertyItem[];
@@ -191,7 +293,10 @@ export default function ReportsPage() {
         const propertyIds = loadedProperties.map((property) => property.id);
 
         if (propertyIds.length > 0) {
-          const [{ data: leaseData }, { data: paymentData }] = await Promise.all([
+          const [
+            { data: leaseData, error: leaseError },
+            { data: propertyPaymentData, error: propertyPaymentError },
+          ] = await Promise.all([
             supabase
               .from("leases")
               .select(
@@ -201,6 +306,24 @@ export default function ReportsPage() {
                 monthly_rent,
                 start_date,
                 end_date,
+                rent_due_day,
+                lease_setup_type,
+                payment_tracking_start_date,
+                lease_status,
+                ended_at,
+                lease_amounts (
+                  id,
+                  amount_type,
+                  amount
+                ),
+                lease_tenants (
+                  id,
+                  first_name,
+                  last_name,
+                  email,
+                  phone,
+                  tenant_role
+                ),
                 properties (
                   property_label
                 )
@@ -215,6 +338,7 @@ export default function ReportsPage() {
                 id,
                 property_id,
                 lease_id,
+                tenant_access_id,
                 amount,
                 rent_cycle_key,
                 rent_amount_cents,
@@ -224,6 +348,10 @@ export default function ReportsPage() {
                 due_date,
                 paid_at,
                 created_at,
+                stripe_payment_intent_id,
+                stripe_checkout_session_id,
+                source,
+                receipt_url,
                 properties (
                   property_label
                 )
@@ -233,13 +361,139 @@ export default function ReportsPage() {
               .order("due_date", { ascending: false }),
           ]);
 
+          if (leaseError) {
+            console.warn("Reports leases load warning:", leaseError);
+            setPropertyOverviewError(true);
+          }
+          if (propertyPaymentError) {
+            console.warn("Reports property payments load warning:", propertyPaymentError);
+          }
+
           const normalizedLeases = normalizeRelatedRows(leaseData || []) as LeaseItem[];
           setLeases(normalizedLeases);
-          setRentPayments(
-            normalizeRelatedRows(paymentData || []) as RentPaymentItem[]
-          );
 
           const leaseIds = normalizedLeases.map((lease) => lease.id);
+          let leasePaymentData: any[] = [];
+          let tenantAccessPaymentData: any[] = [];
+          let timelinePaymentData: any[] = [];
+
+          if (leaseIds.length > 0) {
+            const { data, error } = await supabase
+              .from("rent_payments")
+              .select(
+                `
+                id,
+                property_id,
+                lease_id,
+                tenant_access_id,
+                amount,
+                rent_cycle_key,
+                rent_amount_cents,
+                tenant_service_fee_cents,
+                status,
+                period_label,
+                due_date,
+                paid_at,
+                created_at,
+                stripe_payment_intent_id,
+                stripe_checkout_session_id,
+                source,
+                receipt_url,
+                properties (
+                  property_label
+                )
+              `
+              )
+              .in("lease_id", leaseIds)
+              .order("due_date", { ascending: false });
+
+            if (error) {
+              console.warn("Reports lease payments load warning:", error);
+            }
+
+            leasePaymentData = data || [];
+
+            const timelinePaymentResults = await Promise.all(
+              normalizedLeases.map((lease) =>
+                supabase
+                  .from("rent_payments")
+                  .select("*")
+                  .eq("lease_id", lease.id)
+                  .order("created_at", { ascending: true })
+              )
+            );
+
+            timelinePaymentData = timelinePaymentResults.flatMap((result) => {
+              if (result.error) {
+                console.warn("Reports timeline payments load warning:", result.error);
+                return [];
+              }
+
+              return result.data || [];
+            });
+
+            const { data: tenantAccessData, error: tenantAccessError } = await supabase
+              .from("tenant_access")
+              .select("id, property_id, lease_id")
+              .in("property_id", propertyIds)
+              .in("lease_id", leaseIds);
+
+            if (tenantAccessError) {
+              console.warn("Reports tenant access load warning:", tenantAccessError);
+            }
+
+            const tenantAccessIds = (tenantAccessData || []).map((row) => row.id);
+
+            if (tenantAccessIds.length > 0) {
+              const { data: accessPayments, error: accessPaymentError } = await supabase
+                .from("rent_payments")
+                .select(
+                  `
+                  id,
+                  property_id,
+                  lease_id,
+                  tenant_access_id,
+                  amount,
+                  rent_cycle_key,
+                  rent_amount_cents,
+                  tenant_service_fee_cents,
+                  status,
+                  period_label,
+                  due_date,
+                  paid_at,
+                  created_at,
+                  stripe_payment_intent_id,
+                  stripe_checkout_session_id,
+                  source,
+                  receipt_url,
+                  properties (
+                    property_label
+                  )
+                `
+                )
+                .in("tenant_access_id", tenantAccessIds)
+                .order("created_at", { ascending: false });
+
+              if (accessPaymentError) {
+                console.warn(
+                  "Reports tenant access payments load warning:",
+                  accessPaymentError
+                );
+              }
+
+              tenantAccessPaymentData = accessPayments || [];
+            }
+          }
+
+          const mergedPayments = mergeRentPayments([
+            ...normalizeRelatedRows(propertyPaymentData || []),
+            ...normalizeRelatedRows(leasePaymentData),
+            ...normalizeRelatedRows(tenantAccessPaymentData),
+            ...normalizeRelatedRows(timelinePaymentData),
+          ]) as RentPaymentItem[];
+          setRentPayments(
+            mergedPayments
+          );
 
           if (leaseIds.length > 0) {
             const { data: preferenceData } = await supabase
@@ -274,7 +528,9 @@ export default function ReportsPage() {
           console.warn("Reports expenses load warning:", expenseError);
         }
 
-        setExpenses(normalizeExpenses(expenseData || []));
+        const normalizedExpenses = normalizeExpenses(expenseData || []);
+        setExpenses(normalizedExpenses);
+        setExpenseRows(buildExpenseManagementRows(normalizedExpenses, loadedProperties));
       } catch (error) {
         console.warn("Reports page load warning:", error);
         router.push("/login");
@@ -344,11 +600,55 @@ export default function ReportsPage() {
     () => buildTrendRows(filteredPayments, range),
     [filteredPayments, range]
   );
+  const expenseBreakdownMonth = useMemo(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  }, []);
   const expenseBreakdown = useMemo(
-    () => buildExpenseBreakdown(filteredExpenses),
-    [filteredExpenses]
+    () =>
+      buildMonthlyExpenseBreakdown(
+        expenseRows,
+        selectedProperty,
+        expenseBreakdownMonth
+      ),
+    [expenseBreakdownMonth, expenseRows, selectedProperty]
   );
   const recentExpenses = filteredExpenses.slice(0, 5);
+  const financialOverviewMetrics = useMemo(
+    () =>
+      buildFinancialOverviewMetrics({
+        selectedProperty,
+        selectedRange,
+        customRange: customFinancialRange,
+        leases,
+        rentPayments,
+        expenses: expenseRows,
+      }),
+    [
+      customFinancialRange,
+      expenseRows,
+      leases,
+      rentPayments,
+      selectedProperty,
+      selectedRange,
+    ]
+  );
+  const propertyLeaseOverviewRows = useMemo(
+    () => buildPropertyLeaseOverviewRows(properties, leases),
+    [leases, properties]
+  );
+  const visibleExpenseRows = useMemo(() => {
+    if (expenseFilter === "all") return expenseRows;
+    return expenseRows.filter((row) => row.type === expenseFilter);
+  }, [expenseFilter, expenseRows]);
+  const expenseFilterCounts = useMemo(
+    () => ({
+      all: expenseRows.length,
+      one_time: expenseRows.filter((row) => row.type === "one_time").length,
+      recurring: expenseRows.filter((row) => row.type === "recurring").length,
+    }),
+    [expenseRows]
+  );
   const statementPayments = useMemo(() => {
     return rentPayments.filter((payment) => {
       if (selectedProperty === "all") return true;
@@ -366,57 +666,83 @@ export default function ReportsPage() {
     [filteredLeases, leasePreferences, selectedStatementYear, statementPayments]
   );
 
-  function openAddExpense() {
+  function openAddExpense(category?: string) {
     setEditingExpense(null);
+    setExpenseErrors({});
     setExpenseForm({
       ...emptyExpenseForm,
       propertyId: properties[0]?.id || "",
+      category: category ? normalizeExpenseCategory(category) : emptyExpenseForm.category,
       paidDate: new Date().toISOString().slice(0, 10),
     });
     setExpenseOpen(true);
   }
 
-  function openEditExpense(expense: ExpenseItem) {
+  function openEditExpense(expense: ExpenseManagementRow) {
     setEditingExpense(expense);
+    setExpenseErrors({});
     setExpenseForm({
-      propertyId: expense.property_id,
+      propertyId: expense.propertyId,
       description: expense.description || "",
       category: normalizeExpenseCategory(expense.category),
       amount: String(expense.amount || ""),
-      paidDate: expense.paid_date || new Date().toISOString().slice(0, 10),
-      recurring: false,
-      receiptName: "",
+      paidDate: expense.createdOn || new Date().toISOString().slice(0, 10),
+      expenseType: expense.type,
     });
     setExpenseOpen(true);
   }
 
   async function handleSaveExpense() {
-    if (
-      !profileId ||
-      !expenseForm.propertyId ||
-      !expenseForm.description.trim() ||
-      !expenseForm.amount ||
-      Number(expenseForm.amount) <= 0 ||
-      !expenseForm.paidDate
-    ) {
+    const errors = validateExpenseForm(expenseForm);
+    setExpenseErrors(errors);
+    if (Object.keys(errors).length > 0 || !profileId) {
+      if (!profileId) {
+        setExpenseErrors((prev) => ({
+          ...prev,
+          save: "Unable to save expense. Please try again.",
+        }));
+      }
       return;
     }
 
     setSavingExpense(true);
+    setExpenseErrors({});
 
     const payload = {
       property_id: expenseForm.propertyId,
-      description: expenseForm.description.trim(),
+      description: expenseForm.description.trim() || "N/A",
       category: expenseForm.category,
       amount: Number(expenseForm.amount),
       paid_date: expenseForm.paidDate,
+      expense_frequency: toExpenseFrequencyValue(expenseForm.expenseType),
     };
 
+    const propertyName =
+      properties.find((property) => property.id === expenseForm.propertyId)
+        ?.property_label || "Unknown Property";
+
     if (editingExpense) {
-      const { data, error } = await supabase
+      if (!editingExpense.sourceExpenseId) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("Expense update missing sourceExpenseId:", {
+            editingExpense,
+            payload,
+          });
+        }
+        setExpenseErrors({
+          save:
+            process.env.NODE_ENV === "development"
+              ? "Save failed: missing expense id"
+              : "Unable to save expense. Please try again.",
+        });
+        setSavingExpense(false);
+        return;
+      }
+
+      const updateResponse = await supabase
         .from("expenses")
         .update(payload)
-        .eq("id", editingExpense.id)
+        .eq("id", editingExpense.sourceExpenseId)
         .eq("profile_id", profileId)
         .select(
           `
@@ -427,9 +753,43 @@ export default function ReportsPage() {
         `
         )
         .single();
+      const { data, error } = updateResponse;
 
       if (error) {
-        console.warn("Expense update warning:", error);
+        if (process.env.NODE_ENV === "development") {
+          console.warn("Expense update failed:", {
+            table: "expenses",
+            where: {
+              id: editingExpense.sourceExpenseId,
+              profile_id: profileId,
+            },
+            payload,
+            error: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+            response: updateResponse,
+          });
+        }
+        setExpenseErrors({
+          save:
+            process.env.NODE_ENV === "development"
+              ? `Save failed: ${error.message}${error.code ? ` (${error.code})` : ""}`
+              : "Unable to save expense. Please try again.",
+        });
+        setSavingExpense(false);
+        return;
+      }
+
+      if (!data) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("Expense update returned no row:", editingExpense.sourceExpenseId);
+        }
+        setExpenseErrors({
+          save: "Unable to save expense. Please try again.",
+        });
         setSavingExpense(false);
         return;
       }
@@ -438,6 +798,15 @@ export default function ReportsPage() {
       setExpenses((prev) =>
         prev.map((item) =>
           item.id === normalizedExpense.id ? normalizedExpense : item
+        )
+      );
+      setExpenseRows((prev) =>
+        prev.map((item) =>
+          item.id === editingExpense.id
+            ? {
+                ...expenseToManagementRow(normalizedExpense, item.id, expenseForm.expenseType),
+              }
+            : item
         )
       );
       setExpenseOpen(false);
@@ -468,8 +837,20 @@ export default function ReportsPage() {
       return;
     }
 
-    setExpenses((prev) => [normalizeExpense(data), ...prev]);
+    const normalizedExpense = normalizeExpense(data);
+    setExpenses((prev) => [normalizedExpense, ...prev]);
+    setExpenseRows((prev) => [
+      {
+        ...expenseToManagementRow(
+          normalizedExpense,
+          generateExpenseDisplayId(prev, expenseForm.paidDate),
+          expenseForm.expenseType
+        )
+      },
+      ...prev,
+    ]);
     setExpenseOpen(false);
+    setEditingExpense(null);
     setSavingExpense(false);
   }
 
@@ -478,10 +859,19 @@ export default function ReportsPage() {
 
     setDeletingExpense(true);
 
+    if (!deleteExpense.sourceExpenseId) {
+      setExpenseRows((prev) => prev.filter((item) => item.id !== deleteExpense.id));
+      setDeleteExpense(null);
+      setEditingExpense(null);
+      setExpenseOpen(false);
+      setDeletingExpense(false);
+      return;
+    }
+
     const { error } = await supabase
       .from("expenses")
       .delete()
-      .eq("id", deleteExpense.id)
+      .eq("id", deleteExpense.sourceExpenseId)
       .eq("profile_id", profileId);
 
     if (error) {
@@ -490,8 +880,13 @@ export default function ReportsPage() {
       return;
     }
 
-    setExpenses((prev) => prev.filter((item) => item.id !== deleteExpense.id));
+    setExpenses((prev) =>
+      prev.filter((item) => item.id !== deleteExpense.sourceExpenseId)
+    );
+    setExpenseRows((prev) => prev.filter((item) => item.id !== deleteExpense.id));
     setDeleteExpense(null);
+    setEditingExpense(null);
+    setExpenseOpen(false);
     setDeletingExpense(false);
   }
 
@@ -499,13 +894,15 @@ export default function ReportsPage() {
     downloadCsv(
       "avenueboard-expenses.csv",
       [
-        ["Date", "Property", "Category", "Description", "Amount"],
-        ...filteredExpenses.map((expense) => [
-          formatDate(expense.paid_date),
-          expense.properties?.property_label || "Unknown Property",
-          expense.category || "Other",
-          expense.description,
-          String(expense.amount),
+        ["Expense ID", "Type", "Category", "Description", "Property", "Created On", "Amount"],
+        ...visibleExpenseRows.map((expense) => [
+          expense.id,
+          formatExpenseKind(expense.type),
+          expense.category,
+          expense.description || "N/A",
+          expense.property,
+          formatDate(expense.createdOn),
+          formatCurrency(expense.amount),
         ]),
       ]
     );
@@ -540,12 +937,12 @@ export default function ReportsPage() {
     <div className="h-full overflow-x-hidden overflow-y-auto pb-8 scrollbar-hide">
       <div className="mx-auto max-w-[1440px] pr-1">
         <div className="-ml-3 -mr-6 border-b border-zinc-200 pl-3">
-          <div className="flex gap-8">
+          <div className="flex gap-5">
             <TabButton
               active={activeTab === "overview"}
               onClick={() => setActiveTab("overview")}
             >
-              Reports
+              Analytics
             </TabButton>
             <TabButton
               active={activeTab === "expenses"}
@@ -566,13 +963,25 @@ export default function ReportsPage() {
                   setSelectedProperty={setSelectedProperty}
                   selectedRange={selectedRange}
                   setSelectedRange={setSelectedRange}
+                  customRange={customFinancialRange}
+                  setCustomRange={setCustomFinancialRange}
                 />
 
-                <FinancialOverviewSummary />
+                <FinancialOverviewSummary
+                  metrics={financialOverviewMetrics}
+                  propertyRows={propertyLeaseOverviewRows}
+                  propertyRowsError={propertyOverviewError}
+                  onViewAllProperties={() => router.push("/dashboard")}
+                  onOpenProperty={(propertyId) =>
+                    router.push(`/dashboard/properties/${propertyId}`)
+                  }
+                />
               </section>
 
               <div className="flex min-w-0 min-h-[calc(100vh-185px)] flex-col">
                 <ExpenseBreakdownSection
+                  items={expenseBreakdown}
+                  rangeLabel={getMonthlyExpenseBreakdownLabel(expenseBreakdownMonth)}
                   onAddExpense={openAddExpense}
                   addExpenseDisabled={properties.length === 0}
                 />
@@ -609,7 +1018,7 @@ export default function ReportsPage() {
                     Export CSV
                   </button>
                   <button
-                    onClick={openAddExpense}
+                    onClick={() => openAddExpense()}
                     disabled={properties.length === 0}
                     className="h-10 rounded-2xl bg-slate-950 px-4 text-[13px] font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
                   >
@@ -618,7 +1027,13 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              <ExpenseManagementPreviewTable />
+              <ExpenseManagementPreviewTable
+                rows={visibleExpenseRows}
+                filter={expenseFilter}
+                counts={expenseFilterCounts}
+                onFilterChange={setExpenseFilter}
+                onEdit={openEditExpense}
+              />
             </section>
           </div>
         )}
@@ -630,18 +1045,28 @@ export default function ReportsPage() {
           properties={properties}
           form={expenseForm}
           setForm={setExpenseForm}
+          errors={expenseErrors}
           saving={savingExpense}
+          deleting={deletingExpense}
           onClose={() => {
+            if (savingExpense) return;
             setExpenseOpen(false);
             setEditingExpense(null);
+            setExpenseErrors({});
           }}
           onSave={handleSaveExpense}
+          onDelete={
+            editingExpense
+              ? () => {
+                  setDeleteExpense(editingExpense);
+                }
+              : undefined
+          }
         />
       )}
 
       {deleteExpense && (
         <DeleteExpenseModal
-          expenseName={deleteExpense.description}
           deleting={deletingExpense}
           onClose={() => {
             if (!deletingExpense) setDeleteExpense(null);
@@ -653,28 +1078,54 @@ export default function ReportsPage() {
   );
 }
 
-function FinancialOverviewSummary() {
+function FinancialOverviewSummary({
+  metrics,
+  propertyRows,
+  propertyRowsError,
+  onViewAllProperties,
+  onOpenProperty,
+}: {
+  metrics: FinancialOverviewMetrics;
+  propertyRows: PropertyLeaseOverviewRow[];
+  propertyRowsError: boolean;
+  onViewAllProperties: () => void;
+  onOpenProperty: (propertyId: string) => void;
+}) {
   return (
     <div className="px-5 pt-10">
       <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,0.86fr)] gap-12">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold uppercase tracking-[0.055em] text-slate-500">
-            Rent Collected YTD
+            {metrics.rentLabel}
           </p>
           <p className="mt-5 text-[44px] font-semibold leading-none tracking-[-0.07em] text-slate-950">
-            $186,450
+            {formatCurrency(metrics.rentCollected)}
           </p>
           <p className="mt-5 text-[14px] font-medium text-slate-500">
-            of $245,000 expected
+            {metrics.expectedRent > 0
+              ? (
+                <>
+                  of {formatCurrency(metrics.expectedRent)} expected{" "}
+                  <ExpectedRentTooltip />
+                </>
+              )
+              : "No expected rent available"}
           </p>
 
           <div className="mt-7 h-2.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full w-[76%] rounded-full bg-emerald-500" />
+            <div
+              className="h-full rounded-full bg-emerald-500"
+              style={{ width: `${Math.min(metrics.progressPercent, 100)}%` }}
+            />
           </div>
 
           <div className="mt-4 flex items-center justify-between gap-4 text-[14px] font-semibold">
-            <span className="text-emerald-600">76% collected</span>
-            <span className="text-slate-500">$58,550 remaining</span>
+            <span className="text-emerald-600">
+              {metrics.progressPercent}% collected
+            </span>
+            <span className="text-slate-500">
+              {formatCurrency(metrics.remainingRent)} remaining
+            </span>
           </div>
         </div>
 
@@ -682,58 +1133,111 @@ function FinancialOverviewSummary() {
 
         <div className="min-w-0">
           <p className="text-[12px] font-semibold uppercase tracking-[0.055em] text-slate-500">
-            Total Expenses YTD
+            {metrics.expenseLabel}
           </p>
           <p className="mt-5 text-[44px] font-semibold leading-none tracking-[-0.07em] text-slate-950">
-            $48,230
+            {formatCurrency(metrics.totalExpenses)}
           </p>
           <div className="mt-9 flex items-center gap-4">
-            <span className="inline-flex h-10 items-center rounded-xl bg-red-50 px-4 text-[13px] font-semibold text-red-500">
-              ↑ 12.4%
-            </span>
-            <span className="text-[14px] font-medium text-slate-500">
-              vs last year
+            <span className="inline-flex h-10 items-center rounded-xl bg-slate-100 px-4 text-[13px] font-semibold text-slate-600">
+              {metrics.expenseRatioLabel ? (
+                metrics.expenseRatioLabel
+              ) : (
+                <>
+                  <span
+                    className={
+                      metrics.expenseRatioAccent
+                        ? "text-red-500"
+                        : "text-slate-500"
+                    }
+                  >
+                    {metrics.expenseRatioPercent}
+                  </span>
+                  <span className="ml-1 text-slate-500">
+                    {metrics.expenseRatioText}
+                  </span>
+                </>
+              )}
             </span>
           </div>
         </div>
       </div>
 
-      <PropertiesLeaseOverview />
+      <PropertiesLeaseOverview
+        rows={propertyRows}
+        error={propertyRowsError}
+        onViewAllProperties={onViewAllProperties}
+        onOpenProperty={onOpenProperty}
+      />
     </div>
   );
 }
 
-function PropertiesLeaseOverview() {
-  const rows = [
-    {
-      icon: Home,
-      property: "101 Main St",
-      address: "Unit 2B, Anytown, CA 94016",
-      leaseTerm: "Aug 1, 2024 – Jul 31, 2025",
-      leaseLength: "12 months",
-      rent: "$2,450 / month",
-      rentDue: "Due on 1st",
-      tenant: "John Smith",
-      email: "john.smith@email.com",
-      phone: "(415) 555-0198",
-      nextDue: "Jun 1, 2026",
-      dueIn: "In 12 days",
-    },
-    {
-      icon: Building2,
-      property: "Sunset Villas",
-      address: "Unit 5A, Anytown, CA 94016",
-      leaseTerm: "Jan 15, 2025 – Jan 14, 2026",
-      leaseLength: "12 months",
-      rent: "$2,200 / month",
-      rentDue: "Due on 15th",
-      tenant: "Sarah Johnson",
-      email: "sarah.j@email.com",
-      phone: "(415) 555-0142",
-      nextDue: "Jun 15, 2026",
-      dueIn: "In 26 days",
-    },
-  ];
+function ExpectedRentTooltip() {
+  return (
+    <span className="group relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label="How expected rent is calculated"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[12px] font-semibold text-slate-400 outline-none transition hover:text-slate-700 focus-visible:text-slate-700 focus-visible:ring-2 focus-visible:ring-slate-200"
+      >
+        ⓘ
+      </button>
+      <span className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-40 hidden w-[310px] -translate-x-1/2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-left text-[12px] font-medium leading-5 text-slate-700 shadow-[0_18px_50px_rgba(15,23,42,0.14)] group-hover:block group-focus-within:block">
+        Expected rent is calculated from lease start and end dates, monthly rent,
+        and the selected reporting period. Year to Date uses the full calendar
+        year, but only counts months where the lease is active. For All
+        Properties, this amount is summed across all leases in the selected
+        period.
+      </span>
+    </span>
+  );
+}
+
+function PropertiesLeaseOverview({
+  rows,
+  error,
+  onViewAllProperties,
+  onOpenProperty,
+}: {
+  rows: PropertyLeaseOverviewRow[];
+  error: boolean;
+  onViewAllProperties: () => void;
+  onOpenProperty: (propertyId: string) => void;
+}) {
+  const rowsListRef = useRef<HTMLDivElement | null>(null);
+  const [rowsScrollThumb, setRowsScrollThumb] = useState({
+    top: 0,
+    height: 88,
+  });
+  const [rowsCanScroll, setRowsCanScroll] = useState(false);
+
+  function updatePropertyRowsScrollbar() {
+    const list = rowsListRef.current;
+    if (!list) return;
+
+    const maxScroll = list.scrollHeight - list.clientHeight;
+    const canScroll = maxScroll > 0;
+    const thumbHeight = Math.min(88, list.clientHeight || 88);
+    const thumbTop =
+      canScroll
+        ? (list.scrollTop / maxScroll) * (list.clientHeight - thumbHeight)
+        : 0;
+
+    setRowsCanScroll(canScroll);
+    setRowsScrollThumb({
+      top: thumbTop,
+      height: thumbHeight,
+    });
+  }
+
+  useLayoutEffect(() => {
+    const animationFrame = window.requestAnimationFrame(() => {
+      updatePropertyRowsScrollbar();
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [rows.length, error]);
 
   return (
     <div className="mt-14">
@@ -743,12 +1247,13 @@ function PropertiesLeaseOverview() {
             Properties &amp; Lease Overview
           </h3>
           <span className="rounded-xl bg-slate-100 px-3 py-1 text-[12px] font-semibold text-slate-600">
-            2 of 2 properties
+            {rows.length} of {rows.length} properties
           </span>
         </div>
 
         <button
           type="button"
+          onClick={onViewAllProperties}
           className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-700 transition hover:text-slate-950"
         >
           View all
@@ -760,94 +1265,170 @@ function PropertiesLeaseOverview() {
         </button>
       </div>
 
-      <div className="mt-8 overflow-x-auto">
-        <div className="min-w-[900px]">
-          <div className="grid grid-cols-[2.3fr_1.65fr_1.35fr_1.9fr_1.55fr_24px] border-b border-zinc-200 pb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+      <div className="mt-8 overflow-visible">
+        <div className="w-full">
+          <div className="grid grid-cols-[2.3fr_1.65fr_1.45fr_1.9fr_24px] gap-5 border-b border-zinc-200 pb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
             <span>Property</span>
             <span>Lease Term</span>
             <span>Rent</span>
             <span>Tenant</span>
-            <span>Next Rent Due</span>
             <span />
           </div>
 
-          <div className="divide-y divide-zinc-100">
-            {rows.map((row) => {
-              const Icon = row.icon;
+          {error ? (
+            <div className="flex min-h-[180px] items-center justify-center border-b border-zinc-100 px-6 py-10 text-center">
+              <div>
+                <p className="text-[16px] font-semibold tracking-[-0.035em] text-slate-950">
+                  Unable to load property overview.
+                </p>
+                <p className="mt-2 text-[13.5px] font-medium text-slate-500">
+                  Please refresh and try again.
+                </p>
+              </div>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="flex min-h-[180px] items-center justify-center border-b border-zinc-100 px-6 py-10 text-center">
+              <div>
+                <p className="text-[16px] font-semibold tracking-[-0.035em] text-slate-950">
+                  No properties yet.
+                </p>
+                <p className="mt-2 text-[13.5px] font-medium text-slate-500">
+                  Add a property to see lease and rent details here.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="relative">
+              <div
+                ref={rowsListRef}
+                onScroll={updatePropertyRowsScrollbar}
+                className="max-h-[300px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                <div className="divide-y divide-zinc-100">
+                  {rows.map((row) => (
+                    <div
+                      key={row.propertyId}
+                      className="grid grid-cols-[2.3fr_1.65fr_1.45fr_1.9fr_24px] items-center gap-5 py-7"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-[16px] font-semibold text-slate-950">
+                          {row.propertyName}
+                        </p>
+                        <p className="mt-1.5 truncate text-[13.5px] font-medium text-slate-500">
+                          {row.address}
+                        </p>
+                        <p
+                          className={`mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold ${
+                            row.leaseStatusTone === "green"
+                              ? "text-emerald-600"
+                              : row.leaseStatusTone === "blue"
+                                ? "text-blue-600"
+                                : row.leaseStatusTone === "red"
+                                  ? "text-red-600"
+                                  : "text-slate-500"
+                          }`}
+                        >
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              row.leaseStatusTone === "green"
+                                ? "bg-emerald-500"
+                                : row.leaseStatusTone === "blue"
+                                  ? "bg-blue-500"
+                                  : row.leaseStatusTone === "red"
+                                    ? "bg-red-500"
+                                    : "bg-slate-300"
+                            }`}
+                          />
+                          {row.leaseStatus}
+                        </p>
+                      </div>
 
-              return (
-                <div
-                  key={row.property}
-                  className="grid grid-cols-[2.3fr_1.65fr_1.35fr_1.9fr_1.55fr_24px] items-center gap-5 py-7"
-                >
-                  <div className="flex min-w-0 items-start gap-5">
-                    <Icon
-                      aria-hidden="true"
-                      className="mt-1 h-8 w-8 shrink-0 text-slate-950"
-                      strokeWidth={1.8}
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-[16px] font-semibold text-slate-950">
-                        {row.property}
-                      </p>
-                      <p className="mt-1.5 truncate text-[13.5px] font-medium text-slate-500">
-                        {row.address}
-                      </p>
-                      <p className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-emerald-600">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                        Active Lease
-                      </p>
+                      <div className="space-y-1.5">
+                        {row.hasLease ? (
+                          <>
+                            <p className="text-[15px] font-semibold leading-5 text-slate-950">
+                              {row.leaseStart}
+                            </p>
+                            <p className="text-[15px] font-semibold leading-5 text-slate-950">
+                              <span className="text-slate-500">→</span>{" "}
+                              {row.leaseEnd}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-[15px] font-semibold leading-5 text-slate-950">
+                            No active lease
+                          </p>
+                        )}
+                        <p className="text-[13.5px] font-medium text-slate-500">
+                          {row.leaseLength}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[16px] font-semibold text-slate-950">
+                          {row.rent}
+                        </p>
+                        <p
+                          className={`mt-1.5 text-[13.5px] font-semibold ${
+                            row.nextDueTone === "green"
+                              ? "text-emerald-600"
+                              : row.nextDueTone === "orange"
+                                ? "text-orange-600"
+                                : row.nextDueTone === "red"
+                                  ? "text-red-600"
+                                  : "text-slate-500"
+                          }`}
+                        >
+                          {row.nextDue}
+                        </p>
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-[16px] font-semibold text-slate-950">
+                          {row.tenantName}
+                        </p>
+                        <p className="mt-1.5 truncate text-[13.5px] font-medium text-slate-500">
+                          {row.tenantEmail}
+                        </p>
+                        <p className="mt-1 truncate text-[13.5px] font-medium text-slate-500">
+                          {row.tenantPhone}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        aria-label={`Open ${row.propertyName} dashboard`}
+                        onClick={() => onOpenProperty(row.propertyId)}
+                        className="flex h-8 w-6 items-center justify-end justify-self-end text-slate-950 transition hover:text-[#2563EB]"
+                      >
+                        <ChevronRight
+                          aria-hidden="true"
+                          className="h-5 w-5"
+                          strokeWidth={2.2}
+                        />
+                      </button>
                     </div>
-                  </div>
-
-                  <div>
-                    <p className="max-w-[165px] text-[15px] font-semibold leading-6 text-slate-950">
-                      {row.leaseTerm}
-                    </p>
-                    <p className="mt-1 text-[13.5px] font-medium text-slate-500">
-                      {row.leaseLength}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[16px] font-semibold text-slate-950">
-                      {row.rent}
-                    </p>
-                    <p className="mt-1.5 text-[13.5px] font-medium text-slate-500">
-                      {row.rentDue}
-                    </p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="truncate text-[16px] font-semibold text-slate-950">
-                      {row.tenant}
-                    </p>
-                    <p className="mt-1.5 truncate text-[13.5px] font-medium text-slate-500">
-                      {row.email}
-                    </p>
-                    <p className="mt-1 text-[13.5px] font-medium text-slate-500">
-                      {row.phone}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[16px] font-semibold text-slate-950">
-                      {row.nextDue}
-                    </p>
-                    <p className="mt-1.5 text-[13.5px] font-semibold text-emerald-600">
-                      {row.dueIn}
-                    </p>
-                  </div>
-
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="h-5 w-5 justify-self-end text-slate-950"
-                    strokeWidth={2.2}
-                  />
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+
+              <div className="pointer-events-none absolute -right-[43px] top-0 h-full w-1">
+                <div
+                  className="w-[3px] rounded-full bg-slate-800/90"
+                  style={{
+                    height: `${rowsScrollThumb.height}px`,
+                    transform: `translateY(${rowsScrollThumb.top}px)`,
+                  }}
+                />
+              </div>
+
+              {!rowsCanScroll && (
+                <p className="mt-3 text-center text-[12px] font-medium text-slate-400">
+                  All properties shown
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -860,115 +1441,350 @@ function FinancialOverviewHeader({
   setSelectedProperty,
   selectedRange,
   setSelectedRange,
+  customRange,
+  setCustomRange,
 }: {
   properties: PropertyItem[];
   selectedProperty: string;
   setSelectedProperty: (value: string) => void;
   selectedRange: RangeId;
   setSelectedRange: (value: RangeId) => void;
+  customRange: AppliedCustomRange | null;
+  setCustomRange: (value: AppliedCustomRange | null) => void;
 }) {
+  const [customOpen, setCustomOpen] = useState(false);
+  const [pendingStart, setPendingStart] = useState("");
+  const [pendingEnd, setPendingEnd] = useState("");
+  const [customError, setCustomError] = useState("");
+  const customRef = useRef<HTMLDivElement | null>(null);
+
+  const today = startOfDay(new Date());
+  const minCustomDate = toDateInputValue(
+    new Date(today.getFullYear() - 2, today.getMonth(), today.getDate())
+  );
+  const maxCustomDate = toDateInputValue(
+    new Date(today.getFullYear() + 2, today.getMonth(), today.getDate())
+  );
+
+  function openCustomPicker() {
+    const fallbackRange = getDateRange("this_month");
+    setPendingStart(customRange?.start || toDateInputValue(fallbackRange.start));
+    setPendingEnd(customRange?.end || toDateInputValue(fallbackRange.end));
+    setCustomError("");
+    setCustomOpen(true);
+  }
+
+  function handleRangeClick(id: RangeId) {
+    if (id === "custom") {
+      openCustomPicker();
+      return;
+    }
+
+    setCustomOpen(false);
+    setCustomError("");
+    setSelectedRange(id);
+  }
+
+  function handleApplyCustomRange() {
+    const start = parseLocalDate(pendingStart);
+    const end = parseLocalDate(pendingEnd);
+    const min = parseLocalDate(minCustomDate);
+    const max = parseLocalDate(maxCustomDate);
+
+    if (!start || !end) {
+      setCustomError("Start date and end date are required.");
+      return;
+    }
+    if (start > end) {
+      setCustomError("Start date cannot be after end date.");
+      return;
+    }
+    if ((min && start < min) || (max && end > max)) {
+      setCustomError("Choose dates within two years of today.");
+      return;
+    }
+
+    setCustomRange({ start: pendingStart, end: pendingEnd });
+    setSelectedRange("custom");
+    setCustomOpen(false);
+    setCustomError("");
+  }
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        customRef.current &&
+        !customRef.current.contains(event.target as Node)
+      ) {
+        setCustomOpen(false);
+        setCustomError("");
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setCustomOpen(false);
+        setCustomError("");
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   return (
     <div className="flex flex-nowrap items-center justify-between gap-4 border-b border-zinc-100 pb-4">
       <div className="flex min-w-0 items-center gap-3">
         <h2 className="shrink-0 text-[18px] font-semibold tracking-[-0.035em] text-slate-950">
           Financial Overview
         </h2>
-        <select
-          value={selectedProperty}
-          onChange={(event) => setSelectedProperty(event.target.value)}
-          className="h-10 min-w-[220px] rounded-2xl border border-zinc-200 bg-white px-4 text-[13.5px] font-semibold text-slate-800 outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
-        >
-          <option value="all">All Properties ({properties.length})</option>
-          {properties.map((property) => (
-            <option key={property.id} value={property.id}>
-              {property.property_label}
-            </option>
-          ))}
-        </select>
+        <FinancialOverviewPropertyDropdown
+          properties={properties}
+          selectedProperty={selectedProperty}
+          onSelect={setSelectedProperty}
+        />
       </div>
 
-      <div className="inline-flex h-10 shrink-0 items-center gap-1 rounded-2xl border border-zinc-200 bg-white p-1">
-        {[
-          ["this_month", "This Month"],
-          ["ytd", "Year to Date"],
-          ["custom", "Custom"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setSelectedRange(id as RangeId)}
-            className={`h-8 rounded-xl px-3.5 text-[12.5px] font-semibold transition ${
-              selectedRange === id
-                ? "bg-slate-950 text-white shadow-[0_5px_12px_rgba(15,23,42,0.12)]"
-                : "bg-white text-slate-600 hover:bg-zinc-50 hover:text-slate-950"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div ref={customRef} className="relative shrink-0">
+        <div className="inline-flex h-10 items-center gap-1 rounded-2xl border border-zinc-200 bg-white p-1">
+          {[
+            ["ytd", "Year to Date"],
+            ["this_month", "This Month"],
+            ["custom", "Custom"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleRangeClick(id as RangeId)}
+              className={`h-8 rounded-xl px-3.5 text-[12.5px] font-semibold transition ${
+                selectedRange === id
+                  ? "bg-slate-950 text-white shadow-[0_5px_12px_rgba(15,23,42,0.12)]"
+                  : "bg-white text-slate-600 hover:bg-zinc-50 hover:text-slate-950"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {customOpen && (
+          <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[320px] rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+            <p className="text-[14px] font-semibold text-slate-950">
+              Custom range
+            </p>
+            <div className="mt-4 grid gap-3">
+              <DateRangeInput
+                label="Start Date"
+                value={pendingStart}
+                min={minCustomDate}
+                max={maxCustomDate}
+                onChange={(value) => {
+                  setPendingStart(value);
+                  setCustomError("");
+                }}
+              />
+              <DateRangeInput
+                label="End Date"
+                value={pendingEnd}
+                min={minCustomDate}
+                max={maxCustomDate}
+                onChange={(value) => {
+                  setPendingEnd(value);
+                  setCustomError("");
+                }}
+              />
+            </div>
+            {customError ? (
+              <p className="mt-3 text-[12px] font-medium text-red-500">
+                {customError}
+              </p>
+            ) : null}
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomOpen(false);
+                  setCustomError("");
+                }}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-[12.5px] font-semibold text-slate-700 transition hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyCustomRange}
+                className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-4 text-[12.5px] font-semibold text-white transition hover:bg-slate-800"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DateRangeInput({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min: string;
+  max: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+        {label}
+      </span>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-[13px] font-medium text-slate-950 outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+      />
+    </label>
+  );
+}
+
+function FinancialOverviewPropertyDropdown({
+  properties,
+  selectedProperty,
+  onSelect,
+}: {
+  properties: PropertyItem[];
+  selectedProperty: string;
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const selectedLabel =
+    selectedProperty === "all"
+      ? `All Properties (${properties.length})`
+      : properties.find((property) => property.id === selectedProperty)
+          ?.property_label || "All Properties";
+  const options = [
+    { value: "all", label: `All Properties (${properties.length})` },
+    ...properties.map((property) => ({
+      value: property.id,
+      label: property.property_label,
+    })),
+  ];
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative min-w-[220px]">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex h-10 w-full items-center justify-between rounded-2xl border border-zinc-200 bg-white pl-4 pr-5 text-left text-[13.5px] font-semibold text-slate-800 outline-none transition hover:border-zinc-300 hover:bg-zinc-50/50 focus:border-slate-300 focus:ring-4 focus:ring-slate-100"
+      >
+        <span className="min-w-0 truncate">{selectedLabel}</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`ml-3 h-4 w-4 shrink-0 text-slate-500 transition duration-150 ${
+            open ? "rotate-180" : ""
+          }`}
+          strokeWidth={2.2}
+        />
+      </button>
+
+      <div
+        className={`absolute left-0 top-full z-40 mt-2 w-full overflow-hidden rounded-2xl border border-zinc-200 bg-white p-1 shadow-[0_18px_45px_rgba(15,23,42,0.14)] transition duration-150 ${
+          open
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none -translate-y-1 opacity-0"
+        }`}
+        role="listbox"
+      >
+        {options.map((option) => {
+          const selected = option.value === selectedProperty;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onSelect(option.value);
+                setOpen(false);
+              }}
+              className={`flex h-10 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-[13px] font-semibold transition ${
+                selected
+                  ? "bg-slate-50 text-slate-950"
+                  : "text-slate-600 hover:bg-zinc-50 hover:text-slate-950"
+              }`}
+              role="option"
+              aria-selected={selected}
+            >
+              <span className="min-w-0 truncate">{option.label}</span>
+              {selected ? (
+                <Check
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-[#2563EB]"
+                  strokeWidth={2.4}
+                />
+              ) : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function ExpenseBreakdownSection({
+  items,
+  rangeLabel,
   onAddExpense,
   addExpenseDisabled,
 }: {
-  onAddExpense: () => void;
+  items: ReturnType<typeof buildMonthlyExpenseBreakdown>;
+  rangeLabel: string;
+  onAddExpense: (category?: string) => void;
   addExpenseDisabled: boolean;
 }) {
-  const currentYear = new Date().getFullYear();
-  const displayItems = [
-    {
-      category: "Mortgage",
-      amount: 1250,
-      percent: 50.4,
-      color: "#113E78",
-    },
-    {
-      category: "Property Tax",
-      amount: 420,
-      percent: 16.9,
-      color: "#63C6BF",
-    },
-    {
-      category: "Insurance",
-      amount: 280,
-      percent: 11.3,
-      color: "#91C1F5",
-    },
-    {
-      category: "Maintenance",
-      amount: 210,
-      percent: 8.5,
-      color: "#A979E4",
-    },
-    {
-      category: "HOA / PM",
-      amount: 160,
-      percent: 6.5,
-      color: "#F3B23D",
-    },
-    {
-      category: "Utilities",
-      amount: 110,
-      percent: 4.4,
-      color: "#B7DB8B",
-    },
-    {
-      category: "Other",
-      amount: 50,
-      percent: 2,
-      color: "#C9CED6",
-    },
-  ];
-  const displayTotal = 2480;
+  const displayTotal = items.reduce((sum, item) => sum + item.amount, 0);
+  const empty = displayTotal <= 0;
+  const segmentValue = empty ? 100 / Math.max(items.length, 1) : 0;
   let offset = 0;
-  const gradient = displayItems
+  const gradient = items
     .map((item) => {
       const start = offset;
-      const end = offset + (item.amount / displayTotal) * 100;
+      const end = offset + (empty ? segmentValue : (item.amount / displayTotal) * 100);
       offset = end;
       return `${item.color} ${start}% ${end}%`;
     })
@@ -982,12 +1798,12 @@ function ExpenseBreakdownSection({
             Expense Breakdown
           </h2>
           <p className="mt-1.5 text-[13.5px] font-medium leading-5 text-slate-500">
-            See where your money is going.
+            See where your money is going monthly.
           </p>
         </div>
         <button
           type="button"
-          onClick={onAddExpense}
+          onClick={() => onAddExpense()}
           disabled={addExpenseDisabled}
           className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-[13px] font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400"
         >
@@ -1004,25 +1820,33 @@ function ExpenseBreakdownSection({
               style={{ background: `conic-gradient(${gradient})` }}
             >
               <div className="flex h-[148px] w-[148px] flex-col items-center justify-center rounded-full bg-white text-center">
-                <p className="text-[12px] font-medium text-slate-500">
-                  Total Expenses
-                </p>
-                <p className="mt-2 text-[29px] font-semibold tracking-[-0.065em] text-slate-950">
-                  {formatCurrency(displayTotal)}
-                </p>
-                <p className="mt-1.5 text-[12px] font-medium text-slate-500">
-                  May {currentYear}
-                </p>
+                {empty ? (
+                  <p className="max-w-[90px] text-[20px] font-semibold leading-6 tracking-[-0.045em] text-slate-950">
+                    Add expenses
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[12px] font-medium text-slate-500">
+                      Total Expenses
+                    </p>
+                    <p className="mt-2 text-[29px] font-semibold tracking-[-0.065em] text-slate-950">
+                      {formatCurrency(displayTotal)}
+                    </p>
+                    <p className="mt-1.5 text-[12px] font-medium text-slate-500">
+                      {rangeLabel}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         <div className="mr-5 max-w-[300px] space-y-1.5 justify-self-end">
-          {displayItems.map((item) => (
+          {items.map((item) => (
             <div
               key={item.category}
-              className="grid grid-cols-[auto_auto_minmax(0,1fr)_72px] items-center gap-x-3.5 text-[14px]"
+              className="group/expense-row grid grid-cols-[auto_auto_minmax(0,1fr)_72px] items-center gap-x-3.5 text-[14px]"
             >
               <span
                 className="h-2.5 w-2.5 rounded-[3px]"
@@ -1034,9 +1858,26 @@ function ExpenseBreakdownSection({
               <span className="truncate font-medium text-slate-950">
                 {item.category}
               </span>
-              <span className="justify-self-end text-right font-semibold tabular-nums text-slate-950">
-                {formatCurrency(item.amount)}
-              </span>
+              {item.amount <= 0 ? (
+                <button
+                  type="button"
+                  onClick={() => onAddExpense(item.category)}
+                  disabled={addExpenseDisabled}
+                  className="justify-self-end text-right text-[13px] font-semibold text-[#2563EB] transition hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                >
+                  + Add
+                </button>
+              ) : (
+                <span
+                  className="relative justify-self-end text-right font-semibold tabular-nums text-slate-950"
+                  tabIndex={0}
+                >
+                  {formatCurrency(item.amount)}
+                  <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-max max-w-[220px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] font-medium leading-4 text-slate-600 opacity-0 shadow-[0_12px_30px_rgba(15,23,42,0.12)] transition duration-150 group-hover/expense-row:opacity-100 group-focus-within/expense-row:opacity-100">
+                    Manage this expense from the Expenses tab.
+                  </span>
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -1346,13 +2187,13 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`relative h-12 text-[14px] font-semibold transition ${
+      className={`relative flex h-12 w-[140px] items-center justify-center text-[15px] font-semibold transition ${
         active ? "text-slate-950" : "text-zinc-500 hover:text-slate-800"
       }`}
     >
       {children}
       {active && (
-        <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-slate-950" />
+        <span className="absolute bottom-0 left-1/2 h-[3px] w-[140px] -translate-x-1/2 rounded-full bg-slate-950 transition-all duration-200 ease-out" />
       )}
     </button>
   );
@@ -1638,67 +2479,24 @@ function StatementsSection({
 
 type ExpensePreviewFilter = "all" | "one_time" | "recurring";
 
-function ExpenseManagementPreviewTable() {
-  const [filter, setFilter] = useState<ExpensePreviewFilter>("all");
-  const rows = [
-    {
-      id: "EXP-2026-000006",
-      type: "Recurring",
-      category: "HOA / PM",
-      description: "Monthly HOA fee",
-      property: "101 Main St",
-      createdOn: "Jul 1, 2026",
-      amount: "$150",
-    },
-    {
-      id: "EXP-2026-000005",
-      type: "One-Time",
-      category: "Maintenance",
-      description: "Kitchen sink repair",
-      property: "Sunset Villas",
-      createdOn: "Jun 24, 2026",
-      amount: "$210",
-    },
-    {
-      id: "EXP-2026-000004",
-      type: "Recurring",
-      category: "Insurance",
-      description: "Property insurance premium",
-      property: "All Properties",
-      createdOn: "Jun 1, 2026",
-      amount: "$1,250",
-    },
-    {
-      id: "EXP-2026-000003",
-      type: "One-Time",
-      category: "Utilities",
-      description: "Water bill",
-      property: "101 Main St",
-      createdOn: "May 18, 2026",
-      amount: "$110",
-    },
-    {
-      id: "EXP-2026-000002",
-      type: "One-Time",
-      category: "Property Tax",
-      description: "County property tax",
-      property: "Sunset Villas",
-      createdOn: "Apr 12, 2026",
-      amount: "$420",
-    },
-  ];
+function ExpenseManagementPreviewTable({
+  rows,
+  filter,
+  counts,
+  onFilterChange,
+  onEdit,
+}: {
+  rows: ExpenseManagementRow[];
+  filter: ExpensePreviewFilter;
+  counts: Record<ExpensePreviewFilter, number>;
+  onFilterChange: (filter: ExpensePreviewFilter) => void;
+  onEdit: (expense: ExpenseManagementRow) => void;
+}) {
   const filters: { id: ExpensePreviewFilter; label: string; count: number }[] = [
-    { id: "all", label: "All Expenses", count: 5 },
-    { id: "one_time", label: "One-Time", count: 3 },
-    { id: "recurring", label: "Recurring", count: 2 },
+    { id: "all", label: "All Expenses", count: counts.all },
+    { id: "one_time", label: "One-Time", count: counts.one_time },
+    { id: "recurring", label: "Recurring", count: counts.recurring },
   ];
-  const filteredRows =
-    filter === "all"
-      ? rows
-      : rows.filter((row) =>
-          filter === "recurring" ? row.type === "Recurring" : row.type === "One-Time"
-        );
-
   return (
     <div>
       <div className="border-b border-zinc-100 px-5 pt-2.5">
@@ -1710,7 +2508,7 @@ function ExpenseManagementPreviewTable() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setFilter(item.id)}
+                onClick={() => onFilterChange(item.id)}
                 className={`relative flex h-10 items-center gap-3 bg-transparent px-2 text-[14px] font-semibold transition focus:outline-none ${
                   active ? "text-slate-950" : "text-slate-600 hover:text-slate-950"
                 }`}
@@ -1742,8 +2540,20 @@ function ExpenseManagementPreviewTable() {
           </div>
 
           <div className="divide-y divide-zinc-100">
-            {filteredRows.map((row) => {
-              const recurring = row.type === "Recurring";
+            {rows.length === 0 ? (
+              <div className="flex min-h-[260px] items-center justify-center px-6 py-12 text-center">
+                <div>
+                  <h3 className="text-[20px] font-semibold tracking-[-0.045em] text-slate-950">
+                    No expenses added yet.
+                  </h3>
+                  <p className="mt-2 text-[14px] font-medium text-slate-500">
+                    Use Add Expense to start tracking property costs.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              rows.map((row) => {
+              const recurring = row.type === "recurring";
 
               return (
                 <div
@@ -1759,23 +2569,32 @@ function ExpenseManagementPreviewTable() {
                           : "bg-amber-50 text-amber-700"
                       }`}
                     >
-                      {row.type}
+                      {formatExpenseKind(row.type)}
                     </span>
                   </span>
                   <span className="font-semibold text-slate-800">{row.category}</span>
-                  <span className="truncate font-medium text-slate-600">
-                    {row.description}
+                  <span
+                    className={`truncate font-medium ${
+                      row.description && row.description !== "N/A"
+                        ? "text-slate-600"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {row.description || "N/A"}
                   </span>
                   <span className="truncate font-semibold text-slate-800">
                     {row.property}
                   </span>
-                  <span className="font-medium text-slate-500">{row.createdOn}</span>
+                  <span className="font-medium text-slate-500">
+                    {formatDate(row.createdOn)}
+                  </span>
                   <span className="text-right font-semibold tabular-nums text-slate-950">
-                    {row.amount}
+                    {formatCurrency(row.amount)}
                   </span>
                   <span className="text-right">
                     <button
                       type="button"
+                      onClick={() => onEdit(row)}
                       className="text-[13px] font-semibold text-slate-700 transition hover:text-slate-950 hover:underline"
                     >
                       Edit
@@ -1783,7 +2602,8 @@ function ExpenseManagementPreviewTable() {
                   </span>
                 </div>
               );
-            })}
+            })
+            )}
           </div>
         </div>
       </div>
@@ -1890,128 +2710,196 @@ function ExpenseModal({
   properties,
   form,
   setForm,
+  errors,
   saving,
+  deleting,
   onClose,
   onSave,
+  onDelete,
 }: {
   title: string;
   properties: PropertyItem[];
   form: ExpenseForm;
   setForm: React.Dispatch<React.SetStateAction<ExpenseForm>>;
+  errors: Record<string, string>;
   saving: boolean;
+  deleting: boolean;
   onClose: () => void;
   onSave: () => void;
+  onDelete?: () => void;
 }) {
+  const editing = title === "Edit Expense";
+  const fixedFrequencyCategory = isFixedRecurringExpenseCategory(form.category);
+  const typeLabel = fixedFrequencyCategory ? "Expense Frequency" : "Expense Type";
+  const typeOptions = fixedFrequencyCategory
+    ? [
+        { id: "recurring" as const, label: "Monthly" },
+        { id: "one_time" as const, label: "Yearly" },
+      ]
+    : [
+        { id: "one_time" as const, label: "One-Time" },
+        { id: "recurring" as const, label: "Recurring" },
+      ];
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !saving) onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, saving]);
+
   return (
-    <div className="fixed inset-0 z-[240] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-      <div className="max-h-[90dvh] w-full max-w-[680px] overflow-y-auto rounded-[28px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-6">
+    <div
+      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="expense-modal-title"
+    >
+      <div className="max-h-[92dvh] w-full max-w-[860px] overflow-y-auto rounded-[30px] bg-white p-5 shadow-[0_30px_90px_rgba(15,23,42,0.25)] sm:p-7">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-slate-950">
+            <h2
+              id="expense-modal-title"
+              className="text-[24px] font-semibold tracking-[-0.05em] text-slate-950"
+            >
               {title}
             </h2>
             <p className="mt-1 text-[13px] font-medium text-zinc-500">
-              Record property expenses for cleaner reporting.
+              {editing
+                ? "Update this property expense."
+                : "Record property expenses for cleaner reporting."}
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            disabled={saving}
+            aria-label="Close expense modal"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
           >
             ×
           </button>
         </div>
 
-        <div className="space-y-4">
-          <SelectInput
-            label="Property"
-            value={form.propertyId}
-            onChange={(value) => setForm((prev) => ({ ...prev, propertyId: value }))}
-            options={properties.map((property) => ({
-              label: property.property_label,
-              value: property.id,
-            }))}
-          />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="space-y-4">
+            <SelectInput
+              label="Property"
+              value={form.propertyId}
+              error={errors.propertyId}
+              onChange={(value) => setForm((prev) => ({ ...prev, propertyId: value }))}
+              options={properties.map((property) => ({
+                label: property.property_label,
+                value: property.id,
+              }))}
+            />
 
-          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="text-[13px] font-medium text-zinc-700">
+                {typeLabel}
+              </label>
+              <div className="mt-2 grid grid-cols-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-1">
+                {typeOptions.map((option) => {
+                  const active = form.expenseType === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => ({ ...prev, expenseType: option.id }))
+                      }
+                      className={`h-10 rounded-xl text-[13px] font-semibold transition ${
+                        active
+                          ? "bg-slate-950 text-white shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
+                          : "text-slate-500 hover:text-slate-950"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <SelectInput
               label="Category"
               value={form.category}
+              error={errors.category}
               onChange={(value) => setForm((prev) => ({ ...prev, category: value }))}
               options={expenseCategories.map((category) => ({
                 label: category,
                 value: category,
               }))}
             />
+          </div>
+
+          <div className="space-y-4">
             <InputField
               label="Amount"
               value={form.amount}
+              error={errors.amount}
               onChange={(value) =>
                 setForm((prev) => ({ ...prev, amount: value.replace(/[^\d.]/g, "") }))
               }
-              placeholder="250"
+              placeholder="250.00"
             />
             <InputField
               label="Date"
               value={form.paidDate}
+              error={errors.paidDate}
               onChange={(value) => setForm((prev) => ({ ...prev, paidDate: value }))}
               type="date"
             />
+
+            <InputField
+              label="Vendor / Description"
+              value={form.description}
+              onChange={(value) => setForm((prev) => ({ ...prev, description: value }))}
+              placeholder="Example: Plumbing repair"
+            />
           </div>
-
-          <InputField
-            label="Vendor / Description"
-            value={form.description}
-            onChange={(value) => setForm((prev) => ({ ...prev, description: value }))}
-            placeholder="Example: Plumbing repair"
-          />
-
-          <label className="flex items-center justify-between rounded-2xl border border-zinc-200 px-4 py-3 text-[13.5px] font-semibold text-slate-700">
-            Optional recurring expense
-            <input
-              type="checkbox"
-              checked={form.recurring}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, recurring: event.target.checked }))
-              }
-              className="h-4 w-4"
-            />
-          </label>
-
-          <label className="flex min-h-[86px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 px-4 py-4 text-center text-[13px] font-medium text-zinc-500 hover:bg-zinc-50">
-            <input
-              type="file"
-              className="hidden"
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  receiptName: event.target.files?.[0]?.name || "",
-                }))
-              }
-            />
-            <span className="font-semibold text-slate-700">
-              Upload receipt
-            </span>
-            <span className="mt-1">
-              {form.receiptName || "Optional PDF, image, or receipt file"}
-            </span>
-          </label>
         </div>
 
-        <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
-          <button
-            onClick={onClose}
-            className="h-11 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="h-11 rounded-2xl bg-slate-950 px-6 text-[14px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Expense"}
-          </button>
+        <div className="mt-7">
+          {errors.save ? (
+            <p className="mb-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
+              {errors.save}
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {editing && onDelete ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={saving || deleting}
+              className="h-11 rounded-2xl border border-red-100 bg-white px-5 text-[14px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              Delete Expense
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="grid gap-3 sm:flex sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving || deleting}
+              className="h-11 rounded-2xl border border-zinc-200 bg-white px-6 text-[14px] font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || deleting}
+              className="h-11 rounded-2xl bg-slate-950 px-6 text-[14px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : editing ? "Save Changes" : "Save Expense"}
+            </button>
+          </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2019,12 +2907,10 @@ function ExpenseModal({
 }
 
 function DeleteExpenseModal({
-  expenseName,
   deleting,
   onClose,
   onConfirm,
 }: {
-  expenseName: string;
   deleting: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -2036,11 +2922,9 @@ function DeleteExpenseModal({
           !
         </div>
         <h2 className="mt-5 text-[22px] font-semibold tracking-[-0.04em] text-zinc-900">
-          Delete expense?
+          Delete this expense?
         </h2>
         <p className="mt-3 text-[14px] leading-6 text-zinc-500">
-          This will permanently delete{" "}
-          <span className="font-semibold text-zinc-900">{expenseName}</span>.
           This action cannot be undone.
         </p>
         <div className="mt-7 grid gap-3 sm:flex sm:justify-end">
@@ -2070,12 +2954,14 @@ function InputField({
   onChange,
   placeholder,
   type = "text",
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   type?: string;
+  error?: string;
 }) {
   return (
     <div>
@@ -2085,8 +2971,16 @@ function InputField({
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-[16px] outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100 sm:text-[14px]"
+        aria-invalid={Boolean(error)}
+        className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-[16px] outline-none transition focus:ring-4 sm:text-[14px] ${
+          error
+            ? "border-red-300 focus:border-red-300 focus:ring-red-50"
+            : "border-zinc-200 focus:border-slate-300 focus:ring-slate-100"
+        }`}
       />
+      {error ? (
+        <p className="mt-1.5 text-[12px] font-medium text-red-500">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -2096,11 +2990,13 @@ function SelectInput({
   value,
   onChange,
   options,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { label: string; value: string }[];
+  error?: string;
 }) {
   return (
     <div>
@@ -2108,7 +3004,12 @@ function SelectInput({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-[16px] outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-100 sm:text-[14px]"
+        aria-invalid={Boolean(error)}
+        className={`mt-2 h-12 w-full rounded-2xl border bg-white px-4 text-[16px] outline-none transition focus:ring-4 sm:text-[14px] ${
+          error
+            ? "border-red-300 focus:border-red-300 focus:ring-red-50"
+            : "border-zinc-200 focus:border-slate-300 focus:ring-slate-100"
+        }`}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -2116,6 +3017,9 @@ function SelectInput({
           </option>
         ))}
       </select>
+      {error ? (
+        <p className="mt-1.5 text-[12px] font-medium text-red-500">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -2133,6 +3037,701 @@ function normalizeExpenses(items: any[]): ExpenseItem[] {
   return items.map((item) => normalizeExpense(item));
 }
 
+function buildFinancialOverviewMetrics({
+  selectedProperty,
+  selectedRange,
+  customRange,
+  leases,
+  rentPayments,
+  expenses,
+}: {
+  selectedProperty: string;
+  selectedRange: RangeId;
+  customRange: AppliedCustomRange | null;
+  leases: LeaseItem[];
+  rentPayments: RentPaymentItem[];
+  expenses: ExpenseManagementRow[];
+}): FinancialOverviewMetrics {
+  const allPropertiesSelected = selectedProperty === "all";
+  const metricRange = getFinancialOverviewRange(selectedRange, customRange);
+  const scopedLeases = leases.filter((lease) => {
+    if (allPropertiesSelected) return true;
+    return lease.property_id === selectedProperty;
+  });
+  const scopedLeaseIds = new Set(scopedLeases.map((lease) => lease.id));
+  const scopedPayments = rentPayments.filter((payment) => {
+    if (allPropertiesSelected) return true;
+    return (
+      payment.property_id === selectedProperty ||
+      Boolean(payment.lease_id && scopedLeaseIds.has(payment.lease_id))
+    );
+  });
+  const expectedRentRange = getFinancialOverviewExpectedRentRange(
+    selectedRange,
+    customRange
+  );
+  const expectedRent = getExpectedRentFromLeases(scopedLeases, expectedRentRange);
+  const actualRentPayments = getCollectedRentPayments(
+    scopedPayments,
+    (payment) => isPaymentInFinancialRange(payment, metricRange)
+  );
+  const rentCollected = actualRentPayments.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+  const expenseRange = getFinancialOverviewExpenseRange(selectedRange, customRange);
+  const totalExpenses = getFinancialOverviewExpenseTotal(
+    expenses,
+    scopedLeases,
+    selectedProperty,
+    expenseRange
+  );
+  const progressPercent = expectedRent
+    ? Math.round((rentCollected / expectedRent) * 100)
+    : 0;
+  const labelSuffix = getFinancialOverviewLabelSuffix(selectedRange, customRange);
+  const expenseRatio = getExpenseRatioParts(totalExpenses, rentCollected);
+
+  return {
+    rentLabel: `Rent Collected ${labelSuffix}`,
+    expenseLabel: `Total Expenses ${labelSuffix}`,
+    rentCollected,
+    expectedRent,
+    remainingRent: Math.max(expectedRent - rentCollected, 0),
+    progressPercent,
+    totalExpenses,
+    ...expenseRatio,
+  };
+}
+
+function getFinancialOverviewRange(
+  selectedRange: RangeId,
+  customRange: AppliedCustomRange | null
+) {
+  const today = startOfDay(new Date());
+  if (selectedRange === "custom" && customRange) {
+    const start = parseLocalDate(customRange.start);
+    const end = parseLocalDate(customRange.end);
+    if (start && end) return { start, end };
+  }
+
+  const range = getDateRange(selectedRange);
+  return {
+    start: range.start,
+    end: selectedRange === "ytd" ? today : range.end,
+  };
+}
+
+function getFinancialOverviewExpenseRange(
+  selectedRange: RangeId,
+  customRange: AppliedCustomRange | null
+) {
+  if (selectedRange === "custom" && customRange) {
+    const start = parseLocalDate(customRange.start);
+    const end = parseLocalDate(customRange.end);
+    if (start && end) return { start, end };
+  }
+
+  return getDateRange(selectedRange);
+}
+
+function getFinancialOverviewExpectedRentRange(
+  selectedRange: RangeId,
+  customRange: AppliedCustomRange | null
+) {
+  if (selectedRange === "ytd") {
+    const today = new Date();
+    return {
+      start: new Date(today.getFullYear(), 0, 1),
+      end: new Date(today.getFullYear(), 11, 31),
+    };
+  }
+
+  return getFinancialOverviewRange(selectedRange, customRange);
+}
+
+function getFinancialOverviewExpenseTotal(
+  expenses: ExpenseManagementRow[],
+  leases: LeaseItem[],
+  selectedProperty: string,
+  range: { start: Date; end: Date }
+) {
+  const coverage = getFinancialOverviewExpenseCoverage(leases, range);
+
+  // Financial Overview expenses are normalized by reporting period and lease overlap
+  // so annual expenses do not distort rent-vs-expense percentages.
+  return expenses.reduce((sum, expense) => {
+    if (selectedProperty !== "all" && expense.propertyId !== selectedProperty) {
+      return sum;
+    }
+
+    const propertyCoverage = coverage.get(expense.propertyId);
+    if (!propertyCoverage || propertyCoverage.months.size === 0) return sum;
+
+    return (
+      sum +
+      getFinancialOverviewExpenseAmount(
+        expense,
+        propertyCoverage.months,
+        propertyCoverage.ranges
+      )
+    );
+  }, 0);
+}
+
+function getFinancialOverviewExpenseCoverage(
+  leases: LeaseItem[],
+  range: { start: Date; end: Date }
+) {
+  const coverage = new Map<
+    string,
+    { months: Set<string>; ranges: Array<{ start: Date; end: Date }> }
+  >();
+
+  leases.forEach((lease) => {
+    const leaseCoverage = getLeaseCoverageForRange(lease, range);
+    if (!leaseCoverage) return;
+
+    const propertyCoverage =
+      coverage.get(lease.property_id) || {
+        months: new Set<string>(),
+        ranges: [],
+      };
+
+    propertyCoverage.ranges.push(leaseCoverage);
+    getMonthStartsBetween(leaseCoverage.start, leaseCoverage.end).forEach((month) => {
+      propertyCoverage.months.add(formatCycleKey(month));
+    });
+    coverage.set(lease.property_id, propertyCoverage);
+  });
+
+  return coverage;
+}
+
+function getLeaseCoverageForRange(
+  lease: LeaseItem,
+  range: { start: Date; end: Date }
+) {
+  const leaseStart = parseLocalDate(lease.start_date || "");
+  if (!leaseStart) return null;
+
+  const leaseEnd = parseLocalDate(lease.end_date || "");
+  const rangeStart = startOfDay(range.start);
+  const rangeEnd = startOfDay(range.end);
+  const overlapStart = leaseStart > rangeStart ? leaseStart : rangeStart;
+  const overlapEnd = leaseEnd && leaseEnd < rangeEnd ? leaseEnd : rangeEnd;
+  if (overlapEnd < overlapStart) return null;
+
+  return { start: overlapStart, end: overlapEnd };
+}
+
+function getFinancialOverviewExpenseAmount(
+  expense: ExpenseManagementRow,
+  coveredMonths: Set<string>,
+  coveredRanges: Array<{ start: Date; end: Date }>
+) {
+  const amount = Number(expense.amount || 0);
+  if (amount <= 0) return 0;
+
+  const category = normalizeExpenseCategory(expense.category);
+  const coveredMonthCount = coveredMonths.size;
+  if (coveredMonthCount === 0) return 0;
+
+  if (isFixedRecurringExpenseCategory(category)) {
+    return expense.type === "recurring"
+      ? amount * coveredMonthCount
+      : (amount / 12) * coveredMonthCount;
+  }
+
+  if (expense.type === "recurring") {
+    return amount * coveredMonthCount;
+  }
+
+  return expenseDateFallsInCoverage(expense, coveredRanges) ? amount : 0;
+}
+
+function expenseDateFallsInCoverage(
+  expense: ExpenseManagementRow,
+  coveredRanges: Array<{ start: Date; end: Date }>
+) {
+  const expenseDate = parseLocalDate(expense.createdOn);
+  if (!expenseDate) return false;
+  return coveredRanges.some(
+    (coverage) => expenseDate >= coverage.start && expenseDate <= coverage.end
+  );
+}
+
+function getMonthStartsBetween(start: Date, end: Date) {
+  const months: Date[] = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const finalMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+  while (cursor <= finalMonth) {
+    months.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
+}
+
+function getExpectedRentFromLeases(
+  leases: LeaseItem[],
+  range: { start: Date; end: Date }
+) {
+  return leases.reduce((sum, lease) => {
+    return sum + getExpectedRentForLease(lease, range);
+  }, 0);
+}
+
+function getExpectedRentForLease(
+  lease: LeaseItem,
+  range: { start: Date; end: Date }
+) {
+  const monthlyRent = Number(lease.monthly_rent || 0);
+  const leaseStart = parseLocalDate(lease.start_date || "");
+  if (!monthlyRent || !leaseStart) return 0;
+
+  const leaseEnd = parseLocalDate(lease.end_date || "");
+  const rangeStart = startOfDay(range.start);
+  const rangeEnd = startOfDay(range.end);
+  const overlapStart = leaseStart > rangeStart ? leaseStart : rangeStart;
+  const overlapEnd = leaseEnd && leaseEnd < rangeEnd ? leaseEnd : rangeEnd;
+  if (overlapEnd < overlapStart) return 0;
+
+  const firstCycleDate =
+    getLeaseFirstPaymentCycleDate({
+      startDate: lease.start_date,
+      paymentTrackingStartDate: lease.payment_tracking_start_date,
+      leaseSetupType: lease.lease_setup_type,
+      leaseAmounts: lease.lease_amounts || [],
+    }) || new Date(leaseStart.getFullYear(), leaseStart.getMonth(), 1);
+
+  let expected = 0;
+  const cursor = new Date(overlapStart.getFullYear(), overlapStart.getMonth(), 1);
+  const finalMonth = new Date(overlapEnd.getFullYear(), overlapEnd.getMonth(), 1);
+
+  while (cursor <= finalMonth) {
+    if (leaseOverlapsMonth(leaseStart, leaseEnd, cursor)) {
+      expected += getLeasePaymentAmountForCycle({
+        cycleDate: new Date(cursor),
+        firstCycleDate,
+        monthlyRent,
+        leaseSetupType: lease.lease_setup_type,
+        leaseAmounts: lease.lease_amounts || [],
+      });
+    }
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return expected;
+}
+
+function leaseOverlapsMonth(
+  leaseStart: Date,
+  leaseEnd: Date | null,
+  monthStart: Date
+) {
+  const monthEnd = endOfMonth(monthStart);
+  return leaseStart <= monthEnd && (!leaseEnd || leaseEnd >= monthStart);
+}
+
+function getFinancialPaymentAmount(payment: RentPaymentItem, lease?: LeaseItem) {
+  const paymentAmount = getPaymentAmount(payment);
+  if (paymentAmount > 0) return paymentAmount;
+  if (!lease) return 0;
+
+  const cycleDate = getFinancialPaymentCycleDate(payment);
+  const firstCycleDate =
+    getLeaseFirstPaymentCycleDate({
+      startDate: lease.start_date,
+      paymentTrackingStartDate: lease.payment_tracking_start_date,
+      leaseSetupType: lease.lease_setup_type,
+      leaseAmounts: lease.lease_amounts || [],
+    }) || getLeaseStartMonth(lease.start_date);
+
+  if (!cycleDate || !firstCycleDate) return Number(lease.monthly_rent || 0);
+
+  return getLeasePaymentAmountForCycle({
+    cycleDate,
+    firstCycleDate,
+    monthlyRent: Number(lease.monthly_rent || 0),
+    leaseSetupType: lease.lease_setup_type,
+    leaseAmounts: lease.lease_amounts || [],
+  });
+}
+
+function isPaymentInFinancialRange(
+  payment: RentPaymentItem,
+  range: { start: Date; end: Date }
+) {
+  const cycleDate = getFinancialPaymentCycleDate(payment);
+  if (cycleDate) return cycleDate >= range.start && cycleDate <= range.end;
+
+  return isDateInRange(payment.paid_at || payment.created_at || payment.due_date || "", range);
+}
+
+function getFinancialPaymentCycleDate(payment: RentPaymentItem) {
+  const cycleKeyDate = parseCycleKeyMonth(payment.rent_cycle_key);
+  if (cycleKeyDate) return cycleKeyDate;
+
+  const periodDate = parsePeriodMonth(payment.period_label);
+  if (periodDate) return periodDate;
+
+  const dueDate = parseLocalDate(payment.due_date || "");
+  if (dueDate) return new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
+
+  const paidDate = parseLocalDate(payment.paid_at || "");
+  if (paidDate) return new Date(paidDate.getFullYear(), paidDate.getMonth(), 1);
+
+  const createdDate = parseLocalDate(payment.created_at || "");
+  return createdDate
+    ? new Date(createdDate.getFullYear(), createdDate.getMonth(), 1)
+    : null;
+}
+
+function parseCycleKeyMonth(value?: string | null) {
+  const match = String(value || "").match(/^(\d{4})-(\d{1,2})/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, 1);
+}
+
+function getLeaseStartMonth(value?: string | null) {
+  const date = parseLocalDate(value || "");
+  return date ? new Date(date.getFullYear(), date.getMonth(), 1) : null;
+}
+
+function daysInMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function isDateInRange(value: string, range: { start: Date; end: Date }) {
+  const date = parseLocalDate(value);
+  if (!date) return false;
+  return date >= range.start && date <= range.end;
+}
+
+function getFinancialOverviewLabelSuffix(
+  selectedRange: RangeId,
+  customRange: AppliedCustomRange | null
+) {
+  if (selectedRange === "ytd") return "YTD";
+  if (selectedRange === "custom") {
+    const start = customRange?.start ? parseLocalDate(customRange.start) : null;
+    const end = customRange?.end ? parseLocalDate(customRange.end) : null;
+    if (start && end) return `${formatDate(start)} – ${formatDate(end)}`;
+    return "Custom Range";
+  }
+
+  const today = new Date();
+  return today.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function getExpenseBreakdownRangeLabel(
+  selectedRange: RangeId,
+  customRange: AppliedCustomRange | null
+) {
+  if (selectedRange === "custom") {
+    const start = customRange?.start ? parseLocalDate(customRange.start) : null;
+    const end = customRange?.end ? parseLocalDate(customRange.end) : null;
+    if (start && end) return `${formatDate(start)} – ${formatDate(end)}`;
+    return "Custom Range";
+  }
+
+  return getDateRange(selectedRange).label;
+}
+
+function getMonthlyExpenseBreakdownLabel(month: Date) {
+  return month.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function getExpenseRatioParts(totalExpenses: number, rentCollected: number): {
+  expenseRatioLabel?: string;
+  expenseRatioPercent?: string;
+  expenseRatioText?: string;
+  expenseRatioAccent: boolean;
+} {
+  if (rentCollected <= 0) {
+    return {
+      expenseRatioLabel: "No rent collected yet",
+      expenseRatioAccent: false,
+    };
+  }
+
+  const percent = totalExpenses <= 0
+    ? 0
+    : Math.round((totalExpenses / rentCollected) * 100);
+
+  return {
+    expenseRatioPercent: `${percent}%`,
+    expenseRatioText: "of rent collected",
+    expenseRatioAccent: totalExpenses > 0,
+  };
+}
+
+function buildPropertyLeaseOverviewRows(
+  properties: PropertyItem[],
+  leases: LeaseItem[]
+): PropertyLeaseOverviewRow[] {
+  return properties.map((property) => {
+    const propertyLeases = leases.filter((lease) => lease.property_id === property.id);
+    const lease = selectOverviewLease(propertyLeases);
+    const tenant = selectOverviewTenant(lease?.lease_tenants || []);
+    const leaseActive = Boolean(lease && isLeaseOverviewActive(lease));
+    const overviewStatus = getPropertyOverviewStatus({
+      property,
+      lease,
+      leaseActive,
+      tenant,
+    });
+
+    return {
+      propertyId: property.id,
+      propertyName: property.property_label || "Rental property",
+      address: formatOverviewAddress(property),
+      leaseStatus: overviewStatus.label,
+      leaseStatusTone: overviewStatus.tone,
+      hasLease: Boolean(lease),
+      leaseStart: lease?.start_date ? formatDate(lease.start_date) : "—",
+      leaseEnd: lease?.end_date ? formatDate(lease.end_date) : "—",
+      leaseLength: lease ? formatLeaseDuration(lease.start_date, lease.end_date) : "—",
+      rent: lease?.monthly_rent
+        ? `${formatCurrency(Number(lease.monthly_rent))} / month`
+        : "Rent not set",
+      nextDue: lease ? formatNextRentDue(lease).label : "Next due date not set",
+      nextDueTone: lease ? formatNextRentDue(lease).tone : "gray",
+      tenantName: tenant ? getOverviewTenantName(tenant) : "No tenant assigned",
+      tenantEmail: tenant?.email || "Email not added",
+      tenantPhone: tenant?.phone || "Phone not added",
+    };
+  });
+}
+
+function selectOverviewLease(leases: LeaseItem[]) {
+  if (!leases.length) return null;
+  const activeLease = leases.find(isLeaseOverviewActive);
+  return activeLease || leases[0];
+}
+
+function getPropertyOverviewStatus({
+  property,
+  lease,
+  leaseActive,
+  tenant,
+}: {
+  property: PropertyItem;
+  lease: LeaseItem | null;
+  leaseActive: boolean;
+  tenant: LeaseTenantItem | null;
+}): { label: string; tone: PropertyLeaseOverviewRow["leaseStatusTone"] } {
+  if (!isPropertyBankConnected(property)) {
+    return { label: "Action Needed", tone: "blue" };
+  }
+  if (leaseActive) {
+    return { label: "Active Lease", tone: "green" };
+  }
+  if (!tenant) {
+    return { label: "No tenant assigned", tone: "gray" };
+  }
+  if (!lease) {
+    return { label: "No active lease", tone: "gray" };
+  }
+  const fallbackLabel = formatLeaseStatus(lease.lease_status);
+  return {
+    label: fallbackLabel,
+    tone: isLeaseBlockingStatus(fallbackLabel) ? "red" : "gray",
+  };
+}
+
+function isPropertyBankConnected(property: PropertyItem) {
+  return String(property.bank_status || "").toLowerCase() === "connected";
+}
+
+function isLeaseBlockingStatus(label: string) {
+  const normalized = label.toLowerCase();
+  return (
+    normalized.includes("expired") ||
+    normalized.includes("ended") ||
+    normalized.includes("overdue") ||
+    normalized.includes("failed")
+  );
+}
+
+function isLeaseOverviewActive(lease: LeaseItem) {
+  const normalizedStatus = String(lease.lease_status || "").toLowerCase();
+  if (lease.ended_at || ["ended", "inactive", "terminated"].includes(normalizedStatus)) {
+    return false;
+  }
+  if (normalizedStatus === "active") return true;
+  const endDate = parseLocalDate(lease.end_date || "");
+  return !endDate || endDate >= startOfDay(new Date());
+}
+
+function selectOverviewTenant(tenants: LeaseTenantItem[]) {
+  return (
+    tenants.find(
+      (tenant) => String(tenant.tenant_role || "").toLowerCase() === "primary"
+    ) ||
+    tenants[0] ||
+    null
+  );
+}
+
+function getOverviewTenantName(tenant: LeaseTenantItem) {
+  return `${tenant.first_name || ""} ${tenant.last_name || ""}`.trim() || "Tenant";
+}
+
+function formatOverviewAddress(property: PropertyItem) {
+  const unit = property.unit_name ? `Unit ${property.unit_name}` : "";
+  const stateZip = [property.state_name, property.zip].filter(Boolean).join(" ");
+  const cityStateZip = [property.city, stateZip].filter(Boolean).join(", ");
+  const parts = [property.street_address, unit, cityStateZip].filter(Boolean);
+  return parts.length > 0 ? parts.join(", ") : "Address not added";
+}
+
+function formatLeaseStatus(status?: string | null) {
+  if (!status) return "Lease not active";
+  return `${status.charAt(0).toUpperCase()}${status.slice(1).toLowerCase()} Lease`;
+}
+
+function formatLeaseDuration(startValue?: string | null, endValue?: string | null) {
+  const start = parseLocalDate(startValue || "");
+  const end = parseLocalDate(endValue || "");
+  if (!start || !end) return "—";
+  const months =
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth()) +
+    (end.getDate() >= start.getDate() ? 1 : 0);
+  if (months <= 0) return "—";
+  return `${months} ${months === 1 ? "month" : "months"}`;
+}
+
+function formatNextRentDue(lease: LeaseItem): {
+  label: string;
+  tone: PropertyLeaseOverviewRow["nextDueTone"];
+} {
+  const dueDay = parseRentDueDay(lease.rent_due_day);
+  if (!dueDay) return { label: "Next due date not set", tone: "gray" };
+
+  const today = startOfDay(new Date());
+  const thisMonthDue = new Date(today.getFullYear(), today.getMonth(), dueDay);
+  const nextDue =
+    thisMonthDue >= today
+      ? thisMonthDue
+      : new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+  const days = Math.round(
+    (nextDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (days === 0) return { label: "Due today", tone: "green" };
+  if (days > 0) {
+    return {
+      label: `Next due in ${days} ${days === 1 ? "day" : "days"}`,
+      tone: "green",
+    };
+  }
+  const overdueDays = Math.abs(days);
+  return {
+    label: `Past due by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}`,
+    tone: overdueDays > 7 ? "red" : "orange",
+  };
+}
+
+function parseRentDueDay(value?: string | null) {
+  if (!value) return null;
+  const match = String(value).match(/\d+/);
+  if (!match) return null;
+  const day = Number(match[0]);
+  return Number.isFinite(day) ? Math.min(Math.max(day, 1), 28) : null;
+}
+
+function buildExpenseManagementRows(
+  expenses: ExpenseItem[],
+  properties: PropertyItem[]
+): ExpenseManagementRow[] {
+  const rows = [...expenses]
+    .sort((a, b) => String(a.paid_date || "").localeCompare(String(b.paid_date || "")))
+    .map((expense, index) =>
+      expenseToManagementRow(
+        expense,
+        formatExpenseDisplayId(expense.paid_date, index + 1),
+        undefined,
+        properties
+      )
+    );
+
+  return rows.sort((a, b) => String(b.createdOn).localeCompare(String(a.createdOn)));
+}
+
+function expenseToManagementRow(
+  expense: ExpenseItem,
+  displayId: string,
+  type?: ExpenseKind,
+  properties: PropertyItem[] = []
+): ExpenseManagementRow {
+  const propertyName =
+    expense.properties?.property_label ||
+    properties.find((property) => property.id === expense.property_id)?.property_label ||
+    "Unknown Property";
+
+  return {
+    id: displayId,
+    sourceExpenseId: expense.id,
+    type: type || fromExpenseFrequencyValue(expense.expense_frequency),
+    category: normalizeExpenseCategory(expense.category),
+    description: expense.description || "",
+    propertyId: expense.property_id,
+    property: propertyName,
+    createdOn: expense.paid_date,
+    amount: Number(expense.amount || 0),
+  };
+}
+
+function generateExpenseDisplayId(rows: ExpenseManagementRow[], paidDate: string) {
+  const year = parseLocalDate(paidDate)?.getFullYear() || new Date().getFullYear();
+  const maxSequence = rows.reduce((max, row) => {
+    const match = row.id.match(/^EXP-(\d{4})-(\d{6})$/);
+    if (!match || Number(match[1]) !== year) return max;
+    return Math.max(max, Number(match[2]));
+  }, 0);
+
+  return formatExpenseDisplayId(paidDate, maxSequence + 1);
+}
+
+function formatExpenseDisplayId(paidDate: string, sequence: number) {
+  const year = parseLocalDate(paidDate)?.getFullYear() || new Date().getFullYear();
+  return `EXP-${year}-${String(sequence).padStart(6, "0")}`;
+}
+
+function validateExpenseForm(form: ExpenseForm) {
+  const errors: Record<string, string> = {};
+  if (!form.propertyId) errors.propertyId = "Choose a property.";
+  if (!form.category) errors.category = "Choose a category.";
+  if (!form.amount || Number(form.amount) <= 0) {
+    errors.amount = "Enter a positive amount.";
+  }
+  if (!form.paidDate) errors.paidDate = "Choose a date.";
+  return errors;
+}
+
+function formatExpenseKind(type: ExpenseKind) {
+  return type === "recurring" ? "Recurring" : "One-Time";
+}
+
+function toExpenseFrequencyValue(type: ExpenseKind) {
+  return type === "recurring" ? "recurring" : "one-time";
+}
+
+function fromExpenseFrequencyValue(value?: string | null): ExpenseKind {
+  const normalized = String(value || "").toLowerCase().replace(/_/g, "-");
+  return normalized === "recurring" ? "recurring" : "one_time";
+}
+
 function normalizeRelatedRows(items: any[]) {
   return items.map((item) => ({
     ...item,
@@ -2140,6 +3739,15 @@ function normalizeRelatedRows(items: any[]) {
       ? item.properties[0] || null
       : item.properties,
   }));
+}
+
+function mergeRentPayments(items: any[]) {
+  const paymentMap = new Map<string, any>();
+  items.forEach((item) => {
+    if (!item?.id) return;
+    paymentMap.set(item.id, item);
+  });
+  return Array.from(paymentMap.values());
 }
 
 function getDateRange(range: RangeId) {
@@ -2193,34 +3801,63 @@ function buildTrendRows(payments: RentPaymentItem[], range: { end: Date }) {
   });
 }
 
-function buildExpenseBreakdown(expenses: ExpenseItem[]) {
-  const colors = [
-    "bg-blue-600",
-    "bg-emerald-600",
-    "bg-amber-500",
-    "bg-violet-600",
-    "bg-red-500",
-    "bg-zinc-500",
-    "bg-sky-500",
-    "bg-slate-700",
-  ];
-  const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  if (!total) return [];
+function buildMonthlyExpenseBreakdown(
+  expenses: ExpenseManagementRow[],
+  selectedProperty: string,
+  month: Date
+) {
+  const monthlyAmounts = new Map<string, number>();
 
-  return breakdownCategories
-    .map((category, index) => {
-      const amount = expenses
-        .filter((expense) => normalizeExpenseCategory(expense.category) === category)
-        .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  expenses.forEach((expense) => {
+    if (selectedProperty !== "all" && expense.propertyId !== selectedProperty) {
+      return;
+    }
 
-      return {
-        category,
-        amount,
-        percent: Math.round((amount / total) * 100),
-        color: colors[index % colors.length],
-      };
-    })
-    .filter((item) => item.amount > 0);
+    const category = normalizeExpenseCategory(expense.category);
+    const amount = getMonthlyBreakdownExpenseAmount(expense, month);
+    monthlyAmounts.set(category, (monthlyAmounts.get(category) || 0) + amount);
+  });
+
+  const total = Array.from(monthlyAmounts.values()).reduce(
+    (sum, amount) => sum + amount,
+    0
+  );
+
+  return breakdownCategories.map((category, index) => {
+    const amount = monthlyAmounts.get(category) || 0;
+
+    return {
+      category,
+      amount,
+      percent: total > 0 ? Math.round((amount / total) * 100) : 0,
+      color: expenseBreakdownPalette[index % expenseBreakdownPalette.length],
+    };
+  });
+}
+
+function getMonthlyBreakdownExpenseAmount(
+  expense: ExpenseManagementRow,
+  month: Date
+) {
+  const amount = Number(expense.amount || 0);
+  if (amount <= 0) return 0;
+
+  const category = normalizeExpenseCategory(expense.category);
+  if (isFixedRecurringExpenseCategory(category)) {
+    return expense.type === "recurring" ? amount : amount / 12;
+  }
+
+  if (expense.type === "recurring") return amount;
+  return expenseOccurredInMonth(expense, month) ? amount : 0;
+}
+
+function expenseOccurredInMonth(expense: ExpenseManagementRow, month: Date) {
+  const expenseDate = parseLocalDate(expense.createdOn);
+  return Boolean(
+    expenseDate &&
+      expenseDate.getFullYear() === month.getFullYear() &&
+      expenseDate.getMonth() === month.getMonth()
+  );
 }
 
 function buildStatements(
@@ -2331,7 +3968,9 @@ function getPaymentAmount(payment: RentPaymentItem) {
 
 function isPaid(status?: string | null) {
   const normalized = String(status || "").toLowerCase();
-  return ["paid", "completed", "succeeded", "success"].includes(normalized);
+  return ["paid", "completed", "complete", "succeeded", "success", "posted"].includes(
+    normalized
+  );
 }
 
 function isLate(payment: RentPaymentItem) {
@@ -2345,9 +3984,17 @@ function isLate(payment: RentPaymentItem) {
 function normalizeExpenseCategory(category?: string | null) {
   if (!category) return "Other";
   if (category === "Taxes") return "Property Tax";
+  if (category === "HOA") return "HOA / PM";
+  if (category === "Repairs") return "Maintenance";
   return expenseCategories.includes(category) || breakdownCategories.includes(category)
     ? category
     : "Other";
+}
+
+function isFixedRecurringExpenseCategory(category?: string | null) {
+  return fixedRecurringExpenseCategories.includes(
+    normalizeExpenseCategory(category)
+  );
 }
 
 function formatCurrency(value: number) {
@@ -2377,6 +4024,12 @@ function formatMonthYear(date: Date) {
 
 function formatCycleKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function toDateInputValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
 }
 
 function getPercent(value: number, total: number) {

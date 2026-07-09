@@ -35,6 +35,10 @@ import {
   getMonthsRemaining,
   getTimeBasedGreeting,
 } from "@/lib/tenant/tenantFormatters";
+import {
+  findCollectedPaymentForCycle,
+  getPaymentMonthKey,
+} from "@/lib/rentPaymentClassification";
 
 type PaymentProgressStatus = "paid" | "upcoming" | "late" | "future";
 type PaymentProgressRow = {
@@ -2618,10 +2622,6 @@ function getRentDueDayNumber(rentDueDay?: string | null) {
   return Math.min(Math.max(parsed, 1), 28);
 }
 
-function getPaymentMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function formatPaymentMonthLabel(date: Date) {
   return date.toLocaleDateString("en-US", {
     month: "long",
@@ -2638,30 +2638,7 @@ function formatSummaryDueDate(date: Date) {
 }
 
 function findPaymentForMonth(payments: RentPayment[], date: Date) {
-  const month = date.toLocaleDateString("en-US", { month: "long" }).toLowerCase();
-  const shortMonth = date
-    .toLocaleDateString("en-US", { month: "short" })
-    .toLowerCase();
-  const year = String(date.getFullYear());
-  const paymentKey = getPaymentMonthKey(date);
-
-  return payments.find((payment) => {
-    if (!isSettledPaymentStatus(payment.status)) return false;
-    if (payment.rent_cycle_key === paymentKey) return true;
-
-    const label = String(payment.period_label || "").toLowerCase();
-
-    return (
-      (label.includes(month) || label.includes(shortMonth)) &&
-      (!label.match(/\d{4}/) || label.includes(year))
-    );
-  });
-}
-
-function isSettledPaymentStatus(status?: string | null) {
-  return ["paid", "succeeded", "complete", "completed"].includes(
-    String(status || "").toLowerCase()
-  );
+  return findCollectedPaymentForCycle(payments, date);
 }
 
 function getFirstUpcomingPaymentKey(

@@ -30,6 +30,9 @@ import {
   getProratedRentAmount,
   type LeaseAmountLike,
 } from "@/lib/leasePaymentAmounts";
+import {
+  findCollectedPaymentForCycle,
+} from "@/lib/rentPaymentClassification";
 import { LandlordMobilePropertyDetail } from "@/components/mobile/landlord/LandlordMobileDashboard";
 import {
   deleteLandlordPropertyCascade,
@@ -68,10 +71,27 @@ type LeaseDocumentRecord = {
 type RentPaymentRecord = {
   id: string;
   period_label?: string | null;
+  rent_cycle_key?: string | null;
   status?: string | null;
   amount?: number | null;
+  rent_amount_cents?: number | null;
+  tenant_service_fee_cents?: number | null;
   paid_at?: string | null;
   created_at?: string | null;
+  due_date?: string | null;
+  lease_id?: string | null;
+  property_id?: string | null;
+  tenant_access_id?: string | null;
+  stripe_payment_intent_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_charge_id?: string | null;
+  payment_intent_id?: string | null;
+  charge_id?: string | null;
+  payout_id?: string | null;
+  stripe_payout_id?: string | null;
+  processor_reference?: string | null;
+  processor_payment_id?: string | null;
+  receipt_url?: string | null;
 };
 
 type LeaseAmountRecord = LeaseAmountLike & {
@@ -1321,12 +1341,6 @@ async function handleDeleteDocument() {
         dueRow: dueThisMonthRow,
         leaseAmounts: lease?.lease_amounts || [],
       });
-  const mobilePaymentMap = new Map(
-    payments.map((payment) => [
-      String(payment.period_label || "").toLowerCase(),
-      payment,
-    ])
-  );
   const mobilePaymentsPreview = (leaseEnded
     ? []
     : buildPaymentTimeline(
@@ -1342,14 +1356,17 @@ async function handleDeleteDocument() {
         }
       ))
     .map((item) => {
-      const savedPayment = mobilePaymentMap.get(item.monthFull.toLowerCase());
-      const status = normalizePaymentStatus(savedPayment?.status || item.status);
+      const savedPayment = findCollectedPaymentForCycle(
+        payments,
+        getPaymentCycleDateFromTimelineItem(item)
+      );
+      const status = savedPayment ? "paid" : item.status;
 
       return {
         id: savedPayment?.id || item.key,
         month: item.month,
         status: getPaymentRowStyles(status).label,
-        amount: savedPayment?.amount || item.amount,
+        amount: getCollectedPaymentDisplayAmount(savedPayment) || item.amount,
       };
     })
     .slice(0, 6);
@@ -2499,13 +2516,6 @@ function PaymentPerformanceCard({
 }) {
   const upcomingRef = useRef<HTMLDivElement | null>(null);
 
-  const paymentMap = new Map(
-    payments.map((payment) => [
-      String(payment.period_label || "").toLowerCase(),
-      payment,
-    ])
-  );
-
   const timeline = applyPaymentTimelineStatuses(buildPaymentTimeline(
   leaseStartDate,
   leaseEndDate,
@@ -2518,13 +2528,14 @@ function PaymentPerformanceCard({
     leaseAmounts,
   }
 ).map((item) => {
-  const savedPayment = paymentMap.get(item.monthFull.toLowerCase());
+  const cycleDate = getPaymentCycleDateFromTimelineItem(item);
+  const savedPayment = findCollectedPaymentForCycle(payments, cycleDate);
 
   return {
     ...item,
     id: savedPayment?.id || item.key,
-    status: normalizePaymentStatus(savedPayment?.status || item.status),
-    amount: savedPayment?.amount || item.amount,
+    status: savedPayment ? "paid" : item.status,
+    amount: getCollectedPaymentDisplayAmount(savedPayment) || item.amount,
     paidAt: savedPayment?.paid_at || null,
     createdAt: savedPayment?.created_at || null,
   };
@@ -2919,12 +2930,6 @@ function PaymentHistoryFullView({
   propertyName: string;
   onClose: () => void;
 }) {
-  const paymentMap = new Map(
-    payments.map((payment) => [
-      String(payment.period_label || "").toLowerCase(),
-      payment,
-    ])
-  );
   const timeline = applyPaymentTimelineStatuses(buildPaymentTimeline(
     leaseStartDate,
     leaseEndDate,
@@ -2937,13 +2942,16 @@ function PaymentHistoryFullView({
       leaseAmounts,
     }
   ).map((item) => {
-    const savedPayment = paymentMap.get(item.monthFull.toLowerCase());
-    const status = normalizePaymentStatus(savedPayment?.status || item.status);
+    const savedPayment = findCollectedPaymentForCycle(
+      payments,
+      getPaymentCycleDateFromTimelineItem(item)
+    );
+    const status = savedPayment ? "paid" : item.status;
 
     return {
       ...item,
       id: savedPayment?.id || item.key,
-      amount: savedPayment?.amount || item.amount,
+      amount: getCollectedPaymentDisplayAmount(savedPayment) || item.amount,
       status,
       paidAt: savedPayment?.paid_at || null,
       createdAt: savedPayment?.created_at || null,
@@ -3156,17 +3164,17 @@ function getPaymentRowStyles(status: MonthStatus) {
   }
 
   if (status === "inactive") {
-  return {
-    label: "Inactive",
-    symbol: "□",
-    card: "bg-gradient-to-r from-zinc-50 to-zinc-50/35",
-    pill: "bg-zinc-100 text-zinc-400",
-    text: "text-zinc-400",
-    dot: "bg-zinc-200",
-    bar: "bg-zinc-200",
-    icon: "bg-zinc-100 text-zinc-400",
-  };
-}
+    return {
+      label: "Inactive",
+      symbol: "□",
+      card: "bg-gradient-to-r from-zinc-50 to-zinc-50/35",
+      pill: "bg-zinc-100 text-zinc-400",
+      text: "text-zinc-400",
+      dot: "bg-zinc-200",
+      bar: "bg-zinc-200",
+      icon: "bg-zinc-100 text-zinc-400",
+    };
+  }
 
   return {
     label: "Future",
@@ -3178,6 +3186,32 @@ function getPaymentRowStyles(status: MonthStatus) {
     bar: "bg-zinc-300",
     icon: "bg-zinc-100 text-zinc-500",
   };
+}
+
+function getCollectedPaymentDisplayAmount(payment?: RentPaymentRecord | null) {
+  if (!payment) return 0;
+  const rentAmountCents = Number(payment.rent_amount_cents || 0);
+  if (rentAmountCents > 0) return rentAmountCents / 100;
+  return Number(payment.amount || 0);
+}
+
+function getPaymentCycleDateFromTimelineItem(item: {
+  dueDate?: string | null;
+  key?: string;
+  monthFull?: string;
+}) {
+  const dueDate = item.dueDate ? parseLocalDate(item.dueDate) : null;
+  if (dueDate) return new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
+
+  const keyMatch = String(item.key || "").match(/^(\d{4})-(\d{1,2})$/);
+  if (keyMatch) {
+    return new Date(Number(keyMatch[1]), Number(keyMatch[2]), 1);
+  }
+
+  const monthDate = new Date(`${item.monthFull || ""} 1`);
+  return Number.isNaN(monthDate.getTime())
+    ? new Date()
+    : new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
 }
 
 
