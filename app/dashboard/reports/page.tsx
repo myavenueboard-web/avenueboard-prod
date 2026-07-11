@@ -79,7 +79,6 @@ type RentPaymentItem = {
   tenant_service_fee_cents?: number | null;
   status: string | null;
   period_label: string | null;
-  due_date?: string | null;
   paid_at?: string | null;
   created_at?: string | null;
   stripe_payment_intent_id?: string | null;
@@ -241,6 +240,7 @@ export default function ReportsPage() {
   const [customFinancialRange, setCustomFinancialRange] =
     useState<AppliedCustomRange | null>(null);
   const [statementMenu, setStatementMenu] = useState("");
+  const [preparingStatementKey, setPreparingStatementKey] = useState("");
   const [selectedStatementYear, setSelectedStatementYear] = useState(
     new Date().getFullYear()
   );
@@ -345,7 +345,6 @@ export default function ReportsPage() {
                 tenant_service_fee_cents,
                 status,
                 period_label,
-                due_date,
                 paid_at,
                 created_at,
                 stripe_payment_intent_id,
@@ -358,7 +357,7 @@ export default function ReportsPage() {
               `
               )
               .in("property_id", propertyIds)
-              .order("due_date", { ascending: false }),
+              .order("created_at", { ascending: false }),
           ]);
 
           if (leaseError) {
@@ -369,13 +368,13 @@ export default function ReportsPage() {
             console.warn("Reports property payments load warning:", propertyPaymentError);
           }
 
-          const normalizedLeases = normalizeRelatedRows(leaseData || []) as LeaseItem[];
+          const normalizedLeases = normalizeRelatedRows(leaseData || []) as unknown as LeaseItem[];
           setLeases(normalizedLeases);
 
           const leaseIds = normalizedLeases.map((lease) => lease.id);
-          let leasePaymentData: any[] = [];
-          let tenantAccessPaymentData: any[] = [];
-          let timelinePaymentData: any[] = [];
+          let leasePaymentData: RentPaymentItem[] = [];
+          let tenantAccessPaymentData: RentPaymentItem[] = [];
+          let timelinePaymentData: RentPaymentItem[] = [];
 
           if (leaseIds.length > 0) {
             const { data, error } = await supabase
@@ -392,7 +391,6 @@ export default function ReportsPage() {
                 tenant_service_fee_cents,
                 status,
                 period_label,
-                due_date,
                 paid_at,
                 created_at,
                 stripe_payment_intent_id,
@@ -405,13 +403,13 @@ export default function ReportsPage() {
               `
               )
               .in("lease_id", leaseIds)
-              .order("due_date", { ascending: false });
+              .order("created_at", { ascending: false });
 
             if (error) {
               console.warn("Reports lease payments load warning:", error);
             }
 
-            leasePaymentData = data || [];
+            leasePaymentData = (data || []) as unknown as RentPaymentItem[];
 
             const timelinePaymentResults = await Promise.all(
               normalizedLeases.map((lease) =>
@@ -429,7 +427,7 @@ export default function ReportsPage() {
                 return [];
               }
 
-              return result.data || [];
+              return (result.data || []) as unknown as RentPaymentItem[];
             });
 
             const { data: tenantAccessData, error: tenantAccessError } = await supabase
@@ -459,7 +457,6 @@ export default function ReportsPage() {
                   tenant_service_fee_cents,
                   status,
                   period_label,
-                  due_date,
                   paid_at,
                   created_at,
                   stripe_payment_intent_id,
@@ -481,16 +478,16 @@ export default function ReportsPage() {
                 );
               }
 
-              tenantAccessPaymentData = accessPayments || [];
+              tenantAccessPaymentData = (accessPayments || []) as unknown as RentPaymentItem[];
             }
           }
 
           const mergedPayments = mergeRentPayments([
-            ...normalizeRelatedRows(propertyPaymentData || []),
-            ...normalizeRelatedRows(leasePaymentData),
-            ...normalizeRelatedRows(tenantAccessPaymentData),
-            ...normalizeRelatedRows(timelinePaymentData),
-          ]) as RentPaymentItem[];
+            ...(normalizeRelatedRows(propertyPaymentData || []) as unknown as RentPaymentItem[]),
+            ...(normalizeRelatedRows(leasePaymentData) as unknown as RentPaymentItem[]),
+            ...(normalizeRelatedRows(tenantAccessPaymentData) as unknown as RentPaymentItem[]),
+            ...(normalizeRelatedRows(timelinePaymentData) as unknown as RentPaymentItem[]),
+          ]);
           setRentPayments(
             mergedPayments
           );
@@ -555,9 +552,9 @@ export default function ReportsPage() {
         return false;
       }
 
-      const paymentDate = parseLocalDate(
-        payment.due_date || payment.paid_at || payment.created_at || ""
-      );
+      const paymentDate =
+        getFinancialPaymentCycleDate(payment) ||
+        parseLocalDate(payment.paid_at || payment.created_at || "");
       if (!paymentDate) return true;
 
       return paymentDate >= range.start && paymentDate <= range.end;
@@ -665,7 +662,6 @@ export default function ReportsPage() {
       ),
     [filteredLeases, leasePreferences, selectedStatementYear, statementPayments]
   );
-
   function openAddExpense(category?: string) {
     setEditingExpense(null);
     setExpenseErrors({});
@@ -908,6 +904,59 @@ export default function ReportsPage() {
     );
   }
 
+  function getStatementUrl(month: Date, print = false) {
+    const statementMonth = formatCycleKey(month);
+    const params = new URLSearchParams({
+      property: selectedProperty,
+      month: statementMonth,
+    });
+    if (print) params.set("print", "true");
+    return `/dashboard/reports/statement/${statementMonth}?${params.toString()}`;
+  }
+
+  function openStatementPage(month: Date) {
+    window.open(getStatementUrl(month), "_blank", "noopener,noreferrer");
+  }
+
+  function printStatementFromReports(month: Date, onReady: () => void) {
+    const iframe = document.createElement("iframe");
+    iframe.src = getStatementUrl(month, true);
+    iframe.title = "Rent statement print";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+
+    let readyCleared = false;
+    const clearReady = () => {
+      if (readyCleared) return;
+      readyCleared = true;
+      onReady();
+    };
+
+    const cleanup = () => {
+      clearReady();
+      iframe.remove();
+    };
+
+    iframe.addEventListener("load", () => {
+      iframe.contentWindow?.addEventListener("afterprint", cleanup, { once: true });
+      window.setTimeout(clearReady, 1200);
+      window.setTimeout(cleanup, 30000);
+    });
+
+    iframe.addEventListener("error", (error) => {
+      console.error("Unable to prepare rent statement download.", error);
+      cleanup();
+    });
+
+    document.body.appendChild(iframe);
+  }
+
   function downloadStatement(month: Date, type: "pdf" | "csv") {
     const label = `${formatMonthYear(month)} Statement`;
     if (type === "csv") {
@@ -922,7 +971,13 @@ export default function ReportsPage() {
       return;
     }
 
-    window.print();
+    const statementKey = formatCycleKey(month);
+    setPreparingStatementKey(statementKey);
+    printStatementFromReports(month, () => {
+      setPreparingStatementKey((current) =>
+        current === statementKey ? "" : current
+      );
+    });
   }
 
   if (loading) {
@@ -992,7 +1047,8 @@ export default function ReportsPage() {
                   setSelectedYear={setSelectedStatementYear}
                   statementMenu={statementMenu}
                   setStatementMenu={setStatementMenu}
-                  onView={() => window.print()}
+                  preparingStatementKey={preparingStatementKey}
+                  onView={(month) => openStatementPage(month)}
                   onDownload={(month) => downloadStatement(month, "pdf")}
                 />
               </div>
@@ -1780,12 +1836,16 @@ function ExpenseBreakdownSection({
   const displayTotal = items.reduce((sum, item) => sum + item.amount, 0);
   const empty = displayTotal <= 0;
   const segmentValue = empty ? 100 / Math.max(items.length, 1) : 0;
-  let offset = 0;
   const gradient = items
-    .map((item) => {
-      const start = offset;
-      const end = offset + (empty ? segmentValue : (item.amount / displayTotal) * 100);
-      offset = end;
+    .map((item, index) => {
+      const start = items
+        .slice(0, index)
+        .reduce(
+          (sum, previous) =>
+            sum + (empty ? segmentValue : (previous.amount / displayTotal) * 100),
+          0
+        );
+      const end = start + (empty ? segmentValue : (item.amount / displayTotal) * 100);
       return `${item.color} ${start}% ${end}%`;
     })
     .join(", ");
@@ -1914,6 +1974,7 @@ function RentStatementsCard({
   setSelectedYear,
   statementMenu,
   setStatementMenu,
+  preparingStatementKey,
   onView,
   onDownload,
 }: {
@@ -1922,6 +1983,7 @@ function RentStatementsCard({
   setSelectedYear: (value: number) => void;
   statementMenu: string;
   setStatementMenu: (value: string) => void;
+  preparingStatementKey: string;
   onView: (month: Date) => void;
   onDownload: (month: Date) => void;
 }) {
@@ -2070,6 +2132,7 @@ function RentStatementsCard({
           <div className="divide-y divide-zinc-100">
           {statements.map((statement) => {
             const key = formatCycleKey(statement.month);
+            const isPreparing = preparingStatementKey === key;
             const unavailableMessage =
               statement.unavailableReason === "before_lease_start"
                 ? "Statement not available. No active lease for this month."
@@ -2101,7 +2164,8 @@ function RentStatementsCard({
 
                 <button
                   type="button"
-                  aria-disabled={!statement.available}
+                  aria-disabled={!statement.available || isPreparing}
+                  disabled={isPreparing}
                   onClick={() => {
                     if (!statement.available) {
                       setStatementMenu(key);
@@ -2129,16 +2193,23 @@ function RentStatementsCard({
                   }}
                   className={`inline-flex h-8 items-center justify-center gap-2 rounded-xl border px-3.5 text-[12.5px] font-semibold transition ${
                     statement.available
-                      ? "border-zinc-200 bg-white text-slate-700 hover:bg-zinc-50"
+                      ? "border-zinc-200 bg-white text-slate-700 hover:bg-zinc-50 disabled:cursor-wait disabled:text-slate-400"
                       : "cursor-not-allowed border-zinc-100 bg-white text-slate-300"
                   }`}
                 >
-                  <Download
-                    aria-hidden="true"
-                    className="h-3.5 w-3.5"
-                    strokeWidth={2}
-                  />
-                  Download
+                  {isPreparing ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700"
+                    />
+                  ) : (
+                    <Download
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5"
+                      strokeWidth={2}
+                    />
+                  )}
+                  {isPreparing ? "Preparing..." : "Download"}
                 </button>
 
                 {!statement.available && (
@@ -2351,12 +2422,12 @@ function DonutChart({
   items: { category: string; amount: number; percent: number; color: string }[];
 }) {
   const total = items.reduce((sum, item) => sum + item.amount, 0);
-  let offset = 0;
   const gradient = items
-    .map((item) => {
-      const start = offset;
-      const end = offset + (item.amount / Math.max(total, 1)) * 100;
-      offset = end;
+    .map((item, index) => {
+      const start = items
+        .slice(0, index)
+        .reduce((sum, previous) => sum + (previous.amount / Math.max(total, 1)) * 100, 0);
+      const end = start + (item.amount / Math.max(total, 1)) * 100;
       return `${colorToCss(item.color)} ${start}% ${end}%`;
     })
     .join(", ");
@@ -2430,7 +2501,7 @@ function StatementsSection({
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => onDownload(statement.month, "pdf")}
                 className="h-9 rounded-xl border border-zinc-200 bg-white px-4 text-[12.5px] font-semibold text-slate-700 transition hover:bg-zinc-50"
               >
                 View
@@ -3024,16 +3095,16 @@ function SelectInput({
   );
 }
 
-function normalizeExpense(item: any): ExpenseItem {
+function normalizeExpense(item: ExpenseItem): ExpenseItem {
   return {
     ...item,
     properties: Array.isArray(item.properties)
       ? item.properties[0] || null
       : item.properties,
-  } as ExpenseItem;
+  };
 }
 
-function normalizeExpenses(items: any[]): ExpenseItem[] {
+function normalizeExpenses(items: ExpenseItem[]): ExpenseItem[] {
   return items.map((item) => normalizeExpense(item));
 }
 
@@ -3367,7 +3438,7 @@ function isPaymentInFinancialRange(
   const cycleDate = getFinancialPaymentCycleDate(payment);
   if (cycleDate) return cycleDate >= range.start && cycleDate <= range.end;
 
-  return isDateInRange(payment.paid_at || payment.created_at || payment.due_date || "", range);
+  return isDateInRange(payment.paid_at || payment.created_at || "", range);
 }
 
 function getFinancialPaymentCycleDate(payment: RentPaymentItem) {
@@ -3376,9 +3447,6 @@ function getFinancialPaymentCycleDate(payment: RentPaymentItem) {
 
   const periodDate = parsePeriodMonth(payment.period_label);
   if (periodDate) return periodDate;
-
-  const dueDate = parseLocalDate(payment.due_date || "");
-  if (dueDate) return new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
 
   const paidDate = parseLocalDate(payment.paid_at || "");
   if (paidDate) return new Date(paidDate.getFullYear(), paidDate.getMonth(), 1);
@@ -3732,7 +3800,7 @@ function fromExpenseFrequencyValue(value?: string | null): ExpenseKind {
   return normalized === "recurring" ? "recurring" : "one_time";
 }
 
-function normalizeRelatedRows(items: any[]) {
+function normalizeRelatedRows<T extends { properties?: unknown }>(items: T[]): T[] {
   return items.map((item) => ({
     ...item,
     properties: Array.isArray(item.properties)
@@ -3741,8 +3809,8 @@ function normalizeRelatedRows(items: any[]) {
   }));
 }
 
-function mergeRentPayments(items: any[]) {
-  const paymentMap = new Map<string, any>();
+function mergeRentPayments(items: RentPaymentItem[]) {
+  const paymentMap = new Map<string, RentPaymentItem>();
   items.forEach((item) => {
     if (!item?.id) return;
     paymentMap.set(item.id, item);
@@ -3778,7 +3846,9 @@ function buildTrendRows(payments: RentPaymentItem[], range: { end: Date }) {
 
   return months.map((month) => {
     const rows = payments.filter((payment) => {
-      const date = parseLocalDate(payment.due_date || payment.paid_at || "");
+      const date =
+        getFinancialPaymentCycleDate(payment) ||
+        parseLocalDate(payment.paid_at || payment.created_at || "");
       return (
         date &&
         date.getFullYear() === month.getFullYear() &&
@@ -3938,9 +4008,6 @@ function paymentBelongsToStatementMonth(payment: RentPaymentItem, month: Date) {
   const periodDate = parsePeriodMonth(payment.period_label);
   if (periodDate && formatCycleKey(periodDate) === targetKey) return true;
 
-  const dueDate = parseLocalDate(payment.due_date || "");
-  if (dueDate && formatCycleKey(dueDate) === targetKey) return true;
-
   const paidDate = parseLocalDate(payment.paid_at || "");
   if (paidDate && formatCycleKey(paidDate) === targetKey) return true;
 
@@ -3977,8 +4044,8 @@ function isLate(payment: RentPaymentItem) {
   if (isPaid(payment.status)) return false;
   const normalized = String(payment.status || "").toLowerCase();
   if (["late", "overdue", "failed"].includes(normalized)) return true;
-  const dueDate = parseLocalDate(payment.due_date || "");
-  return Boolean(dueDate && dueDate < startOfDay(new Date()));
+  const cycleDate = getFinancialPaymentCycleDate(payment);
+  return Boolean(cycleDate && endOfMonth(cycleDate) < startOfDay(new Date()));
 }
 
 function normalizeExpenseCategory(category?: string | null) {

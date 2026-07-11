@@ -1,13 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Download } from "lucide-react";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/tenant/tenantFormatters";
+import StatementActionBar from "@/components/StatementActionBar";
 
 type TenantAccessRecord = {
   id: string;
@@ -85,8 +84,6 @@ type StatementData = {
   landlord: ProfileRecord | null;
   paymentMethod: PaymentMethodRecord | null;
 };
-
-const PLATFORM_FEE_CENTS = 1000;
 
 export default function TenantRentStatementPage() {
   const router = useRouter();
@@ -233,8 +230,12 @@ export default function TenantRentStatementPage() {
 
   if (error || !statement || !viewModel) {
     return (
-      <main className="min-h-screen bg-[#f7f7f5] px-5 pb-5 pt-2 text-zinc-950">
-        <StatementToolbar />
+      <main className="min-h-screen bg-[#f7f7f5] px-5 pb-5 pt-3 text-zinc-950">
+        <StatementActionBar
+          backHref="/tenant"
+          backLabel="Back"
+          downloadLabel="Download PDF"
+        />
         <div className="mx-auto max-w-[920px] rounded-[28px] border border-zinc-200 bg-white p-8">
           <p className="text-[18px] font-semibold text-zinc-950">
             {statementNotGenerated ? "Statement not generated" : "Statement unavailable"}
@@ -250,11 +251,19 @@ export default function TenantRentStatementPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f7f5] px-5 pb-5 pt-2 text-zinc-950 print:bg-white print:px-0 print:py-0">
-      <StatementToolbar onDownload={() => window.print()} />
+    <main className="h-screen overflow-hidden bg-[#f7f7f5] px-5 pb-5 pt-3 text-zinc-950 print:h-auto print:overflow-visible print:bg-white print:px-0 print:py-0">
+      <StatementActionBar
+        backHref="/tenant"
+        backLabel="Back"
+        downloadLabel="Download PDF"
+        onDownload={() => window.print()}
+      />
 
-      <article className="mx-auto max-w-[920px] bg-white px-10 pb-10 pt-7 shadow-[0_18px_70px_rgba(15,23,42,0.08)] ring-1 ring-zinc-200 print:max-w-none print:shadow-none print:ring-0 md:px-12 md:pb-11 md:pt-8">
-        <header className="grid gap-7 border-b border-zinc-200 pb-7 md:grid-cols-[1fr_auto]">
+      <article
+        id="tenant-statement-document"
+        className="tenant-statement-preview mx-auto flex h-[1123px] w-[794px] flex-col overflow-hidden bg-white px-12 pb-11 pt-8 shadow-[0_18px_70px_rgba(15,23,42,0.08)] ring-1 ring-zinc-200 print:shadow-none print:ring-0"
+      >
+        <header className="grid grid-cols-[1fr_auto] gap-7 border-b border-zinc-200 pb-7">
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
               RENT PAYMENT STATEMENT
@@ -262,14 +271,14 @@ export default function TenantRentStatementPage() {
             <h1 className="mt-2.5 text-[40px] font-semibold leading-none tracking-[-0.06em] text-zinc-950">
               {viewModel.rentMonth}
             </h1>
-            <dl className="mt-4 grid max-w-[520px] grid-cols-1 gap-3 text-[13px] leading-5 text-zinc-600 sm:grid-cols-3">
+            <dl className="mt-4 grid max-w-[520px] grid-cols-3 gap-3 text-[13px] leading-5 text-zinc-600">
               <StatementMeta label="Statement number" value={viewModel.statementNumber} />
               <StatementMeta label="Payment date" value={viewModel.paymentDate} />
               <StatementMeta label="Rent month" value={viewModel.rentMonth} />
             </dl>
           </div>
 
-          <div className="flex flex-col items-start md:items-end">
+          <div className="flex flex-col items-end">
             <Image
               src="/logo.png"
               alt="AvenueBoard"
@@ -281,7 +290,7 @@ export default function TenantRentStatementPage() {
           </div>
         </header>
 
-        <section className="grid gap-8 border-b border-zinc-200 py-7 md:grid-cols-2">
+        <section className="grid grid-cols-2 gap-8 border-b border-zinc-200 py-7">
           <AddressBlock
             title="Tenant"
             lines={[
@@ -348,7 +357,7 @@ export default function TenantRentStatementPage() {
           </div>
         </section>
 
-        <footer className="mt-7 border-t border-zinc-200 pt-4">
+        <footer className="mt-auto border-t border-zinc-200 pt-4">
           <p className="text-[11px] leading-5 text-zinc-400">
             This statement is provided by AvenueBoard for record-keeping purposes
             only. It reflects payment information available in AvenueBoard at the
@@ -361,9 +370,44 @@ export default function TenantRentStatementPage() {
       </article>
 
       <style jsx global>{`
+        @media screen {
+          .tenant-statement-preview {
+            transform: scale(0.76);
+            transform-origin: top center;
+          }
+        }
+
+        @media screen and (max-height: 860px) {
+          .tenant-statement-preview {
+            transform: scale(0.7);
+          }
+        }
+
+        @media screen and (max-height: 780px) {
+          .tenant-statement-preview {
+            transform: scale(0.64);
+          }
+        }
+
         @media print {
           @page {
-            margin: 0.45in;
+            size: A4;
+            margin: 0;
+          }
+          html,
+          body {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            overflow: hidden !important;
+          }
+          .tenant-statement-preview {
+            width: 210mm !important;
+            height: 297mm !important;
+            transform: none !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            overflow: hidden !important;
           }
           body {
             background: #fff !important;
@@ -371,35 +415,6 @@ export default function TenantRentStatementPage() {
         }
       `}</style>
     </main>
-  );
-}
-
-function StatementToolbar({
-  onDownload,
-}: {
-  onDownload?: () => void;
-}) {
-  return (
-    <div className="fixed left-5 right-5 top-3 z-20 flex items-center justify-between gap-3 print:hidden">
-      <Link
-        href="/tenant"
-        className="inline-flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-zinc-500 transition hover:text-zinc-800 hover:underline hover:underline-offset-4"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Board
-      </Link>
-
-      {onDownload && (
-        <button
-          type="button"
-          onClick={onDownload}
-          className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-slate-800"
-        >
-          <Download className="h-4 w-4" />
-          Download PDF
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -530,11 +545,6 @@ function isCompletedPayment(status?: string | null) {
   return ["paid", "succeeded", "success", "completed", "complete"].includes(
     String(status || "").toLowerCase()
   );
-}
-
-function centsToDollars(value?: number | null) {
-  if (!value || Number.isNaN(Number(value))) return 0;
-  return Number(value) / 100;
 }
 
 function centsToDollarsOrNull(value?: number | null) {

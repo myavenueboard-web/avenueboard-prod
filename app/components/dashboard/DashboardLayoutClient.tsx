@@ -497,6 +497,10 @@ export default function DashboardLayoutClient({
       ? ""
       : "Landlord workspace";
 
+  if (pathname.startsWith("/dashboard/reports/statement/")) {
+    return <>{children}</>;
+  }
+
   if (loading) {
     return (
       <main className="flex h-screen items-center justify-center bg-white text-sm text-zinc-500">
