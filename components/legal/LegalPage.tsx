@@ -135,7 +135,7 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
 
   return (
     <main className="flex min-h-screen flex-col bg-white font-sans text-[#0F172A]">
-      <MarketingHeader activePage="landing" variant="legal" />
+      <MarketingHeader />
 
       <section className="border-b border-zinc-200 bg-white">
         <div className="mx-auto flex max-w-[1600px] items-center px-5 sm:px-7 lg:px-16">

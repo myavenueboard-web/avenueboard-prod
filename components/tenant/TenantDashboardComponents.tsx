@@ -399,7 +399,7 @@ function AutoPayDetailRow({
 
 function AvenuePerksCard() {
   function openAvenuePerks() {
-    window.location.href = "/avenue-perks";
+    window.location.href = "/member-benefits?section=avenue-perks";
   }
 
   return (
@@ -460,7 +460,7 @@ function AvenuePerksCard() {
 
 function CreditBuildingCard() {
   function openCreditBuilding() {
-    window.location.href = "/credit-building";
+    window.location.href = "/member-benefits?section=credit-building";
   }
 
   return (

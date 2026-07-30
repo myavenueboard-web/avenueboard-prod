@@ -461,7 +461,7 @@ export default function DashboardLayoutClient({
   const isAddPropertyPage = pathname === "/dashboard/add-property";
   const isReportsArea =
     pathname === "/dashboard/reports" || pathname === "/dashboard/expenses";
-  const isPerksPage = pathname === "/avenue-perks";
+  const isPerksPage = pathname === "/member-benefits";
   const landlordFirstName = getFirstName(user?.name);
   const landlordGreeting = landlordFirstName
     ? `${getGreeting()}, ${landlordFirstName}`
@@ -582,7 +582,7 @@ export default function DashboardLayoutClient({
         </button>
 
         <a
-          href="/avenue-perks"
+          href="/member-benefits?section=avenue-perks"
           target="_blank"
           rel="noopener noreferrer"
           className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
@@ -711,7 +711,7 @@ export default function DashboardLayoutClient({
                   </button>
 
                   <a
-                    href="/avenue-perks"
+                    href="/member-benefits?section=avenue-perks"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
@@ -897,10 +897,11 @@ export default function DashboardLayoutClient({
       </p>
     </div>
 
-    <button
-      onClick={() =>
-        setDismissedNotifications((prev) => [
-          ...prev,
+	    <button
+	      aria-label="Dismiss notification"
+	      onClick={() =>
+	        setDismissedNotifications((prev) => [
+	          ...prev,
           notification.id,
         ])
       }
@@ -1010,20 +1011,30 @@ export default function DashboardLayoutClient({
   Tax Documents
 </button>
 
-                      <button
-                        onClick={() => {
-                          window.dispatchEvent(new CustomEvent("avenueboard:close-landlord-overlays"));
-                          setMenuOpen(false);
-                          setProfileOpen(true);
+	                      <button
+	                        onClick={() => {
+	                          window.dispatchEvent(new CustomEvent("avenueboard:close-landlord-overlays"));
+	                          setMenuOpen(false);
+	                          setProfileOpen(true);
                         }}
                         className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
-                      >
-                        Profile Settings
-                      </button>
+	                      >
+	                        Profile Settings
+	                      </button>
 
-                      <button
-                        onClick={handleLogout}
-                        className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
+	                      <button
+	                        onClick={() => {
+	                          setMenuOpen(false);
+	                          router.push("/help-center");
+	                        }}
+	                        className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-zinc-700 hover:bg-zinc-50"
+	                      >
+	                        Help Center
+	                      </button>
+
+	                      <button
+	                        onClick={handleLogout}
+	                        className="w-full rounded-xl px-3 py-3 text-left text-[13px] font-medium text-red-600 hover:bg-red-50"
                       >
                         Logout
                       </button>

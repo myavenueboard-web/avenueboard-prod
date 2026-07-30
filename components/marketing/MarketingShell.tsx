@@ -9,21 +9,21 @@ import { supabase } from "@/lib/supabase";
 import { MarketingFooter } from "./MarketingFooter";
 
 type MarketingHeaderPage =
-  | "landing"
+  | "platform"
   | "avenue-perks"
   | "credit-building"
+  | "pricing"
   | "help-center";
 
 type MarketingHeaderProps = {
   activePage?: MarketingHeaderPage;
-  variant?: "marketing" | "platform" | "perks" | "legal";
+  variant?: "marketing" | "platform" | "perks" | "legal" | "member-benefits";
   activeNav?:
     | "platform"
-    | "rent-tools"
-    | "company"
     | "perks"
     | "avenue-perks"
     | "credit-building"
+    | "pricing"
     | "legal"
     | "trust";
 };
@@ -40,45 +40,37 @@ let cachedMarketingAuthUser: MarketingAuthUser | null = null;
 let cachedMarketingAuthInitialized = false;
 
 const landingNavItems = [
-  { label: "Rental Properties", href: "#rental-properties" },
-  { label: "Residents", href: "#residents" },
-  { label: "Avenue Perks", href: "#avenue-perks" },
-  { label: "Pricing", href: "#pricing" },
+  { id: "platform", label: "Platform", href: "/" },
+  { id: "avenue-perks", label: "Avenue Perks", href: "/avenue-perks" },
+  { id: "pricing", label: "Pricing", href: "/pricing" },
 ];
 
 const publicNavItems = [
+  { id: "platform", label: "Platform", href: "/" },
   { id: "avenue-perks", label: "Avenue Perks", href: "/avenue-perks" },
-  { id: "credit-building", label: "Credit Building", href: "/credit-building" },
-] as const;
-
-const platformNavItems = [
-  { id: "platform", label: "Platform", href: "/platform?section=platform" },
-  { id: "rent-tools", label: "Rent Tools", href: "/platform?section=rent-tools" },
-  { id: "company", label: "Company", href: "/platform?section=company" },
-  { id: "perks", label: "Perks", href: "/perks?section=avenue-perks" },
+  { id: "pricing", label: "Pricing", href: "/pricing" },
 ] as const;
 
 const perksNavItems = [
   {
     id: "avenue-perks",
     label: "Avenue Perks",
-    href: "/perks?section=avenue-perks",
+    href: "/member-benefits?section=avenue-perks",
   },
   {
     id: "credit-building",
     label: "Credit Building",
-    href: "/perks?section=credit-building",
+    href: "/member-benefits?section=credit-building",
   },
-  { id: "platform", label: "Platform", href: "/platform?section=platform" },
 ] as const;
 
 const legalNavItems = [
-  { id: "legal", label: "Legal", href: "/legal?section=terms-of-service" },
-  { id: "trust", label: "Trust", href: "/legal?section=security" },
+  { id: "legal", label: "Legal", href: "/legal?section=privacy-policy" },
+  { id: "trust", label: "Trust", href: "/legal?section=privacy-preferences" },
 ] as const;
 
 export function MarketingHeader({
-  activePage = "landing",
+  activePage = "platform",
   variant = "marketing",
   activeNav,
 }: MarketingHeaderProps) {
@@ -91,13 +83,15 @@ export function MarketingHeader({
     !cachedMarketingAuthInitialized
   );
   const [menuOpen, setMenuOpen] = useState(false);
-  const isLanding = activePage === "landing";
   const isMarketing = variant === "marketing";
-  const usesPlatformShell = variant === "platform";
+  const isMemberBenefitsNav =
+    variant === "perks" || variant === "member-benefits";
   const primaryNavItems =
     variant === "platform"
-      ? platformNavItems
+      ? publicNavItems
       : variant === "perks"
+      ? perksNavItems
+      : variant === "member-benefits"
       ? perksNavItems
       : variant === "legal"
       ? legalNavItems
@@ -244,30 +238,37 @@ export function MarketingHeader({
           </Link>
 
           <nav className="hidden items-center gap-8 xl:gap-10 lg:flex">
-            {isMarketing && isLanding
+            {isMarketing
               ? landingNavItems.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="text-[15px] font-medium text-[#4B4E5A] transition-colors hover:text-black"
+                    className={`text-[15px] font-medium transition-colors ${
+                      activePage === item.id
+                        ? "text-black"
+                        : "text-[#4B4E5A] hover:text-black"
+                    }`}
                   >
                     {item.label}
                   </Link>
                 ))
               : primaryNavItems.map((item) => {
-                  const active =
-                    variant === "marketing"
-                      ? activePage === item.id
-                      : activeNav === item.id;
+                  const active = activeNav === item.id;
 
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`text-[15px] font-medium transition-colors ${
-                        active
-                          ? "text-black"
-                          : "text-[#4B4E5A] hover:text-black"
+                      className={`${
+                        isMemberBenefitsNav
+                          ? "flex h-20 items-center whitespace-nowrap"
+                          : ""
+                      } text-[15px] transition-colors ${
+                        active ? "text-black" : "text-[#4B4E5A] hover:text-black"
+                      } ${
+                        isMemberBenefitsNav && active
+                          ? "font-semibold"
+                          : "font-medium"
                       }`}
                     >
                       {item.label}
@@ -372,20 +373,44 @@ export function MarketingHeader({
                 href="/login"
                 className="text-[15px] font-medium text-[#4B4E5A] transition-colors hover:text-black"
               >
-                {isLanding || usesPlatformShell ? "Log In" : "Sign In"}
+                Log In
               </Link>
 
               <Link
                 href="/signup"
                 className="inline-flex items-center gap-2 rounded-full bg-[#0F172A] px-7 py-3 text-[15px] font-semibold text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] transition-all hover:bg-[#1E293B]"
               >
-                {isLanding || usesPlatformShell ? "Get Started" : "Create Account"}
-                {isLanding && <ArrowRight size={16} />}
+                Get Started
+                <ArrowRight size={16} />
               </Link>
             </>
           )}
         </div>
       </div>
+      {isMemberBenefitsNav && (
+        <nav
+          className="mx-auto flex max-w-[1600px] items-center overflow-x-auto px-6 sm:px-10 lg:hidden"
+          aria-label="Member benefits"
+        >
+          <div className="flex min-w-max items-center gap-9">
+            {perksNavItems.map((item) => {
+              const active = activeNav === item.id;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex h-12 items-center whitespace-nowrap text-[15px] transition-colors ${
+                    active ? "text-black" : "text-[#4B4E5A] hover:text-black"
+                  } ${active ? "font-semibold" : "font-medium"}`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

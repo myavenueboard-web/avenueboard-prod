@@ -1,4 +1,8 @@
 import { supabase } from "@/lib/supabase";
+import {
+  getPropertyActionState,
+  selectRelevantLease,
+} from "@/lib/dashboard/landlordDashboardLogic";
 
 export type LandlordNotification = {
   id: string;
@@ -12,12 +16,17 @@ type LeaseTenantRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  tenant_role?: string | null;
   invite_status: string | null;
 };
 
 type LeaseNotificationRow = {
   id: string;
+  start_date: string | null;
   end_date: string | null;
+  lease_status: string | null;
+  payment_status: string | null;
+  ended_at?: string | null;
   lease_tenants?: LeaseTenantRow[] | null;
 };
 
@@ -25,6 +34,7 @@ type PropertyNotificationRow = {
   id: string;
   property_label: string | null;
   bank_status: string | null;
+  status: string | null;
   leases?: LeaseNotificationRow[] | null;
 };
 
@@ -47,9 +57,14 @@ export async function getLandlordNotifications(profileId: string) {
       id,
       property_label,
       bank_status,
+      status,
       leases (
         id,
+        start_date,
         end_date,
+        lease_status,
+        payment_status,
+        ended_at,
         lease_tenants (
           id,
           first_name,
@@ -80,9 +95,10 @@ export async function getLandlordNotifications(profileId: string) {
   const today = new Date();
 
   propertyRows.forEach((property) => {
-    const lease = property.leases?.[0];
+    const lease = selectRelevantLease(property.leases, today);
+    const actionState = getPropertyActionState(property, lease, today);
 
-    if (property.bank_status !== "connected") {
+    if (actionState.reasons.includes("bank_pending")) {
       notifications.push({
         id: `bank-${property.id}`,
         title: "Complete payment setup",
@@ -92,21 +108,14 @@ export async function getLandlordNotifications(profileId: string) {
       });
     }
 
-    if (lease?.end_date) {
-      const endDate = new Date(lease.end_date);
-      const diffDays = Math.ceil(
-        (endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      if (diffDays >= 0 && diffDays <= 60) {
-        notifications.push({
-          id: `lease-ending-${lease.id}`,
-          title: "Lease ending soon",
-          message: `${property.property_label} lease ends soon. Extend or update the lease term.`,
-          type: "warning",
-          created_at: new Date().toISOString(),
-        });
-      }
+    if (lease?.id && actionState.reasons.includes("lease_ending_soon")) {
+      notifications.push({
+        id: `lease-ending-${lease.id}`,
+        title: "Lease ending soon",
+        message: `${property.property_label} lease ends soon. Extend or update the lease term.`,
+        type: "warning",
+        created_at: new Date().toISOString(),
+      });
     }
 
     const acceptedTenant = lease?.lease_tenants?.find(

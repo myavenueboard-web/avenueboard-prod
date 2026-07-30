@@ -1,14 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  CalendarDays,
+  Landmark,
+  type LucideIcon,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import {
+  getLeaseFirstPaymentCycleDate,
+  getLeasePaymentAmountForCycle,
+  parseLocalDate,
+  type LeaseAmountLike,
+} from "@/lib/leasePaymentAmounts";
+import {
+  findCollectedPaymentForCycle,
+  getActualRentAmount,
+  type RentPaymentClassificationRecord,
+} from "@/lib/rentPaymentClassification";
 import { LandlordMobileHome } from "@/components/mobile/landlord/LandlordMobileDashboard";
 import {
   deleteLandlordPropertyCascade,
   getDeletePropertyErrorMessage,
 } from "@/lib/dashboard/deleteLandlordProperty";
+import {
+  getPropertyActionState,
+  isCurrentActiveLease as isDashboardCurrentActiveLease,
+  selectRelevantLease,
+} from "@/lib/dashboard/landlordDashboardLogic";
 
 type ActivityLog = {
   id: string;
@@ -29,11 +51,16 @@ type DashboardProperty = {
   status: string | null;
   leases?: {
     id: string;
+    start_date: string | null;
     end_date: string;
     monthly_rent: number;
     rent_due_day: string;
+    lease_setup_type?: string | null;
+    payment_tracking_start_date?: string | null;
     lease_status: string | null;
     payment_status: string | null;
+    ended_at?: string | null;
+    lease_amounts?: Array<LeaseAmountLike & { id?: string }>;
     lease_tenants?: {
       first_name: string;
       last_name: string;
@@ -42,44 +69,98 @@ type DashboardProperty = {
   }[];
 };
 
+type DashboardRentPayment = RentPaymentClassificationRecord;
+
+type PayoutMonthMetric = {
+  key: string;
+  label: string;
+  expected: number;
+  collected: number;
+  paid: number;
+  pending: number;
+  late: number;
+  percent: number;
+  status: "paid" | "partial" | "late" | "upcoming" | "empty" | "future";
+};
+
+type PayoutPerformanceMetrics = {
+  collectionRate: number;
+  totalCollected: number;
+  totalExpected: number;
+  collectedDisplay: string;
+  expectedDisplay: string;
+  calculationSummary: string;
+  tooltipText: string;
+  paidCount: number;
+  pendingCount: number;
+  lateCount: number;
+  months: PayoutMonthMetric[];
+  oldestLabel: string;
+  newestLabel: string;
+  hasExpectedRent: boolean;
+  debugSummary: PayoutPerformanceDebugSummary;
+};
+
+type PayoutObligationStatus = "paid" | "pending" | "late";
+
+type PayoutObligation = {
+  propertyId: string;
+  propertyName: string;
+  leaseId: string;
+  leaseStartDate: Date;
+  monthKey: string;
+  expected: number;
+  collected: number;
+  dueDate: Date;
+  status: PayoutObligationStatus;
+};
+
+type PayoutPerformanceDebugSummary = {
+  activeLeaseCount: number;
+  obligations: Array<{
+    propertyName: string;
+    month: string;
+    expected: number;
+    collected: number;
+    dueDate: string;
+    status: PayoutObligationStatus;
+  }>;
+  totalExpected: number;
+  totalCollected: number;
+  collectionRate: number;
+  paidCount: number;
+  pendingCount: number;
+  lateCount: number;
+};
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [properties, setProperties] = useState<DashboardProperty[]>([]);
+  const [rentPayments, setRentPayments] = useState<DashboardRentPayment[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [profileId, setProfileId] = useState("");
   const [landlordName, setLandlordName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [propertyLoadState, setPropertyLoadState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteProperty, setDeleteProperty] =
     useState<DashboardProperty | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const paidCount = properties.filter(
-  (property) => property.leases?.[0]?.payment_status === "paid"
-).length;
-
-const lateCount = properties.filter(
-  (property) => property.leases?.[0]?.payment_status === "late"
-).length;
-
-const pendingPaymentCount = properties.filter((property) => {
-  const status = property.leases?.[0]?.payment_status;
-  return !status || status === "pending";
-}).length;
-
-const collectionRate =
-  properties.length > 0 ? Math.round((paidCount / properties.length) * 100) : 0;
-
-const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
-  Array.from({ length: 12 }, (_, index) => {
-    if (index === 9 && lateCount > 0) return "late";
-    if (index === 10 && pendingPaymentCount > 0) return "upcoming";
-    if (index === 11 && paidCount > 0) return "paid";
-    return "future";
-  });
+  const [payoutInfoOpen, setPayoutInfoOpen] = useState(false);
+  const payoutPerformance = useMemo(
+    () => getPayoutPerformanceMetrics(properties, rentPayments),
+    [properties, rentPayments]
+  );
 
   useEffect(() => {
     async function loadDashboard() {
+      setLoading(true);
+      setPropertyLoadState("loading");
+
       try {
         const { data } = await supabase.auth.getUser();
 
@@ -111,11 +192,20 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
             *,
             leases (
               id,
+              start_date,
               end_date,
               monthly_rent,
               rent_due_day,
+              lease_setup_type,
+              payment_tracking_start_date,
               lease_status,
               payment_status,
+              ended_at,
+              lease_amounts (
+                id,
+                amount_type,
+                amount
+              ),
               lease_tenants (
                 first_name,
                 last_name,
@@ -129,9 +219,97 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
           .order("created_at", { ascending: false });
 
         if (propertyError) {
-          console.error("Properties load error:", propertyError);
+          if (process.env.NODE_ENV === "development") {
+            console.error("Properties load error:", propertyError);
+          }
+          setProperties([]);
+          setRentPayments([]);
+          setPropertyLoadState("error");
         } else {
-          setProperties((propertyData || []) as DashboardProperty[]);
+          const loadedProperties = (propertyData || []) as DashboardProperty[];
+          setProperties(loadedProperties);
+          setPropertyLoadState("ready");
+
+          const leaseIds = loadedProperties.flatMap((property) =>
+            (property.leases || []).map((lease) => lease.id)
+          );
+          const propertyIds = loadedProperties.map((property) => property.id);
+          const paymentRows: DashboardRentPayment[] = [];
+
+          if (propertyIds.length > 0) {
+            const { data: propertyPayments, error: propertyPaymentError } =
+              await supabase
+                .from("rent_payments")
+                .select("*")
+                .in("property_id", propertyIds)
+                .order("created_at", { ascending: false });
+
+            if (propertyPaymentError) {
+              console.warn(
+                "Dashboard property payments load warning:",
+                propertyPaymentError
+              );
+            } else {
+              paymentRows.push(
+                ...((propertyPayments || []) as DashboardRentPayment[])
+              );
+            }
+          }
+
+          if (leaseIds.length > 0) {
+            const { data: leasePayments, error: leasePaymentError } =
+              await supabase
+                .from("rent_payments")
+                .select("*")
+                .in("lease_id", leaseIds)
+                .order("created_at", { ascending: false });
+
+            if (leasePaymentError) {
+              console.warn(
+                "Dashboard lease payments load warning:",
+                leasePaymentError
+              );
+            } else {
+              paymentRows.push(...((leasePayments || []) as DashboardRentPayment[]));
+            }
+
+            const { data: tenantAccessRows, error: tenantAccessError } =
+              await supabase
+                .from("tenant_access")
+                .select("id")
+                .in("lease_id", leaseIds);
+
+            if (tenantAccessError) {
+              console.warn(
+                "Dashboard tenant access load warning:",
+                tenantAccessError
+              );
+            } else {
+              const tenantAccessIds = (tenantAccessRows || []).map((row) => row.id);
+
+              if (tenantAccessIds.length > 0) {
+                const { data: tenantAccessPayments, error: accessPaymentError } =
+                  await supabase
+                    .from("rent_payments")
+                    .select("*")
+                    .in("tenant_access_id", tenantAccessIds)
+                    .order("created_at", { ascending: false });
+
+                if (accessPaymentError) {
+                  console.warn(
+                    "Dashboard tenant access payments load warning:",
+                    accessPaymentError
+                  );
+                } else {
+                  paymentRows.push(
+                    ...((tenantAccessPayments || []) as DashboardRentPayment[])
+                  );
+                }
+              }
+            }
+          }
+
+          setRentPayments(mergeDashboardRentPayments(paymentRows));
         }
 
         const { data: activityData, error: activityError } = await supabase
@@ -155,27 +333,30 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
     }
 
     loadDashboard();
-  }, [router]);
+  }, [router, dashboardReloadKey]);
 
   useEffect(() => {
-    if (!openMenuId) return;
+    if (!openMenuId && !payoutInfoOpen) return;
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
 
       if (
         target instanceof Element &&
-        target.closest("[data-property-card-menu]")
+        (target.closest("[data-property-card-menu]") ||
+          target.closest("[data-payout-info]"))
       ) {
         return;
       }
 
       setOpenMenuId(null);
+      setPayoutInfoOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpenMenuId(null);
+        setPayoutInfoOpen(false);
       }
     }
 
@@ -186,16 +367,26 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [openMenuId]);
+  }, [openMenuId, payoutInfoOpen]);
 
+  const dashboardNow = useMemo(() => new Date(), []);
   const totalMonthlyRent = properties.reduce((sum, property) => {
-    const lease = property.leases?.[0];
+    const lease = selectRelevantLease(property.leases, dashboardNow);
     return sum + Number(lease?.monthly_rent || 0);
   }, 0);
 
-  const nextDueText =
-    properties[0]?.leases?.[0]?.rent_due_day?.replace(" of the Month", "") ||
-    "—";
+  const overviewActiveProperties = getOverviewActiveProperties(properties);
+  const overviewMonthlyRent = overviewActiveProperties.reduce(
+    (sum, property) =>
+      sum +
+      (property.leases || []).reduce((leaseSum, lease) => {
+        if (!isCurrentOverviewActiveLease(property, lease)) return leaseSum;
+        return leaseSum + Number(lease.monthly_rent || 0);
+      }, 0),
+    0
+  );
+
+  const nextDueText = getNextDueText(properties, dashboardNow);
 
   const activeProperties = properties.filter(
     (property) => property.status === "active"
@@ -206,29 +397,15 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
   ).length;
 
   const actionNeededCount = properties.filter((property) => {
-    const lease = property.leases?.[0];
-    const paymentStatus = String(lease?.payment_status || "").toLowerCase();
-    const bankPending = property.bank_status !== "connected";
-    const tenantSetupIncomplete =
-      !lease?.lease_tenants || lease.lease_tenants.length === 0;
-    const leaseEndingSoon = getLeaseStatus(lease?.end_date).label === "Ending Soon";
-    const paymentIssue = ["late", "failed", "declined"].includes(paymentStatus);
-
-    return bankPending || tenantSetupIncomplete || leaseEndingSoon || paymentIssue;
+    const lease = selectRelevantLease(property.leases, dashboardNow);
+    return getPropertyActionState(property, lease, dashboardNow).actionNeeded;
   }).length;
 
   const bankStatusValue =
     pendingBankCount === 0
       ? "Ready"
       : `${pendingBankCount} not connected`;
-
-  const averageRent =
-    properties.length > 0 ? Math.round(totalMonthlyRent / properties.length) : 0;
-
-  const highestRent = properties.reduce((max, property) => {
-    const rent = Number(property.leases?.[0]?.monthly_rent || 0);
-    return rent > max ? rent : max;
-  }, 0);
+  const payoutTooltipId = "payout-performance-tooltip";
 
   async function handleDeleteProperty() {
     if (!deleteProperty || deleting) return;
@@ -321,7 +498,13 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
         onConnectBank={handleConnectBank}
       />
 
-      {properties.length === 0 ? (
+      {propertyLoadState === "error" ? (
+        <div className="hidden min-h-0 flex-1 overflow-y-auto lg:block">
+          <DashboardLoadError
+            onRetry={() => setDashboardReloadKey((current) => current + 1)}
+          />
+        </div>
+      ) : properties.length === 0 ? (
         <div className="hidden min-h-0 flex-1 overflow-y-auto lg:block">
           <EmptyDashboard onAdd={() => router.push("/dashboard/add-property")} />
         </div>
@@ -367,7 +550,7 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
       <div>
         <p className="text-[11px] font-medium text-zinc-500">Monthly Rent</p>
         <p className="mt-1 text-[23px] font-[800] tracking-[-0.06em] text-zinc-950">
-          ${totalMonthlyRent.toLocaleString()}
+          ${overviewMonthlyRent.toLocaleString()}
         </p>
         <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
           Stable
@@ -381,7 +564,7 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
         </p>
         <p className="mt-2 text-[11px] font-medium text-zinc-500">
           <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          Active {activeProperties}
+          {formatActivePropertiesLabel(overviewActiveProperties.length)}
         </p>
       </div>
     </div>
@@ -389,12 +572,43 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
 
   <section className="rounded-[20px] border border-zinc-200 bg-white p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
   <div className="flex items-center justify-between">
-    <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
-      Payout Performance
-    </h3>
+    <div
+      className="relative flex items-center gap-1.5"
+      data-payout-info
+      onMouseEnter={() => setPayoutInfoOpen(true)}
+      onMouseLeave={() => setPayoutInfoOpen(false)}
+    >
+      <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
+        Payout Performance
+      </h3>
+
+      <button
+        type="button"
+        aria-label="How payout performance is calculated"
+        aria-expanded={payoutInfoOpen}
+        aria-describedby={payoutInfoOpen ? payoutTooltipId : undefined}
+        onClick={() => setPayoutInfoOpen((open) => !open)}
+        onFocus={() => setPayoutInfoOpen(true)}
+        onBlur={() => setPayoutInfoOpen(false)}
+        className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-200 bg-white text-[11px] font-semibold leading-none text-zinc-400 transition hover:border-zinc-300 hover:text-zinc-700 focus:border-zinc-400 focus:outline-none"
+      >
+        i
+      </button>
+
+      {payoutInfoOpen && (
+        <div
+          id={payoutTooltipId}
+          role="tooltip"
+          className="absolute left-0 top-7 z-20 w-[286px] rounded-2xl border border-zinc-200 bg-white p-3 text-[11px] font-medium leading-5 text-zinc-600 shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
+        >
+          Collection rate is calculated using active leases only.{" "}
+          {payoutPerformance.tooltipText}
+        </div>
+      )}
+    </div>
 
     <span className="rounded-full bg-zinc-950 px-2.5 py-1 text-[10px] font-semibold text-white">
-      12 Months
+      YTD {new Date().getFullYear()}
     </span>
   </div>
 
@@ -405,85 +619,109 @@ const payoutBarStatuses: Array<"paid" | "late" | "upcoming" | "future"> =
           Collection Rate
         </p>
         <p className="mt-1 text-[23px] font-[800] tracking-[-0.06em] text-zinc-950">
-          {collectionRate}%
+          {payoutPerformance.collectionRate}%
+        </p>
+        <p className="mt-1 text-[10px] font-medium text-zinc-500">
+          {payoutPerformance.collectedDisplay} of{" "}
+          {payoutPerformance.expectedDisplay} collected
         </p>
       </div>
 
       <p className="text-right text-[11px] leading-5 text-zinc-500">
-        <span className="font-semibold text-emerald-700">{paidCount}</span> paid
+        <span className="font-semibold text-emerald-700">
+          {payoutPerformance.paidCount}
+        </span>{" "}
+        paid
         <br />
-        <span className="font-semibold text-amber-600">{lateCount}</span> late
+        <span className="font-semibold text-amber-600">
+          {payoutPerformance.lateCount}
+        </span>{" "}
+        late
       </p>
     </div>
 
-    <div className="mt-3.5 flex h-[48px] items-end gap-1.5">
-      {payoutBarStatuses.map(
-        (status, index) => {
-          const barClass =
-            status === "paid"
-              ? "bg-emerald-400"
-              : status === "late"
-              ? "bg-amber-400"
-              : "bg-zinc-300";
-
-          return (
-            <span
-              key={index}
-              className={`h-full flex-1 rounded-full ${barClass}`}
-            />
-          );
-        }
-      )}
+    <div className="mt-3.5 flex h-[48px] items-end justify-between px-1">
+      {payoutPerformance.months.map((month) => {
+        const barClass =
+          month.status === "future"
+            ? "bg-zinc-200/60"
+            : month.status === "paid"
+            ? "bg-emerald-400"
+            : month.status === "partial" || month.status === "late"
+            ? "bg-amber-400"
+            : "bg-zinc-300";
+        return (
+          <span
+            key={month.key}
+            title={`${month.label}: ${month.percent}% collected`}
+            className={`h-10 w-2.5 rounded-full ${barClass}`}
+          />
+        );
+      })}
     </div>
 
     <div className="mt-2 flex justify-between text-[10px] font-medium text-zinc-400">
-      <span>Jan</span>
-      <span>Dec</span>
+      <span>{payoutPerformance.oldestLabel}</span>
+      <span>{payoutPerformance.newestLabel}</span>
     </div>
+
+    {!payoutPerformance.hasExpectedRent && (
+      <p className="mt-2 text-[10px] font-medium leading-4 text-zinc-400">
+        Performance will appear when an active lease begins.
+      </p>
+    )}
   </div>
 
   <div className="mt-3 grid grid-cols-3 gap-2 border-t border-zinc-100 pt-3">
-    <PerformanceMini label="Paid" value={`${paidCount}`} tone="green" />
-    <PerformanceMini label="Pending" value={`${pendingPaymentCount}`} tone="neutral" />
-    <PerformanceMini label="Late" value={`${lateCount}`} tone="amber" />
-  </div>
-</section>
-
-  <section className="rounded-[20px] border border-zinc-200 bg-white p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
-  <h3 className="text-[16px] font-semibold tracking-[-0.035em] text-zinc-950">
-    Quick Summary
-  </h3>
-
-  <div className="mt-3.5 space-y-2">
-    <CompactSummaryRow
-      label="Total Properties"
-      value={`${properties.length}`}
-      subtext="Total active portfolio"
+    <PerformanceMini
+      label="Paid"
+      value={`${payoutPerformance.paidCount}`}
       tone="green"
     />
-
-    <CompactSummaryRow
-      label="Action Needed"
-      value={`${actionNeededCount}`}
-      subtext="Setup, lease, or payment review"
-      tone={actionNeededCount > 0 ? "amber" : "green"}
-    />
-
-    <CompactSummaryRow
-      label="Bank Status"
-      value={bankStatusValue}
-      subtext={pendingBankCount > 0 ? "Connection needed" : "All connected"}
-      tone={pendingBankCount > 0 ? "amber" : "green"}
-    />
-
-    <CompactSummaryRow
-      label="Next Due"
-      value={nextDueText}
-      subtext="Upcoming rent cycle"
+    <PerformanceMini
+      label="Pending"
+      value={`${payoutPerformance.pendingCount}`}
       tone="neutral"
+    />
+    <PerformanceMini
+      label="Late"
+      value={`${payoutPerformance.lateCount}`}
+      tone="amber"
     />
   </div>
 </section>
+
+  <section className="rounded-[20px] border border-zinc-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+    <h3 className="text-[17px] font-semibold tracking-[-0.045em] text-zinc-950">
+      At a Glance
+    </h3>
+
+    <div className="mt-3 divide-y divide-zinc-100">
+      <AtAGlanceRow
+        Icon={AlertCircle}
+        title="Action Needed"
+        value={`${actionNeededCount}`}
+        subtitle="Setup, lease, or payment review"
+        tone="blue"
+      />
+
+      <AtAGlanceRow
+        Icon={Landmark}
+        title="Bank Status"
+        value={bankStatusValue}
+        subtitle={pendingBankCount > 0 ? "Connection needed" : "All connected"}
+        tone="orange"
+      />
+
+      <AtAGlanceRow
+        Icon={CalendarDays}
+        title="Next Due"
+        value={nextDueText}
+        subtitle="Upcoming rent cycle"
+        tone="neutral"
+      />
+    </div>
+  </section>
 
 </aside>
 
@@ -541,62 +779,65 @@ function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function CompactSummaryRow({
-  label,
-  value,
-  subtext,
-  tone,
-}: {
-  label: string;
-  value: string;
-  subtext: string;
-  tone: "green" | "amber" | "neutral";
-}) {
-  const dotClass =
-    tone === "green"
-      ? "bg-emerald-500"
-      : tone === "amber"
-      ? "bg-amber-500"
-      : "bg-zinc-500";
-
+function DashboardLoadError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl bg-zinc-50/70 px-3.5 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
-
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-zinc-800">{label}</p>
-          <p className="mt-0.5 truncate text-[11px] text-zinc-400">
-            {subtext}
-          </p>
+    <div className="mt-4 rounded-[24px] bg-[#FBFBFB] px-5 py-12 sm:mt-8 sm:px-8 sm:py-16">
+      <div className="mx-auto flex max-w-[520px] flex-col items-center text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-[22px] font-semibold text-zinc-500 shadow-sm">
+          !
         </div>
-      </div>
 
-      <p className="shrink-0 text-[16px] font-[800] tracking-[-0.04em] text-zinc-950">
-        {value}
-      </p>
+        <h2 className="mt-6 text-[18px] font-semibold tracking-[-0.035em] text-zinc-950">
+          We couldn’t load your properties.
+        </h2>
+        <p className="mt-2 max-w-[420px] text-[13px] leading-6 text-zinc-500">
+          Please refresh and try again.
+        </p>
+
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-6 rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-[14px] font-semibold text-zinc-800 transition hover:bg-zinc-50"
+        >
+          Retry
+        </button>
+      </div>
     </div>
   );
 }
 
-function SummaryItem({
-  label,
+function AtAGlanceRow({
+  Icon,
+  title,
   value,
-  warning = false,
+  subtitle,
+  tone,
 }: {
-  label: string;
+  Icon: LucideIcon;
+  title: string;
   value: string;
-  warning?: boolean;
+  subtitle: string;
+  tone: "blue" | "orange" | "neutral";
 }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-4">
-      <p className="text-[13px] text-zinc-500">{label}</p>
+  const iconClass =
+    tone === "blue"
+      ? "text-blue-600"
+      : tone === "orange"
+      ? "text-orange-500"
+      : "text-zinc-500";
 
-      <p
-        className={`text-[15px] font-semibold ${
-          warning ? "text-amber-600" : "text-zinc-900"
-        }`}
-      >
+  return (
+    <div className="group flex items-center gap-3 py-3.5">
+      <Icon className={`h-6 w-6 shrink-0 ${iconClass}`} strokeWidth={2} />
+
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-zinc-950">{title}</p>
+        <p className="mt-0.5 truncate text-[12px] font-medium text-zinc-500">
+          {subtitle}
+        </p>
+      </div>
+
+      <p className="shrink-0 text-right text-[13px] font-semibold text-zinc-950">
         {value}
       </p>
     </div>
@@ -620,11 +861,12 @@ function PropertyCard({
   onDelete: () => void;
   onConnectBank: () => void;
 }) {
-  const lease = property.leases?.[0];
+  const lease = selectRelevantLease(property.leases);
   const leaseStatus = getLeaseStatus(lease?.end_date);
+  const actionState = getPropertyActionState(property, lease);
 
   const primaryTenant = lease?.lease_tenants?.find(
-    (tenant) => tenant.tenant_role === "primary"
+    (tenant) => String(tenant.tenant_role || "").toLowerCase() === "primary"
   );
 
   const tenantName = primaryTenant
@@ -633,14 +875,7 @@ function PropertyCard({
 
   const rent = Number(lease?.monthly_rent || 0);
   const bankConnected = property.bank_status === "connected";
-  const paymentStatus = String(lease?.payment_status || "").toLowerCase();
-  const bankPending = !bankConnected;
-  const tenantSetupIncomplete =
-    !lease || !lease.lease_tenants?.length || lease.lease_status === "draft";
-  const leaseActionNeeded = leaseStatus.showExtend;
-  const paymentIssue = paymentStatus === "late" || paymentStatus === "failed";
-  const actionNeeded =
-    bankPending || tenantSetupIncomplete || leaseActionNeeded || paymentIssue;
+  const actionNeeded = actionState.actionNeeded;
 
   const borderColor =
     actionNeeded
@@ -661,7 +896,16 @@ function PropertyCard({
   return (
     <div
       onClick={onOpen}
-      className={`group relative cursor-pointer rounded-[20px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:z-[60] hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)] focus-within:z-[60]`}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${property.property_label || "property"}`}
+      className={`group relative cursor-pointer rounded-[20px] border border-zinc-200 border-l-[4px] ${borderColor} bg-white/95 p-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.035)] backdrop-blur-sm transition hover:z-[60] hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(15,23,42,0.075)] focus-within:z-[60] focus:outline-none focus:ring-4 focus:ring-zinc-100`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -677,6 +921,9 @@ function PropertyCard({
         <div className="relative shrink-0" data-property-card-menu>
           <button
             type="button"
+            aria-label={`More options for ${property.property_label || "property"}`}
+            aria-haspopup="menu"
+            aria-expanded={openMenuId === property.id}
             onClick={(e) => {
               e.stopPropagation();
               setOpenMenuId(openMenuId === property.id ? null : property.id);
@@ -828,30 +1075,426 @@ function PerformanceMini({
   );
 }
 
-function ActivityItem({
-  title,
-  text,
-  warning = false,
-}: {
-  title: string;
-  text: string;
-  warning?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl bg-white p-4">
-      <div className="flex items-center gap-2">
-        <span
-          className={`h-2 w-2 rounded-full ${
-            warning ? "bg-amber-500" : "bg-[#B9476D]"
-          }`}
-        />
+function getNextDueText(properties: DashboardProperty[], now = new Date()) {
+  const nextDue = properties
+    .flatMap((property) =>
+      (property.leases || [])
+        .filter((lease) => isCurrentOverviewActiveLease(property, lease))
+        .map((lease) => getNextDueDateForLease(lease, now))
+    )
+    .filter((date): date is Date => Boolean(date))
+    .sort((a, b) => a.getTime() - b.getTime())[0];
 
-        <p className="text-[13px] font-semibold text-zinc-900">{title}</p>
-      </div>
+  return nextDue ? formatOrdinalDay(nextDue.getDate()) : "Not scheduled";
+}
 
-      <p className="mt-2 text-[12px] leading-5 text-zinc-500">{text}</p>
-    </div>
+function getNextDueDateForLease(
+  lease: NonNullable<DashboardProperty["leases"]>[number],
+  now = new Date()
+) {
+  if (!lease.start_date || !lease.end_date) return null;
+
+  const today = startOfDay(now);
+  const leaseStart = startOfDay(parseLocalDate(lease.start_date));
+  const leaseEnd = startOfDay(parseLocalDate(lease.end_date));
+  const dueDay = Number(String(lease.rent_due_day || "1").match(/\d+/)?.[0] || 1);
+  let dueDate = buildDueDate(today.getFullYear(), today.getMonth(), dueDay);
+
+  if (dueDate < today) {
+    dueDate = buildDueDate(today.getFullYear(), today.getMonth() + 1, dueDay);
+  }
+
+  while (dueDate < leaseStart) {
+    dueDate = buildDueDate(dueDate.getFullYear(), dueDate.getMonth() + 1, dueDay);
+  }
+
+  return dueDate <= leaseEnd ? dueDate : null;
+}
+
+function buildDueDate(year: number, month: number, dueDay: number) {
+  const normalizedMonth = new Date(year, month, 1);
+  return new Date(
+    normalizedMonth.getFullYear(),
+    normalizedMonth.getMonth(),
+    Math.min(dueDay, getLastDayOfMonth(normalizedMonth))
   );
+}
+
+function formatOrdinalDay(day: number) {
+  const suffix =
+    day % 100 >= 11 && day % 100 <= 13
+      ? "th"
+      : day % 10 === 1
+      ? "st"
+      : day % 10 === 2
+      ? "nd"
+      : day % 10 === 3
+      ? "rd"
+      : "th";
+  return `${day}${suffix}`;
+}
+
+function getPayoutPerformanceMetrics(
+  properties: DashboardProperty[],
+  rentPayments: DashboardRentPayment[]
+): PayoutPerformanceMetrics {
+  const months = buildYearToDatePayoutMonths();
+  const today = new Date();
+  const currentMonth = startOfMonth(today);
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  let activeLeaseCount = 0;
+  const activeLeaseStarts: Date[] = [];
+  const obligations: PayoutObligation[] = [];
+  const monthMetrics = months.map((month) => ({
+    key: getMonthKey(month),
+    label: formatCompactMonth(month),
+    expected: 0,
+    collected: 0,
+    paid: 0,
+    pending: 0,
+    late: 0,
+    percent: 0,
+    status:
+      month > currentMonth
+        ? ("future" as PayoutMonthMetric["status"])
+        : ("empty" as PayoutMonthMetric["status"]),
+  }));
+
+  properties.forEach((property) => {
+    (property.leases || []).forEach((lease) => {
+      if (!isPayoutEligibleLease(property, lease)) return;
+      if (!lease.start_date || !lease.end_date) return;
+
+      const leaseStartDate = parseLocalDate(lease.start_date);
+      const monthlyRent = Number(lease.monthly_rent || 0);
+      if (!monthlyRent) return;
+      activeLeaseCount += 1;
+      activeLeaseStarts.push(leaseStartDate);
+
+      const firstCycleDate =
+        getLeaseFirstPaymentCycleDate({
+          startDate: lease.start_date,
+          paymentTrackingStartDate: lease.payment_tracking_start_date,
+          leaseSetupType: lease.lease_setup_type,
+          leaseAmounts: lease.lease_amounts || [],
+        }) || startOfMonth(parseLocalDate(lease.start_date));
+      const leaseEndMonth = startOfMonth(parseLocalDate(lease.end_date));
+      const dueDay = Number(String(lease.rent_due_day || "1").match(/\d+/)?.[0] || 1);
+      const leasePayments = rentPayments.filter((payment) =>
+        paymentBelongsToLeaseOrProperty(payment, lease.id, property.id)
+      );
+
+      monthMetrics.forEach((month) => {
+        const cycleDate = parseMonthKey(month.key);
+        if (cycleDate > currentMonth) return;
+        if (cycleDate < firstCycleDate || cycleDate > leaseEndMonth) return;
+
+        const expectedAmount = getLeasePaymentAmountForCycle({
+          cycleDate,
+          firstCycleDate,
+          monthlyRent,
+          leaseSetupType: lease.lease_setup_type,
+          leaseAmounts: lease.lease_amounts || [],
+        });
+        if (!expectedAmount) return;
+
+        const collectedPayment = findCollectedPaymentForCycle(
+          leasePayments,
+          cycleDate
+        );
+        const collectedAmount = collectedPayment
+          ? getActualRentAmount(collectedPayment)
+          : 0;
+        const fullyPaid = collectedAmount >= expectedAmount;
+        const dueDate = new Date(
+          cycleDate.getFullYear(),
+          cycleDate.getMonth(),
+          Math.min(dueDay, getLastDayOfMonth(cycleDate))
+        );
+        const status: PayoutObligationStatus = fullyPaid
+          ? "paid"
+          : dueDate < todayStart
+          ? "late"
+          : "pending";
+
+        obligations.push({
+          propertyId: property.id,
+          propertyName: property.property_label || "Property",
+          leaseId: lease.id,
+          leaseStartDate,
+          monthKey: month.key,
+          expected: expectedAmount,
+          collected: Math.min(collectedAmount, expectedAmount),
+          dueDate,
+          status,
+        });
+      });
+    });
+  });
+
+  obligations.forEach((obligation) => {
+    const month = monthMetrics.find((item) => item.key === obligation.monthKey);
+    if (!month) return;
+
+    month.expected += obligation.expected;
+    month.collected += obligation.collected;
+    if (obligation.status === "paid") {
+      month.paid += 1;
+    } else if (obligation.status === "late") {
+      month.late += 1;
+    } else {
+      month.pending += 1;
+    }
+  });
+
+  let totalExpected = 0;
+  let totalCollected = 0;
+  let paidCount = 0;
+  let pendingCount = 0;
+  let lateCount = 0;
+
+  monthMetrics.forEach((month) => {
+    totalExpected += month.expected;
+    totalCollected += month.collected;
+    paidCount += month.paid;
+    pendingCount += month.pending;
+    lateCount += month.late;
+
+    month.percent = month.expected
+      ? Math.min(100, Math.round((month.collected / month.expected) * 100))
+      : 0;
+
+    if (month.status === "future") {
+      return;
+    }
+
+    if (!month.expected) {
+      month.status = "empty";
+    } else if (month.late > 0) {
+      month.status = "late";
+    } else if (month.pending === 0 && month.paid > 0) {
+      month.status = "paid";
+    } else {
+      month.status = "empty";
+    }
+  });
+
+  const collectionRate = totalExpected
+    ? Math.min(100, Math.round((totalCollected / totalExpected) * 100))
+    : 0;
+  const calculationSummary = `${formatDashboardCurrency(
+    totalCollected
+  )} collected out of ${formatDashboardCurrency(
+    totalExpected
+  )} expected year to date = ${collectionRate}%.`;
+
+  return {
+    collectionRate,
+    totalCollected,
+    totalExpected,
+    collectedDisplay: formatDashboardCurrency(totalCollected),
+    expectedDisplay: formatDashboardCurrency(totalExpected),
+    calculationSummary,
+    tooltipText: buildPayoutTooltipText({
+      activeLeaseCount,
+      activeLeaseStarts,
+      obligations,
+      calculationSummary,
+    }),
+    paidCount,
+    pendingCount,
+    lateCount,
+    months: monthMetrics,
+    oldestLabel: monthMetrics[0]?.label || "",
+    newestLabel: monthMetrics[monthMetrics.length - 1]?.label || "",
+    hasExpectedRent: totalExpected > 0,
+    debugSummary: {
+      activeLeaseCount,
+      obligations: obligations.map((obligation) => ({
+        propertyName: obligation.propertyName,
+        month: obligation.monthKey,
+        expected: obligation.expected,
+        collected: obligation.collected,
+        dueDate: formatDateKey(obligation.dueDate),
+        status: obligation.status,
+      })),
+      totalExpected,
+      totalCollected,
+      collectionRate,
+      paidCount,
+      pendingCount,
+      lateCount,
+    },
+  };
+}
+
+function buildYearToDatePayoutMonths() {
+  const current = startOfMonth(new Date());
+  return Array.from({ length: 12 }, (_, index) => {
+    return new Date(current.getFullYear(), index, 1);
+  });
+}
+
+function buildPayoutTooltipText({
+  activeLeaseCount,
+  activeLeaseStarts,
+  obligations,
+  calculationSummary,
+}: {
+  activeLeaseCount: number;
+  activeLeaseStarts: Date[];
+  obligations: PayoutObligation[];
+  calculationSummary: string;
+}) {
+  if (activeLeaseCount === 1 && activeLeaseStarts[0]) {
+    const includedMonths = formatIncludedMonthList(
+      obligations.map((obligation) => obligation.monthKey)
+    );
+    return `This lease began ${formatLongDate(
+      activeLeaseStarts[0]
+    )}, so ${includedMonths || "eligible lease months"} are included year to date. ${calculationSummary} Future lease months are excluded.`;
+  }
+
+  return `Payout Performance is based on monthly rent obligations for active leases from January 1 through the current month, limited by each lease's start and end dates. ${calculationSummary} Action Needed, inactive, and expired leases are excluded.`;
+}
+
+function formatIncludedMonthList(monthKeys: string[]) {
+  const uniqueMonths = Array.from(new Set(monthKeys)).sort();
+  const labels = uniqueMonths.map((key) =>
+    parseMonthKey(key).toLocaleDateString("en-US", { month: "long" })
+  );
+
+  if (labels.length <= 2) return labels.join(" and ");
+  if (labels.length <= 4) {
+    return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+  }
+
+  return `${labels[0]} through ${labels[labels.length - 1]}`;
+}
+
+function isPayoutEligibleLease(
+  property: DashboardProperty,
+  lease: NonNullable<DashboardProperty["leases"]>[number]
+) {
+  const propertyActive = String(property.status || "").toLowerCase() === "active";
+  const bankConnected =
+    String(property.bank_status || "").toLowerCase() === "connected";
+  const leaseStatus = String(lease.lease_status || "").toLowerCase();
+  const tenantSetupComplete = Boolean(lease.lease_tenants?.length);
+  const hasActiveStatus = ![
+    "draft",
+    "ended",
+    "expired",
+    "inactive",
+    "terminated",
+    "cancelled",
+    "canceled",
+  ].includes(leaseStatus);
+  const notEnded = !lease.ended_at;
+
+  return (
+    propertyActive &&
+    bankConnected &&
+    tenantSetupComplete &&
+    hasActiveStatus &&
+    notEnded &&
+    isDashboardCurrentActiveLease(lease)
+  );
+}
+
+function getOverviewActiveProperties(properties: DashboardProperty[]) {
+  return properties.filter((property) =>
+    (property.leases || []).some((lease) =>
+      isCurrentOverviewActiveLease(property, lease)
+    )
+  );
+}
+
+function isCurrentOverviewActiveLease(
+  property: DashboardProperty,
+  lease: NonNullable<DashboardProperty["leases"]>[number]
+) {
+  if (!isPayoutEligibleLease(property, lease)) return false;
+  if (!lease.start_date || !lease.end_date) return false;
+
+  const today = startOfDay(new Date());
+  const startDate = startOfDay(parseLocalDate(lease.start_date));
+  const endDate = startOfDay(parseLocalDate(lease.end_date));
+
+  return startDate <= today && endDate >= today;
+}
+
+function formatActivePropertiesLabel(count: number) {
+  return `${count === 1 ? "Active Property" : "Active Properties"} ${count}`;
+}
+
+function paymentBelongsToLeaseOrProperty(
+  payment: DashboardRentPayment,
+  leaseId: string,
+  propertyId: string
+) {
+  return payment.lease_id === leaseId || payment.property_id === propertyId;
+}
+
+function mergeDashboardRentPayments(payments: DashboardRentPayment[]) {
+  const paymentMap = new Map<string, DashboardRentPayment>();
+  payments.forEach((payment) => {
+    if (!payment?.id) return;
+    paymentMap.set(payment.id, payment);
+  });
+  return Array.from(paymentMap.values());
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function parseMonthKey(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  return new Date(year, month - 1, 1);
+}
+
+function getMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatDashboardCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatLongDate(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatCompactMonth(date: Date) {
+  return date.toLocaleDateString("en-US", { month: "short" });
+}
+
+function getLastDayOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
 function DeletePropertyModal({

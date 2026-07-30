@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CookieConsentManager } from "@/components/cookie-consent/CookieConsent";
 import { footerColumns } from "@/components/public-pages/publicPageNavigation";
 
 const socialLinks = [
@@ -74,15 +75,19 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-zinc-200 bg-white">
       <div className="mx-auto max-w-[1600px] px-6 py-28 sm:px-10 lg:px-16 xl:py-32">
-        <div className="grid gap-20 lg:translate-x-4 lg:grid-cols-[320px_minmax(0,1fr)] xl:translate-x-6 xl:gap-28">
+        <div className="grid gap-20 lg:translate-x-4 lg:grid-cols-[320px_minmax(48px,1fr)_minmax(520px,760px)] lg:gap-0 xl:translate-x-6">
           <div className="flex min-h-[520px] flex-col items-start">
             <img
               src="/logo.png"
               alt="AvenueBoard"
-              className="-ml-2 h-12 w-auto object-contain"
+              className="-ml-2 h-14 w-auto object-contain"
             />
 
-            <div className="-ml-1.5 mt-10 flex items-center gap-6 text-zinc-900">
+            <p className="mt-5 max-w-[260px] text-[14.5px] font-normal leading-6 text-[#7A7E89]">
+              Modern rental platform for landlords, managers and residents.
+            </p>
+
+            <div className="-ml-1.5 mt-8 flex items-center gap-6 text-zinc-900">
               {socialLinks.map((social) => (
                 <Link
                   key={social.label}
@@ -95,15 +100,15 @@ export function MarketingFooter() {
               ))}
             </div>
 
-            <div className="mt-14">
-              <p className="text-[13px] font-semibold tracking-[-0.01em] text-zinc-950">
+            <div className="mt-12">
+              <p className="text-[15px] font-semibold tracking-[-0.01em] text-zinc-950">
                 Download our app
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link
                   href="#"
-                  className="inline-flex min-w-[156px] items-center gap-2.5 rounded-lg bg-black px-3.5 py-2.5 text-white transition hover:bg-[#111] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="inline-flex h-[58px] w-[192px] items-center gap-3 rounded-lg bg-black px-4 text-white transition hover:bg-[#111] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   aria-label="Download on the App Store"
                 >
                   <svg
@@ -114,10 +119,10 @@ export function MarketingFooter() {
                     <path d="M15.769 0h.162c.13 1.606-.483 2.806-1.228 3.675-.731.863-1.732 1.7-3.351 1.573-.108-1.583.506-2.694 1.25-3.561C13.292.879 14.557.16 15.769 0zm4.901 16.716v.045c-.455 1.378-1.104 2.559-1.896 3.655-.723.995-1.609 2.334-3.191 2.334-1.367 0-2.275-.879-3.676-.903-1.482-.024-2.297.735-3.652.926h-.462c-.995-.144-1.798-.932-2.383-1.642-1.725-2.098-3.058-4.808-3.306-8.276v-1.019c.105-2.482 1.311-4.5 2.914-5.478.846-.52 2.009-.963 3.304-.765.555.086 1.122.276 1.619.464.471.181 1.06.502 1.618.485.378-.011.754-.208 1.135-.347 1.116-.403 2.21-.865 3.652-.648 1.733.262 2.963 1.032 3.723 2.22-1.466.933-2.625 2.339-2.427 4.74.176 2.181 1.444 3.457 3.028 4.209z" />
                   </svg>
                   <span className="text-left">
-                    <span className="block text-[10px] font-medium leading-none text-white">
+                    <span className="block text-[11px] font-medium leading-none text-white">
                       Download on the
                     </span>
-                    <span className="mt-0.5 block text-[17px] font-semibold leading-none tracking-[-0.02em]">
+                    <span className="mt-0.5 block text-[18px] font-semibold leading-none tracking-[-0.02em]">
                       App Store
                     </span>
                   </span>
@@ -125,7 +130,7 @@ export function MarketingFooter() {
 
                 <Link
                   href="#"
-                  className="inline-flex min-w-[176px] items-center gap-2.5 rounded-lg bg-black px-3.5 py-2.5 text-white transition hover:bg-[#111] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="inline-flex h-[58px] w-[192px] items-center gap-3 rounded-lg bg-black px-4 text-white transition hover:bg-[#111] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   aria-label="Get it on Google Play"
                 >
                   <svg
@@ -151,10 +156,10 @@ export function MarketingFooter() {
                     />
                   </svg>
                   <span className="text-left">
-                    <span className="block text-[10px] font-medium leading-none text-white">
+                    <span className="block text-[11px] font-medium leading-none text-white">
                       Get it on
                     </span>
-                    <span className="mt-0.5 block text-[17px] font-semibold leading-none tracking-[-0.02em]">
+                    <span className="mt-0.5 block text-[18px] font-semibold leading-none tracking-[-0.02em]">
                       Google Play
                     </span>
                   </span>
@@ -162,12 +167,12 @@ export function MarketingFooter() {
               </div>
             </div>
 
-            <p className="mt-auto pt-20 text-[13px] leading-6 text-[#7A7E89]">
+            <p className="mt-auto pt-16 text-[14px] leading-6 text-[#7A7E89]">
               © 2026 AvenueBoard. All rights reserved.
             </p>
           </div>
 
-          <div className="grid w-full gap-x-12 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 xl:gap-x-16">
+          <div className="grid w-full max-w-[760px] gap-x-16 gap-y-12 sm:grid-cols-2 lg:col-start-3 lg:grid-rows-[auto_auto] lg:gap-y-16 lg:justify-self-end xl:gap-x-20">
             {footerColumns.map((column) => (
               <div key={column.label}>
                 <h3 className="text-[14px] font-semibold tracking-[-0.015em] text-zinc-800">
@@ -190,6 +195,7 @@ export function MarketingFooter() {
           </div>
         </div>
       </div>
+      <CookieConsentManager />
     </footer>
   );
 }

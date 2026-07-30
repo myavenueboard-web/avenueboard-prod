@@ -58,3 +58,32 @@ select {
     width: 100%;
   }
 }
+
+@keyframes avenueTrustTextWave {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.trust-gradient-text {
+  background-image: linear-gradient(110deg, #059669, #d97706, #7c3aed, #059669);
+  background-size: 220% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: avenueTrustTextWave 10s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trust-gradient-text {
+    animation: none;
+  }
+}

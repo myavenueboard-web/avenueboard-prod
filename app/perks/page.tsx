@@ -171,7 +171,11 @@ function PerksPageContent() {
 
   return (
     <main className="flex min-h-screen flex-col bg-white font-sans text-[#0F172A]">
-      <MarketingHeader variant="perks" activeNav={activeSection} />
+      <MarketingHeader
+        variant="member-benefits"
+        activePage="avenue-perks"
+        activeNav={activeSection}
+      />
 
       {activeSection === "credit-building" ? (
         <CreditBuildingSection locked={locked} />

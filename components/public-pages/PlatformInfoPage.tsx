@@ -21,20 +21,35 @@ type PlatformContent = {
 };
 
 const platformContent: Record<string, PlatformContent> = {
-  "rental-properties": {
-    title: "Rental Properties",
+  "platform-overview": {
+    title: "AvenueBoard Platform",
     description:
-      "AvenueBoard helps keep property records, lease context, resident access, and rental activity organized in one clean workspace.",
+      "AvenueBoard brings core rental workflows into one organized platform for landlords, property managers, and residents.",
     items: [
       {
-        title: "Property records",
+        title: "Landlord Board",
         description:
-          "Keep core property and unit details close to lease, document, and payment information.",
+          "Manage properties, residents, leases, payments, documents, reporting, and day-to-day rental operations from one workspace.",
       },
       {
-        title: "Lease context",
+        title: "Resident Board",
         description:
-          "Connect lease dates, monthly rent, resident access, and active status to each rental property.",
+          "Give residents a focused place to view rent details, payment setup, lease information, documents, statements, and support.",
+      },
+      {
+        title: "Ava Assistant",
+        description:
+          "Help users find guidance and route support questions into cleaner follow-up workflows.",
+      },
+      {
+        title: "Avenue Perks",
+        description:
+          "Connect users with partner savings and benefits designed to make the rental experience more useful.",
+      },
+      {
+        title: "Credit Building",
+        description:
+          "Support planned resident credit-building experiences where available.",
       },
     ],
   },
@@ -105,6 +120,24 @@ const platformContent: Record<string, PlatformContent> = {
         title: "Partner powered",
         description:
           "Perks are positioned as exclusive savings and offers, not points, cashback, or rewards balances.",
+      },
+    ],
+  },
+  "credit-building": {
+    title: "Credit Building",
+    description:
+      "Credit Building is designed to help residents understand available rent-reporting and credit-building experiences where supported.",
+    items: [
+      {
+        title: "Resident opportunity",
+        description:
+          "Credit-building information can help residents learn how eligible rent activity may support their broader financial profile.",
+        href: "/credit-building",
+      },
+      {
+        title: "Platform context",
+        description:
+          "Credit Building sits alongside rent, statements, support, and Avenue Perks as part of the resident experience.",
       },
     ],
   },
@@ -385,11 +418,7 @@ const platformContent: Record<string, PlatformContent> = {
 };
 
 function getPlatformSection(value: string | null): PlatformSectionId {
-  if (
-    value === "platform" ||
-    value === "rent-tools" ||
-    value === "company"
-  ) {
+  if (value === "platform") {
     return value;
   }
 
@@ -401,12 +430,17 @@ function getPlatformCategory(
   value: string | null,
 ): PublicPageLink {
   const group = platformSections[section];
+  const visibleCategory = group.links.find((category) => category.id === value);
 
-  return (
-    group.links.find((category) => category.id === value) ??
-    group.links.find((category) => category.id === group.defaultCategory) ??
-    group.links[0]
-  );
+  if (visibleCategory) {
+    return visibleCategory;
+  }
+
+  return {
+    id: group.defaultCategory,
+    label: group.label,
+    href: `/platform?section=${section}`,
+  };
 }
 
 export function PlatformInfoPage() {

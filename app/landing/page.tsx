@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -22,9 +23,9 @@ export default function HomePage() {
       {/* NAVBAR */}
       <header className="fixed left-0 top-0 z-[999] w-full px-3 py-4 sm:px-6 sm:py-5">
         <div className="mx-auto grid w-full max-w-[1680px] grid-cols-[1fr_auto] items-center rounded-full border border-white/50 bg-white/70 px-4 py-3 shadow-[0_18px_70px_rgba(15,23,42,0.08)] backdrop-blur-3xl transition-all duration-500 md:grid-cols-[1fr_auto_1fr] md:px-7">
-          <a href="/" className="flex items-center justify-self-start">
+          <Link href="/" className="flex items-center justify-self-start">
             <img src="/logo.png" alt="AvenueBoard" className="h-7 w-auto object-contain sm:h-8" />
-          </a>
+          </Link>
 
           <nav className="hidden items-center gap-10 justify-self-center text-[14px] font-medium text-zinc-700 md:flex">
             <a href="#why" className="transition hover:text-[#0F172A]">Product</a>
@@ -327,7 +328,7 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 gap-10 sm:grid-cols-3 lg:gap-14">
-              <FooterColumn title="Product" links={[["About", "#why"], ["How It Works", "#how"], ["Pricing", "#pricing"], ["Rent Collection", "#why"], ["Resident Setup", "#how"], ["Lease Tracking", "#pricing"]]} />
+              <FooterColumn title="Product" links={[["About", "#why"], ["How It Works", "#how"], ["Pricing", "#pricing"], ["Resident Setup", "#how"]]} />
               <FooterColumn title="Resources" links={[["FAQs", "#faq"], ["Login", "/login"], ["Get Started", "/signup"], ["Contact", "mailto:support@avenueboard.com"]]} />
               <FooterColumn title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"], ["Security", "#"]]} />
             </div>

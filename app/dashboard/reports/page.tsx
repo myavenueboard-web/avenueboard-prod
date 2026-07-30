@@ -3161,7 +3161,7 @@ function buildFinancialOverviewMetrics({
     ? Math.round((rentCollected / expectedRent) * 100)
     : 0;
   const labelSuffix = getFinancialOverviewLabelSuffix(selectedRange, customRange);
-  const expenseRatio = getExpenseRatioParts(totalExpenses, rentCollected);
+  const expenseRatio = getExpenseRatioParts(totalExpenses, expectedRent);
 
   return {
     rentLabel: `Rent Collected ${labelSuffix}`,
@@ -3518,28 +3518,35 @@ function getMonthlyExpenseBreakdownLabel(month: Date) {
   });
 }
 
-function getExpenseRatioParts(totalExpenses: number, rentCollected: number): {
+function getExpenseRatioParts(totalExpenses: number, expectedRent: number): {
   expenseRatioLabel?: string;
   expenseRatioPercent?: string;
   expenseRatioText?: string;
   expenseRatioAccent: boolean;
 } {
-  if (rentCollected <= 0) {
+  if (expectedRent <= 0) {
     return {
-      expenseRatioLabel: "No rent collected yet",
+      expenseRatioLabel: "0% of expected payouts",
       expenseRatioAccent: false,
     };
   }
 
   const percent = totalExpenses <= 0
     ? 0
-    : Math.round((totalExpenses / rentCollected) * 100);
+    : (totalExpenses / expectedRent) * 100;
 
   return {
-    expenseRatioPercent: `${percent}%`,
-    expenseRatioText: "of rent collected",
+    expenseRatioPercent: formatExpenseRatioPercent(percent),
+    expenseRatioText: "of expected payouts",
     expenseRatioAccent: totalExpenses > 0,
   };
+}
+
+function formatExpenseRatioPercent(value: number) {
+  if (!Number.isFinite(value) || value <= 0 || Object.is(value, -0)) return "0%";
+  if (value < 0.1) return "<0.1%";
+  if (value < 10) return `${Number(value.toFixed(1))}%`;
+  return `${Math.round(value)}%`;
 }
 
 function buildPropertyLeaseOverviewRows(
