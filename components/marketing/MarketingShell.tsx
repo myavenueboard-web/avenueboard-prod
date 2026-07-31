@@ -231,10 +231,10 @@ export function MarketingHeader({
 
   return (
     <header className="sticky top-0 z-50 bg-white/72 backdrop-blur-2xl supports-[backdrop-filter]:bg-white/60">
-      <div className="mx-auto flex h-20 max-w-[1600px] items-center justify-between px-6 sm:px-10 lg:px-16">
+      <div className="mx-auto flex h-[88px] max-w-[1600px] items-center justify-between px-6 sm:px-10 lg:px-16">
         <div className="flex items-center gap-10 xl:gap-14">
           <Link href="/" className="-ml-1 flex items-center">
-            <img src="/logo.png" alt="AvenueBoard" className="h-9 w-auto" />
+            <img src="/logo.png" alt="AvenueBoard" className="h-10 w-auto" />
           </Link>
 
           <nav className="hidden items-center gap-8 xl:gap-10 lg:flex">
@@ -243,7 +243,7 @@ export function MarketingHeader({
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`text-[15px] font-medium transition-colors ${
+                    className={`text-[16px] font-medium transition-colors ${
                       activePage === item.id
                         ? "text-black"
                         : "text-[#4B4E5A] hover:text-black"
@@ -261,9 +261,9 @@ export function MarketingHeader({
                       href={item.href}
                       className={`${
                         isMemberBenefitsNav
-                          ? "flex h-20 items-center whitespace-nowrap"
+                          ? "flex h-[88px] items-center whitespace-nowrap"
                           : ""
-                      } text-[15px] transition-colors ${
+                      } text-[16px] transition-colors ${
                         active ? "text-black" : "text-[#4B4E5A] hover:text-black"
                       } ${
                         isMemberBenefitsNav && active
@@ -281,7 +281,7 @@ export function MarketingHeader({
         <div className="hidden items-center gap-5 xl:gap-6 lg:flex">
           <Link
             href="/help-center"
-            className={`text-[15px] font-medium transition-colors ${
+            className={`text-[16px] font-medium transition-colors ${
               activePage === "help-center"
                 ? "text-black"
                 : "text-[#4B4E5A] hover:text-black"
@@ -371,17 +371,17 @@ export function MarketingHeader({
             <>
               <Link
                 href="/login"
-                className="text-[15px] font-medium text-[#4B4E5A] transition-colors hover:text-black"
+                className="text-[16px] font-medium text-[#4B4E5A] transition-colors hover:text-black"
               >
                 Log In
               </Link>
 
               <Link
                 href="/signup"
-                className="inline-flex items-center gap-2 rounded-full bg-[#0F172A] px-7 py-3 text-[15px] font-semibold text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] transition-all hover:bg-[#1E293B]"
+                className="inline-flex items-center gap-2 rounded-full bg-[#0F172A] px-8 py-3.5 text-[16px] font-semibold text-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] transition-all hover:bg-[#1E293B]"
               >
                 Get Started
-                <ArrowRight size={16} />
+                <ArrowRight size={18} />
               </Link>
             </>
           )}
