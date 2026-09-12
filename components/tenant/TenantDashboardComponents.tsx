@@ -39,6 +39,7 @@ import {
   findCollectedPaymentForCycle,
   getPaymentMonthKey,
 } from "@/lib/rentPaymentClassification";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 
 type PaymentProgressStatus = "paid" | "upcoming" | "late" | "future";
 type PaymentProgressRow = {
@@ -210,9 +211,15 @@ export function PaymentHero({
           </div>
         </div>
 
-        <div className="grid min-h-0 grid-cols-3 gap-4">
-          <AvenuePerksCard />
-          <CreditBuildingCard />
+        <div
+          className={`grid min-h-0 gap-4 ${
+            ENABLE_AVENUE_PERKS || ENABLE_CREDIT_BUILDING
+              ? "grid-cols-3"
+              : "grid-cols-1"
+          }`}
+        >
+          {ENABLE_AVENUE_PERKS ? <AvenuePerksCard /> : null}
+          {ENABLE_CREDIT_BUILDING ? <CreditBuildingCard /> : null}
           <LeaseDetailsCard lease={lease} onClick={() => setLeaseDetailsOpen(true)} />
         </div>
       </div>

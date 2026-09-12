@@ -9,6 +9,7 @@ import {
   type PlatformSectionId,
   type PublicPageLink,
 } from "@/components/public-pages/publicPageNavigation";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 
 type PlatformContent = {
   title: string;
@@ -41,16 +42,24 @@ const platformContent: Record<string, PlatformContent> = {
         description:
           "Help users find guidance and route support questions into cleaner follow-up workflows.",
       },
-      {
-        title: "Avenue Perks",
-        description:
-          "Connect users with partner savings and benefits designed to make the rental experience more useful.",
-      },
-      {
-        title: "Credit Building",
-        description:
-          "Support planned resident credit-building experiences where available.",
-      },
+      ...(ENABLE_AVENUE_PERKS
+        ? [
+            {
+              title: "Avenue Perks",
+              description:
+                "Connect users with partner savings and benefits designed to make the rental experience more useful.",
+            },
+          ]
+        : []),
+      ...(ENABLE_CREDIT_BUILDING
+        ? [
+            {
+              title: "Credit Building",
+              description:
+                "Support planned resident credit-building experiences where available.",
+            },
+          ]
+        : []),
     ],
   },
   "landlord-dashboard": {
@@ -73,7 +82,7 @@ const platformContent: Record<string, PlatformContent> = {
   "resident-dashboard": {
     title: "Resident Board",
     description:
-      "The Resident Board gives residents a focused place to view rent details, payment setup, lease information, documents, statements, and benefits.",
+      "The Resident Board gives residents a focused place to view rent details, payment setup, lease information, documents, statements, and support.",
     items: [
       {
         title: "Resident view",
@@ -83,7 +92,7 @@ const platformContent: Record<string, PlatformContent> = {
       {
         title: "Account support",
         description:
-          "Connect residents to Help Center, support cases, Avenue Perks, and credit-building information where available.",
+          "Connect residents to Help Center and support cases from one organized account experience.",
       },
     ],
   },
@@ -333,7 +342,7 @@ const platformContent: Record<string, PlatformContent> = {
   "get-started": {
     title: "Get Started",
     description:
-      "Create an AvenueBoard account to access available landlord, resident, support, and benefit experiences.",
+      "Create an AvenueBoard account to access available landlord, resident, and support experiences.",
     items: [
       {
         title: "Create account",

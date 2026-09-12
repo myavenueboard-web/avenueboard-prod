@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { getWorkspaceOnboardingStatus } from "@/lib/workspaceOnboardingClient";
 
 export default function SelectModePage() {
   const router = useRouter();
@@ -22,6 +23,13 @@ export default function SelectModePage() {
         }
 
         await getOrCreateProfile();
+
+        const workspaceStatus = await getWorkspaceOnboardingStatus();
+
+        if (workspaceStatus?.requiresOnboarding) {
+          router.replace("/onboarding/workspace");
+          return;
+        }
       } catch (error) {
         console.error(error);
       } finally {
@@ -84,7 +92,7 @@ export default function SelectModePage() {
             <WorkspaceCard
               variant="tenant"
               title="Resident Board"
-              description="View rent details, payment setup, lease information, documents, statements, and Avenue Perks."
+              description="View rent details, payment setup, lease information, documents, and statements."
               onClick={() => router.push("/tenant")}
             />
           </div>

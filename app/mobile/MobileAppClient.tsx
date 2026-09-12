@@ -31,7 +31,6 @@ import {
   Mail,
   MapPin,
   MessageSquare,
-  MoreHorizontal,
   Phone,
   ShieldCheck,
   ReceiptText,
@@ -46,6 +45,8 @@ import AvaChatPanel from "@/app/components/ava/AvaChatPanel";
 import { createActivity } from "@/lib/createActivity";
 import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { ensureLandlordRole } from "@/lib/roleAssignmentClient";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 import { supabase } from "@/lib/supabase";
 import { buildTenantActivities } from "@/lib/tenant/tenantActivity";
 import type {
@@ -223,7 +224,9 @@ type MobileNavTab = { id: MobileTab; label: string; Icon: MobileTabIcon };
 const mobileTabs: MobileNavTab[] = [
   { id: "home", label: "Home", Icon: Home },
   { id: "rent", label: "Rent", Icon: ReceiptText },
-  { id: "perks", label: "Perks", Icon: Sparkles },
+  ...(ENABLE_AVENUE_PERKS || ENABLE_CREDIT_BUILDING
+    ? [{ id: "perks" as const, label: "Perks", Icon: Sparkles }]
+    : []),
   { id: "hub", label: "Ava", Icon: MessageSquare },
   { id: "activity", label: "Activity", Icon: FileText },
 ];
@@ -231,7 +234,9 @@ const mobileTabs: MobileNavTab[] = [
 const landlordMobileTabs: MobileNavTab[] = [
   { id: "home", label: "Home", Icon: Home },
   { id: "rent", label: "Rent", Icon: ReceiptText },
-  { id: "perks", label: "Perks", Icon: Sparkles },
+  ...(ENABLE_AVENUE_PERKS || ENABLE_CREDIT_BUILDING
+    ? [{ id: "perks" as const, label: "Perks", Icon: Sparkles }]
+    : []),
   { id: "ava", label: "Ava", Icon: MessageSquare },
   { id: "reports", label: "Reports", Icon: BarChart3 },
 ];
@@ -455,12 +460,12 @@ const mobileGroupedDeals: { title: string; count: number; deals: MobileDeal[] }[
 ];
 
 export default function MobileAppClient() {
-  const routeLoadedAtRef = useRef(0);
+  const [routeLoadedAtMs] = useState(() => Date.now());
   const [state, setState] = useState<MobileState>("signed-out");
   const [authResolved, setAuthResolved] = useState(false);
   const [minimumSplashDone, setMinimumSplashDone] = useState(false);
   const [splashExpired, setSplashExpired] = useState(false);
-  const [nowMs, setNowMs] = useState(0);
+  const [nowMs, setNowMs] = useState(routeLoadedAtMs);
   const [dualResidentSelected, setDualResidentSelected] = useState(false);
   const [dualLandlordSelected, setDualLandlordSelected] = useState(false);
   const [context, setContext] = useState<MobileContext>({
@@ -487,9 +492,6 @@ export default function MobileAppClient() {
 
   useEffect(() => {
     let mounted = true;
-    const mountedAt = Date.now();
-    routeLoadedAtRef.current = mountedAt;
-    setNowMs(mountedAt);
 
     async function resolveMobileEntry() {
       const result = await resolveMobileSession();
@@ -595,8 +597,7 @@ export default function MobileAppClient() {
     };
   }, []);
 
-  const splashElapsedMs =
-    routeLoadedAtRef.current > 0 ? Math.max(0, nowMs - routeLoadedAtRef.current) : 0;
+  const splashElapsedMs = Math.max(0, nowMs - routeLoadedAtMs);
   const splashTimedOut = splashExpired || splashElapsedMs >= 2500;
   const showSplash =
     !splashTimedOut && (!minimumSplashDone || !authResolved || splashElapsedMs < 900);
@@ -2099,6 +2100,15 @@ function LandlordAddPropertyScreen({
       });
       setCreatedPropertyId(property.id);
 
+      const landlordRoleResult = await ensureLandlordRole({
+        reason: "owned_property_created",
+        propertyId: property.id,
+      });
+
+      if (landlordRoleResult.created) {
+        await triggerEmailEvent({ trigger: "landlord_signup" });
+      }
+
       if (!propertyCreatedEventSent) {
         await triggerEmailEvent({
           trigger: "property_created",
@@ -2365,7 +2375,7 @@ function LandlordAddPropertyScreen({
                   error={validationAttempted && !propertyForm.propertyLabel.trim()}
                 />
                 <p className="-mt-1 text-[13px] font-medium leading-5 text-zinc-500">
-                  Examples: Willow's Apartment, Downtown Apartment, Unit 2B
+                  Examples: Willow&apos;s Apartment, Downtown Apartment, Unit 2B
                 </p>
               </div>
             )}
@@ -5274,9 +5284,15 @@ function MobileAccountDrawer({
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    setDisplayName(context.tenantName);
-    setPhone(context.tenantPhone === "Not available" ? "" : context.tenantPhone);
-    setStatus("");
+    const resetTimer = window.setTimeout(() => {
+      setDisplayName(context.tenantName);
+      setPhone(
+        context.tenantPhone === "Not available" ? "" : context.tenantPhone
+      );
+      setStatus("");
+    }, 0);
+
+    return () => window.clearTimeout(resetTimer);
   }, [context.profileId, context.tenantName, context.tenantPhone]);
 
   async function handleSave() {

@@ -563,7 +563,7 @@ function EmailTenantWelcome({
                       And we're just getting started.
                     </p>
                     <p style="margin:0 0 18px;color:#42526a;font-size:15px;line-height:29px;">
-                      As AvenueBoard continues to grow, we'll introduce tenant-focused benefits designed to reward responsible renters and create an even better rental experience.
+                      As AvenueBoard continues to grow, we'll continue improving the resident experience with clearer tools, stronger support, and more organized rental workflows.
                     </p>
                     <p style="margin:0 0 18px;color:#42526a;font-size:15px;line-height:29px;">
                       Thank you for joining AvenueBoard.
@@ -839,7 +839,7 @@ As you begin using AvenueBoard, you'll be able to securely manage your rental ex
 
 And we're just getting started.
 
-As AvenueBoard continues to grow, we'll introduce tenant-focused benefits designed to reward responsible renters and create an even better rental experience.
+As AvenueBoard continues to grow, we'll continue improving the resident experience with clearer tools, stronger support, and more organized rental workflows.
 
 Thank you for joining AvenueBoard.
 

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { createActivity } from "@/lib/createActivity";
 import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
+import { ensureLandlordRole } from "@/lib/roleAssignmentClient";
 
 import StepIndicator from "../../components/add-property/StepIndicator";
 import PropertyStep from "../../components/add-property/PropertyStep";
@@ -813,6 +814,15 @@ export default function AddPropertyPage() {
         existingPropertyId: createdPropertyId,
       });
       setCreatedPropertyId(property.id);
+
+      const landlordRoleResult = await ensureLandlordRole({
+        reason: "owned_property_created",
+        propertyId: property.id,
+      });
+
+      if (landlordRoleResult.created) {
+        await triggerEmailEvent({ trigger: "landlord_signup" });
+      }
 
       if (!propertyCreatedEventSent) {
         await triggerEmailEvent({

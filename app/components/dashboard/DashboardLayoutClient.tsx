@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { getWorkspaceOnboardingStatus } from "@/lib/workspaceOnboardingClient";
+import { WORKSPACE_TYPE_LABELS, type WorkspaceType } from "@/lib/workspaceTypes";
+import { ENABLE_AVENUE_PERKS } from "@/lib/phaseOneFeatures";
 import ProfileSettingsPanel from "@/app/components/dashboard/ProfileSettingsPanel";
 import HelpChat from "@/app/components/dashboard/HelpChat";
 import {
@@ -195,6 +198,8 @@ export default function DashboardLayoutClient({
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [hasLandlordRole, setHasLandlordRole] = useState(false);
   const [hasTenantPortal, setHasTenantPortal] = useState(false);
+  const [primaryWorkspaceType, setPrimaryWorkspaceType] =
+    useState<WorkspaceType | null>(null);
   const [canRemoveLandlordPortal, setCanRemoveLandlordPortal] = useState(false);
   const [taxDocumentsOpen, setTaxDocumentsOpen] = useState(false);
   const [removingLandlordPortal, setRemovingLandlordPortal] = useState(false);
@@ -221,6 +226,15 @@ export default function DashboardLayoutClient({
         }
 
         const profile = await getOrCreateProfile();
+
+        const workspaceStatus = await getWorkspaceOnboardingStatus();
+
+        if (workspaceStatus?.requiresOnboarding) {
+          router.replace("/onboarding/workspace");
+          return;
+        }
+
+        setPrimaryWorkspaceType(workspaceStatus?.primaryWorkspaceType || null);
 
         const resolvedName =
           profile.display_name || data.user.email?.split("@")[0] || "User";
@@ -581,19 +595,21 @@ export default function DashboardLayoutClient({
           Reports & Expenses
         </button>
 
-        <a
-          href="/member-benefits?section=avenue-perks"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
-            isPerksPage
-              ? "bg-zinc-50 text-slate-950"
-              : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
-          }`}
-        >
-          <SidebarPerksIcon active={isPerksPage} />
-          Avenue Perks
-        </a>
+        {ENABLE_AVENUE_PERKS ? (
+          <a
+            href="/member-benefits?section=avenue-perks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[14.5px] font-bold transition ${
+              isPerksPage
+                ? "bg-zinc-50 text-slate-950"
+                : "text-slate-700 hover:bg-zinc-100 hover:text-slate-950"
+            }`}
+          >
+            <SidebarPerksIcon active={isPerksPage} />
+            Avenue Perks
+          </a>
+        ) : null}
 
         <button
           onClick={() => {
@@ -710,20 +726,22 @@ export default function DashboardLayoutClient({
                     Reports & Expenses
                   </button>
 
-                  <a
-                    href="/member-benefits?section=avenue-perks"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
-                  >
-                    <span
-                      className="flex h-7 w-7 items-center justify-center text-[16px] leading-none text-slate-800"
-                      aria-hidden="true"
+                  {ENABLE_AVENUE_PERKS ? (
+                    <a
+                      href="/member-benefits?section=avenue-perks"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
                     >
-                      ✦
-                    </span>
-                    Avenue Perks
-                  </a>
+                      <span
+                        className="flex h-7 w-7 items-center justify-center text-[16px] leading-none text-slate-800"
+                        aria-hidden="true"
+                      >
+                        ✦
+                      </span>
+                      Avenue Perks
+                    </a>
+                  ) : null}
 
                   <button
                     onClick={() => {
@@ -1064,6 +1082,9 @@ export default function DashboardLayoutClient({
         hasTenantPortal={hasTenantPortal}
         hasLandlordRole={hasLandlordRole}
         canRemoveLandlordPortal={canRemoveLandlordPortal}
+        primaryWorkspaceLabel={
+          primaryWorkspaceType ? WORKSPACE_TYPE_LABELS[primaryWorkspaceType] : ""
+        }
         removingLandlordPortal={removingLandlordPortal}
         removeLandlordError={removeLandlordError}
         onClearRemoveLandlordError={() => setRemoveLandlordError("")}

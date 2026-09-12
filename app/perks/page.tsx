@@ -7,6 +7,7 @@ import { Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingHeader } from "@/components/marketing/MarketingShell";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 import { supabase } from "@/lib/supabase";
 
 type PerksSection = "avenue-perks" | "credit-building";
@@ -137,6 +138,16 @@ function PerksPageContent() {
   const activeSection = getPerksSection(searchParams.get("section"));
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const phaseOneHidden =
+    (!ENABLE_AVENUE_PERKS && !ENABLE_CREDIT_BUILDING) ||
+    (activeSection === "avenue-perks" && !ENABLE_AVENUE_PERKS) ||
+    (activeSection === "credit-building" && !ENABLE_CREDIT_BUILDING);
+
+  useEffect(() => {
+    if (phaseOneHidden) {
+      window.location.replace("/");
+    }
+  }, [phaseOneHidden]);
 
   useEffect(() => {
     let mounted = true;
@@ -168,6 +179,10 @@ function PerksPageContent() {
   }, []);
 
   const locked = authChecked && !authenticated;
+
+  if (phaseOneHidden) {
+    return null;
+  }
 
   return (
     <main className="flex min-h-screen flex-col bg-white font-sans text-[#0F172A]">

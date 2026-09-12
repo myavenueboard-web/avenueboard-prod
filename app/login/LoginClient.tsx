@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
 import AuthOAuthButton from "@/app/components/AuthOAuthButton";
+import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
 import { supabase } from "@/lib/supabase";
+import { getWorkspaceOnboardingStatus } from "@/lib/workspaceOnboardingClient";
 
 function getSafeInternalReturnTo(value: string | null) {
   if (!value) return "";
@@ -87,26 +89,35 @@ export default function LoginClient() {
       return;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("user_id", user.id)
-      .single();
+    const profile = await getOrCreateProfile();
 
     if (!profile) {
       router.replace(redirectPath);
       return;
     }
 
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("profile_id", profile.id);
+    const workspaceStatus = await getWorkspaceOnboardingStatus();
+
+    if (workspaceStatus?.requiresOnboarding) {
+      router.replace("/onboarding/workspace");
+      return;
+    }
+
+    const [{ data: roles }, { data: tenantAccess }] = await Promise.all([
+      supabase.from("user_roles").select("role").eq("profile_id", profile.id),
+      supabase
+        .from("tenant_access")
+        .select("id")
+        .eq("tenant_profile_id", profile.id)
+        .eq("invite_status", "accepted")
+        .limit(1),
+    ]);
 
     const roleList = (roles || []).map((r) => r.role);
 
     const hasLandlord = roleList.includes("landlord");
-    const hasTenant = roleList.includes("tenant");
+    const hasTenant =
+      roleList.includes("tenant") || Boolean(tenantAccess?.length);
 
     if (redirectPath !== "/dashboard") {
       router.replace(redirectPath);

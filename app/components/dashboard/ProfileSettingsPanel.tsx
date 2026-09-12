@@ -19,6 +19,7 @@ type ProfileSettingsPanelProps = {
   hasTenantPortal: boolean;
   hasLandlordRole: boolean;
   canRemoveLandlordPortal?: boolean;
+  primaryWorkspaceLabel?: string;
   removingLandlordPortal: boolean;
   removeLandlordError: string;
   onClearRemoveLandlordError: () => void;
@@ -39,6 +40,7 @@ export default function ProfileSettingsPanel({
   hasTenantPortal,
   hasLandlordRole,
   canRemoveLandlordPortal = false,
+  primaryWorkspaceLabel,
   removingLandlordPortal,
   removeLandlordError,
   onClearRemoveLandlordError,
@@ -173,6 +175,25 @@ export default function ProfileSettingsPanel({
                   className="mt-2 h-[48px] w-full rounded-xl border border-zinc-200 bg-[#F8F9FA] px-4 text-[16px] text-zinc-900 outline-none focus:border-[#2563EB] focus:bg-white focus:ring-4 focus:ring-[#2563EB]/10 sm:h-[52px] sm:px-5 sm:text-[14px]"
                 />
               </div>
+
+              {primaryWorkspaceLabel ? (
+                <div>
+                  <label className="text-[13px] font-medium text-zinc-800 sm:text-[14px]">
+                    Primary workspace
+                  </label>
+                  <div className="mt-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <p className="text-[14px] font-semibold text-zinc-900">
+                      {primaryWorkspaceLabel}
+                    </p>
+                    <a
+                      href="/support"
+                      className="mt-1 inline-flex text-[12.5px] font-semibold text-zinc-500 underline underline-offset-4 transition hover:text-zinc-900"
+                    >
+                      Request workspace change
+                    </a>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-6 bg-white sm:mt-6">

@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { getWorkspaceOnboardingStatus } from "@/lib/workspaceOnboardingClient";
+import { ensureLandlordRole } from "@/lib/roleAssignmentClient";
+import { WORKSPACE_TYPE_LABELS, type WorkspaceType } from "@/lib/workspaceTypes";
 import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 import type {
   ActivityLog,
@@ -131,6 +134,73 @@ function resolveTenantSelectedLeaseId({
   }
 
   return leases[0].lease_id;
+}
+
+function getStripeReturnNoticeFromCurrentUrl(): StripeReturnNotice {
+  if (typeof window === "undefined") return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const payment = params.get("payment");
+  const autopay = params.get("autopay");
+  const cycle = params.get("cycle");
+
+  if (payment === "success") {
+    return {
+      type: "success",
+      title: "Payment successful",
+      text: `Your ${cycle || "rent"} payment was submitted successfully.`,
+    };
+  }
+
+  if (payment === "cancelled") {
+    return {
+      type: "warning",
+      title: "Payment cancelled",
+      text: "No payment was submitted. You can retry when ready.",
+    };
+  }
+
+  if (payment === "error") {
+    return {
+      type: "error",
+      title: "Payment could not be confirmed",
+      text: "Please try again or contact support if the issue continues.",
+    };
+  }
+
+  if (autopay === "success") {
+    return {
+      type: "success",
+      title: "AutoPay is active",
+      text: "Future rent payments will use your saved payment method.",
+    };
+  }
+
+  if (autopay === "cancelled") {
+    return {
+      type: "warning",
+      title: "AutoPay setup cancelled",
+      text: "No payment method was saved. You can try again anytime.",
+    };
+  }
+
+  if (autopay === "error") {
+    return {
+      type: "error",
+      title: "AutoPay setup could not be completed",
+      text: "Please try again or contact support if the issue continues.",
+    };
+  }
+
+  if (autopay === "lease_ended") {
+    return {
+      type: "warning",
+      title: "Lease ended",
+      text: "Online rent payments are no longer available for this lease.",
+    };
+  }
+
+  return null;
 }
 
 function buildTenantNotifications({
@@ -306,6 +376,8 @@ export default function TenantDashboardPage() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [localActivities, setLocalActivities] = useState<TenantActivity[]>([]);
   const [hasLandlordRole, setHasLandlordRole] = useState(false);
+  const [primaryWorkspaceType, setPrimaryWorkspaceType] =
+    useState<WorkspaceType | null>(null);
   const [selectedLeaseId, setSelectedLeaseId] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
@@ -320,7 +392,7 @@ export default function TenantDashboardPage() {
   );
   const [paymentActionError, setPaymentActionError] = useState("");
   const [stripeReturnNotice, setStripeReturnNotice] =
-    useState<StripeReturnNotice>(null);
+    useState<StripeReturnNotice>(() => getStripeReturnNoticeFromCurrentUrl());
   const [payEarlyPreview, setPayEarlyPreview] = useState<PayEarlyPreview>(null);
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>(
     []
@@ -362,6 +434,14 @@ export default function TenantDashboardPage() {
         }
 
         const profile = await getOrCreateProfile();
+        const workspaceStatus = await getWorkspaceOnboardingStatus();
+
+        if (workspaceStatus?.requiresOnboarding) {
+          router.replace("/onboarding/workspace");
+          return;
+        }
+
+        setPrimaryWorkspaceType(workspaceStatus?.primaryWorkspaceType || null);
         setProfileId(profile.id);
 
         setUserInfo({
@@ -574,59 +654,7 @@ export default function TenantDashboardPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const params = new URLSearchParams(window.location.search);
-    const payment = params.get("payment");
-    const autopay = params.get("autopay");
-    const cycle = params.get("cycle");
-    let notice: StripeReturnNotice = null;
-
-    if (payment === "success") {
-      notice = {
-        type: "success",
-        title: "Payment successful",
-        text: `Your ${cycle || "rent"} payment was submitted successfully.`,
-      };
-    } else if (payment === "cancelled") {
-      notice = {
-        type: "warning",
-        title: "Payment cancelled",
-        text: "No payment was submitted. You can retry when ready.",
-      };
-    } else if (payment === "error") {
-      notice = {
-        type: "error",
-        title: "Payment could not be confirmed",
-        text: "Please try again or contact support if the issue continues.",
-      };
-    } else if (autopay === "success") {
-      notice = {
-        type: "success",
-        title: "AutoPay is active",
-        text: "Future rent payments will use your saved payment method.",
-      };
-    } else if (autopay === "cancelled") {
-      notice = {
-        type: "warning",
-        title: "AutoPay setup cancelled",
-        text: "No payment method was saved. You can try again anytime.",
-      };
-    } else if (autopay === "error") {
-      notice = {
-        type: "error",
-        title: "AutoPay setup could not be completed",
-        text: "Please try again or contact support if the issue continues.",
-      };
-    } else if (autopay === "lease_ended") {
-      notice = {
-        type: "warning",
-        title: "Lease ended",
-        text: "Online rent payments are no longer available for this lease.",
-      };
-    }
-
-    if (notice) {
-      setStripeReturnNotice(notice);
-      setPaymentActionError("");
+    if (getStripeReturnNoticeFromCurrentUrl()) {
       router.replace("/tenant", { scroll: false });
     }
   }, [router]);
@@ -776,8 +804,8 @@ export default function TenantDashboardPage() {
         shared_notes: true,
         documents: true,
         lease_status: true,
-        credit_building: true,
-        avenue_perks: true,
+        credit_building: false,
+        avenue_perks: false,
         support_tickets: true,
         payments: true,
       },
@@ -807,9 +835,6 @@ export default function TenantDashboardPage() {
         "Private notes",
         "Shared notes",
         "Rent reminders",
-        "Avenue Perks",
-        "Tenant promotions",
-        "Eligible credit-building opportunities when enabled",
       ],
     }),
     [
@@ -1675,35 +1700,15 @@ export default function TenantDashboardPage() {
     setCreatingLandlordPortal(true);
 
     try {
-      const profile = profileId ? { id: profileId } : await getOrCreateProfile();
-      const activeProfileId = profile.id;
-
-      const { data: existingRole, error: roleCheckError } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("profile_id", activeProfileId)
-        .eq("role", "landlord")
-        .maybeSingle();
-
-      if (roleCheckError) {
-        throw roleCheckError;
+      if (!profileId) {
+        await getOrCreateProfile();
       }
 
-      if (!existingRole) {
-        const { error: roleCreateError } = await supabase.from("user_roles").upsert(
-          {
-            profile_id: activeProfileId,
-            role: "landlord",
-          },
-          {
-            onConflict: "profile_id,role",
-          }
-        );
+      const result = await ensureLandlordRole({
+        reason: "resident_created_landlord_board",
+      });
 
-        if (roleCreateError) {
-          throw roleCreateError;
-        }
-
+      if (result.created) {
         await triggerEmailEvent({ trigger: "landlord_signup" });
       }
 
@@ -2377,6 +2382,9 @@ export default function TenantDashboardPage() {
         onLogout={handleTenantLogout}
         hasTenantPortal={leases.length > 0}
         hasLandlordRole={hasLandlordRole}
+        primaryWorkspaceLabel={
+          primaryWorkspaceType ? WORKSPACE_TYPE_LABELS[primaryWorkspaceType] : ""
+        }
         removingLandlordPortal={false}
         removeLandlordError=""
         onClearRemoveLandlordError={() => undefined}

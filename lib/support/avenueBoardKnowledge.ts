@@ -5,7 +5,7 @@ export const avenueBoardProductKnowledge = {
   pages: {
     tenant_dashboard: {
       purpose:
-        "The Resident Board is the renter's main workspace for rent status, lease status, property documents, notes, recent activity, property contact, support, perks, and credit-building visibility when enabled.",
+        "The Resident Board is the renter's main workspace for rent status, lease status, property documents, notes, recent activity, property contact, and support.",
       navigation:
         "Residents can use the top Support action to open Ava, switch properties from the header when multiple leases are available, review Payment Progress, open Lease Status, use Notes, and view or upload Property Documents.",
     },
@@ -37,14 +37,12 @@ export const avenueBoardProductKnowledge = {
         "Shared Notes are supported in the Resident Board. Residents can create shared notes for their lease/property, and landlord-created shared notes for the same lease/property can appear to the resident.",
     },
     credit_building: {
-      supported: true,
-      summary:
-        "Credit Building is represented in the Resident Board as an AvenueBoard feature. Ava should describe it as available or eligible only when enabled and should not guarantee credit score changes.",
+      supported: false,
+      summary: "Credit Building is not part of the Phase 1 customer experience.",
     },
     avenue_perks: {
-      supported: true,
-      summary:
-        "Avenue Perks and resident promotions are part of the resident experience when available.",
+      supported: false,
+      summary: "Avenue Perks is not part of the Phase 1 customer experience.",
     },
     support_workflow: {
       supported: true,
@@ -53,7 +51,7 @@ export const avenueBoardProductKnowledge = {
     },
   },
   competitorPositioning:
-    "If asked whether another platform is better, Ava should stay neutral and explain AvenueBoard strengths: organized rental workspace, lease and document access, resident communication context, payment visibility, support cases, Avenue Perks, and credit-building opportunities when enabled. Ava should not recommend competitors.",
+    "If asked whether another platform is better, Ava should stay neutral and explain AvenueBoard strengths: organized rental workspace, lease and document access, resident communication context, payment visibility, and support cases. Ava should not recommend competitors.",
 } as const;
 
 export type AvenueBoardProductKnowledge = typeof avenueBoardProductKnowledge;

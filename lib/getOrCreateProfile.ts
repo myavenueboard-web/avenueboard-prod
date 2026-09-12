@@ -1,5 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import { triggerEmailEvent } from "@/lib/email/triggerEmailEvent";
 
 export async function getOrCreateProfile() {
   const {
@@ -11,9 +10,6 @@ export async function getOrCreateProfile() {
     throw new Error("User not authenticated");
   }
 
-  const accountType = user.user_metadata?.account_type;
-  const landlordPortalRemoved = user.user_metadata?.landlord_portal_removed === true;
-
   const { data: existingProfile, error: fetchError } = await supabase
     .from("profiles")
     .select("*")
@@ -21,10 +17,6 @@ export async function getOrCreateProfile() {
     .single();
 
   if (existingProfile) {
-    if (accountType === "landlord" && !landlordPortalRemoved) {
-      await ensureUserRole(existingProfile.id, "landlord");
-    }
-
     return existingProfile;
   }
 
@@ -47,31 +39,5 @@ export async function getOrCreateProfile() {
     throw insertError;
   }
 
-  if (accountType === "landlord") {
-    await ensureUserRole(newProfile.id, "landlord");
-    await triggerEmailEvent({ trigger: "landlord_signup" });
-  }
-
-  if (accountType === "tenant") {
-    await ensureUserRole(newProfile.id, "tenant");
-    await triggerEmailEvent({ trigger: "tenant_signup" });
-  }
-
   return newProfile;
-}
-
-async function ensureUserRole(profileId: string, role: "landlord" | "tenant") {
-  const { error } = await supabase.from("user_roles").upsert(
-    {
-      profile_id: profileId,
-      role,
-    },
-    {
-      onConflict: "profile_id,role",
-    }
-  );
-
-  if (error) {
-    console.warn("User role setup warning:", error.message || error);
-  }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 import FormField, { inputClass } from "./FormField";
 
 type PreferencesStepProps = {
@@ -365,7 +366,8 @@ function StopAbsorbingFeeModal({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -444,7 +446,8 @@ function PlatformFeeModal({ onClose }: { onClose: () => void }) {
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -483,16 +486,24 @@ function PlatformFeeModal({ onClose }: { onClose: () => void }) {
       body: "Residents can pay rent by card today. Standard ACH payments are planned for a future release.",
       icon: <BankIcon />,
     },
-    {
-      title: "Credit-building opportunities",
-      body: "Residents may be able to build credit history with on-time rent payments.",
-      icon: <CreditIcon />,
-    },
-    {
-      title: "Avenue Perks",
-      body: "Access resident perks and partner offers.",
-      icon: <PerksIcon />,
-    },
+    ...(ENABLE_CREDIT_BUILDING
+      ? [
+          {
+            title: "Credit-building opportunities",
+            body: "Residents may be able to build credit history with on-time rent payments.",
+            icon: <CreditIcon />,
+          },
+        ]
+      : []),
+    ...(ENABLE_AVENUE_PERKS
+      ? [
+          {
+            title: "Avenue Perks",
+            body: "Access resident perks and partner offers.",
+            icon: <PerksIcon />,
+          },
+        ]
+      : []),
     {
       title: "Resident Board features",
       body: "Track payments, manage documents, view notes, and stay organized.",
@@ -544,7 +555,7 @@ function PlatformFeeModal({ onClose }: { onClose: () => void }) {
 
           <div className="mt-6 text-[15px] leading-7 text-zinc-600">
             <p>
-              AvenueBoard is built to make renting more rewarding for residents
+              AvenueBoard is built to make renting simpler for residents
               while making rental management simpler for landlords and property
               managers.
             </p>
@@ -611,7 +622,7 @@ function PlatformFeeModal({ onClose }: { onClose: () => void }) {
 
         <div className="border-t border-zinc-200 bg-white px-5 py-4 sm:px-8">
           <p className="mb-3 text-left text-[13.5px] leading-5 text-zinc-500">
-            You're always in control. You can change this preference anytime by
+            You&apos;re always in control. You can change this preference anytime by
             editing the lease.
           </p>
           <button
@@ -633,7 +644,8 @@ function AgreementDrawer({ onClose }: { onClose: () => void }) {
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {

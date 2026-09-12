@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronDown } from "lucide-react";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 import { supabase } from "@/lib/supabase";
 import { MarketingFooter } from "./MarketingFooter";
 
@@ -41,27 +42,39 @@ let cachedMarketingAuthInitialized = false;
 
 const landingNavItems = [
   { id: "platform", label: "Platform", href: "/" },
-  { id: "avenue-perks", label: "Avenue Perks", href: "/avenue-perks" },
+  ...(ENABLE_AVENUE_PERKS
+    ? [{ id: "avenue-perks", label: "Avenue Perks", href: "/avenue-perks" }]
+    : []),
   { id: "pricing", label: "Pricing", href: "/pricing" },
 ];
 
 const publicNavItems = [
   { id: "platform", label: "Platform", href: "/" },
-  { id: "avenue-perks", label: "Avenue Perks", href: "/avenue-perks" },
+  ...(ENABLE_AVENUE_PERKS
+    ? [{ id: "avenue-perks", label: "Avenue Perks", href: "/avenue-perks" }]
+    : []),
   { id: "pricing", label: "Pricing", href: "/pricing" },
 ] as const;
 
 const perksNavItems = [
-  {
-    id: "avenue-perks",
-    label: "Avenue Perks",
-    href: "/member-benefits?section=avenue-perks",
-  },
-  {
-    id: "credit-building",
-    label: "Credit Building",
-    href: "/member-benefits?section=credit-building",
-  },
+  ...(ENABLE_AVENUE_PERKS
+    ? [
+        {
+          id: "avenue-perks",
+          label: "Avenue Perks",
+          href: "/member-benefits?section=avenue-perks",
+        },
+      ]
+    : []),
+  ...(ENABLE_CREDIT_BUILDING
+    ? [
+        {
+          id: "credit-building",
+          label: "Credit Building",
+          href: "/member-benefits?section=credit-building",
+        },
+      ]
+    : []),
 ] as const;
 
 const legalNavItems = [

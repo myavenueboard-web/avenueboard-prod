@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 
 type PlatformPageProps = {
   searchParams?: Promise<{
@@ -19,10 +20,12 @@ export default async function PlatformPage({ searchParams }: PlatformPageProps) 
   }
 
   if (category === "avenue-perks") {
+    if (!ENABLE_AVENUE_PERKS) redirect("/");
     redirect("/avenue-perks");
   }
 
   if (category === "credit-building") {
+    if (!ENABLE_CREDIT_BUILDING) redirect("/");
     redirect("/credit-building");
   }
 

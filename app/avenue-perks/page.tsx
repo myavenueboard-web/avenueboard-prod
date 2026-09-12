@@ -3,6 +3,8 @@ import { ArrowRight } from "lucide-react";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingHeader } from "@/components/marketing/MarketingShell";
 import { PublicHero } from "@/components/marketing/PublicHero";
+import { ENABLE_AVENUE_PERKS } from "@/lib/phaseOneFeatures";
+import { redirect } from "next/navigation";
 
 const categoryPlaceholders = [
   "Home",
@@ -29,6 +31,8 @@ const accessSteps = [
 ] as const;
 
 export default function AvenuePerksMarketingPage() {
+  if (!ENABLE_AVENUE_PERKS) redirect("/");
+
   return (
     <main className="min-h-screen bg-white font-sans text-[#0F172A]">
       <MarketingHeader activePage="avenue-perks" />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingHeader } from "@/components/marketing/MarketingShell";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 
 type LegalPageKind = "terms" | "privacy";
 
@@ -43,10 +44,14 @@ const termsSections: LegalSection[] = [
     title: "Documents and Communications",
     body: "Users may upload, store, and share documents, notes, and communications through AvenueBoard. Users are responsible for ensuring they have the right to upload, share, view, or rely on any content they add to the platform.",
   },
-  {
-    title: "Avenue Perks and Credit Building",
-    body: "Avenue Perks and credit-building features may include partner-enabled, planned, or limited-availability experiences. Offers, eligibility, availability, and partner terms may change. AvenueBoard does not guarantee credit outcomes, savings, approvals, or third-party offer availability.",
-  },
+  ...(ENABLE_AVENUE_PERKS || ENABLE_CREDIT_BUILDING
+    ? [
+        {
+          title: "Avenue Perks and Credit Building",
+          body: "Avenue Perks and credit-building features may include partner-enabled, planned, or limited-availability experiences. Offers, eligibility, availability, and partner terms may change. AvenueBoard does not guarantee credit outcomes, savings, approvals, or third-party offer availability.",
+        },
+      ]
+    : []),
   {
     title: "Acceptable Use",
     body: "You may not misuse AvenueBoard, attempt to access accounts or data without permission, upload harmful content, interfere with platform security, use the service for unlawful activity, or submit information that you do not have permission to provide.",

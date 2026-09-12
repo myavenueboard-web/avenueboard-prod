@@ -1,3 +1,5 @@
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
+
 export type PlatformSectionId = "platform";
 
 export type LegalTrustGroupId = "legal" | "trust";
@@ -34,16 +36,24 @@ export const platformSections: Record<PlatformSectionId, PublicPageSection> = {
         label: "Ava Assistant",
         href: "/#rental-properties",
       },
-      {
-        id: "avenue-perks",
-        label: "Avenue Perks",
-        href: "/avenue-perks",
-      },
-      {
-        id: "credit-building",
-        label: "Credit Building",
-        href: "/credit-building",
-      },
+      ...(ENABLE_AVENUE_PERKS
+        ? [
+            {
+              id: "avenue-perks",
+              label: "Avenue Perks",
+              href: "/avenue-perks",
+            },
+          ]
+        : []),
+      ...(ENABLE_CREDIT_BUILDING
+        ? [
+            {
+              id: "credit-building",
+              label: "Credit Building",
+              href: "/credit-building",
+            },
+          ]
+        : []),
       {
         id: "pricing",
         label: "Pricing",
@@ -72,16 +82,24 @@ export const footerPlatformSection: PublicPageSection = {
       label: "Ava Assistant",
       href: "/#rental-properties",
     },
-    {
-      id: "avenue-perks",
-      label: "Avenue Perks",
-      href: "/member-benefits?section=avenue-perks",
-    },
-    {
-      id: "credit-building",
-      label: "Credit Building",
-      href: "/member-benefits?section=credit-building",
-    },
+    ...(ENABLE_AVENUE_PERKS
+      ? [
+          {
+            id: "avenue-perks",
+            label: "Avenue Perks",
+            href: "/member-benefits?section=avenue-perks",
+          },
+        ]
+      : []),
+    ...(ENABLE_CREDIT_BUILDING
+      ? [
+          {
+            id: "credit-building",
+            label: "Credit Building",
+            href: "/member-benefits?section=credit-building",
+          },
+        ]
+      : []),
     {
       id: "pricing",
       label: "Pricing",

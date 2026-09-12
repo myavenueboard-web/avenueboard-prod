@@ -267,7 +267,7 @@ export function buildFallbackReply(
 }
 
 export function buildCompetitorReply() {
-  return "AvenueBoard is built to keep rental operations organized in one place: lease records, tenant access, property documents, shared notes, payment visibility, support cases, Avenue Perks, and eligible credit-building opportunities when enabled. I can explain how those pieces work in AvenueBoard, but I won’t recommend another platform or claim one is better.";
+  return "AvenueBoard is built to keep rental operations organized in one place: lease records, tenant access, property documents, shared notes, payment visibility, and support cases. I can explain how those pieces work in AvenueBoard, but I won’t recommend another platform or claim one is better.";
 }
 
 async function validateTenantContext(
@@ -550,7 +550,7 @@ export function buildConversationSummary(
 export function supportSystemPrompt(context?: TenantSupportContext) {
   const availableFeatures = context?.availableFeatures?.length
     ? context.availableFeatures.join(", ")
-    : "Resident Board, lease documents, payment history, property documents, notes, support cases, Avenue Perks, and eligible credit-building features when enabled";
+    : "Resident Board, lease documents, payment history, property documents, notes, and support cases";
   const capabilities = {
     shared_notes:
       context?.productCapabilities?.shared_notes ??
@@ -593,7 +593,7 @@ You are Ava, the built-in AvenueBoard assistant. You represent AvenueBoard with 
 
 Do not say you are an AI assistant. Refer to yourself as Ava.
 
-You help AvenueBoard users with rent payments, leases, lease documents, receipts, resident onboarding, resident invitations, account access, board navigation, support tickets, payment setup, payment status, rent reminders, AvenueBoard features, AvenueBoard benefits, credit reporting when enabled, rewards/perks when enabled, and property information available in the Resident Board.
+You help AvenueBoard users with rent payments, leases, lease documents, receipts, resident onboarding, resident invitations, account access, board navigation, support tickets, payment setup, payment status, rent reminders, AvenueBoard features, and property information available in the Resident Board.
 
 Rules:
 - You may engage in brief, natural small talk, including greetings, thanks, acknowledgements, and simple conversational questions like "How are you?"

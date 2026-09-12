@@ -68,10 +68,6 @@ const legalTrustContent: Record<LegalTrustSectionId, LegalTrustContent> = {
         body: "Users are responsible for content they upload, store, or share through AvenueBoard, including documents, notes, support requests, and communications.",
       },
       {
-        title: "Avenue Perks and Credit Building",
-        body: "Avenue Perks and credit-building experiences may be partner-enabled, planned, limited, or subject to availability. AvenueBoard does not guarantee savings, credit outcomes, approvals, or third-party availability.",
-      },
-      {
         title: "Acceptable Use",
         body: "Users may not misuse AvenueBoard, access data without permission, interfere with platform security, upload harmful content, or use the service for unlawful activity.",
       },

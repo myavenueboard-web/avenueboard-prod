@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Fragment,
-  type CSSProperties,
-  type RefObject,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -24,27 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/MarketingShell";
-
-const productTabs = [
-  {
-    label: "Landlord Board",
-    title: "Manage every rental from one clean view.",
-    description:
-      "Track properties, residents, rent status, lease details, notes, and documents without jumping between spreadsheets, folders, and text threads.",
-    link: "Explore rental properties",
-    href: "#rental-properties",
-    stats: ["Rent status", "Lease details", "Resident profile", "Documents"],
-  },
-  {
-    label: "Resident Board",
-    title: "Give residents a simple place to stay connected.",
-    description:
-      "Residents can view rent details, payment history, lease information, shared notes, documents, and important updates from one modern workspace.",
-    link: "Explore resident experience",
-    href: "#rental-properties",
-    stats: ["Amount due", "Payment progress", "Lease status", "Property contact"],
-  },
-];
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 
 const whyItems = [
   {
@@ -114,7 +87,7 @@ const whyItems = [
     icon: Sparkles,
     title: "Built for what's next",
     body: "A platform that keeps expanding.",
-    bullets: ["Credit Building", "Perks, Ava & utilities"],
+    bullets: ["Ava Assistant", "Future services"],
     accentColor: "#0891B2",
     iconClassName: "bg-stone-50 text-stone-800 group-hover:bg-stone-100",
     heightClassName: "min-h-[304px]",
@@ -411,40 +384,6 @@ function WalkthroughVideoModal({ open, onClose }: WalkthroughVideoModalProps) {
 }
 
 function PlatformSection() {
-  const [activeTab, setActiveTab] = useState(0);
-  const selectorRef = useRef<HTMLDivElement>(null);
-  const selectorLabelRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const [underlineStyle, setUnderlineStyle] = useState({
-    left: 0,
-    width: 0,
-  });
-
-  useEffect(() => {
-    const updateUnderline = () => {
-      const selector = selectorRef.current;
-      const label = selectorLabelRefs.current[activeTab];
-
-      if (!selector || !label) return;
-
-      const selectorRect = selector.getBoundingClientRect();
-      const labelRect = label.getBoundingClientRect();
-      const underlineWidth = labelRect.width + 20;
-
-      setUnderlineStyle({
-        left: labelRect.left - selectorRect.left - 10,
-        width: underlineWidth,
-      });
-    };
-
-    const frame = window.requestAnimationFrame(updateUnderline);
-    window.addEventListener("resize", updateUnderline);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updateUnderline);
-    };
-  }, [activeTab]);
-
   return (
     <section
       id="rental-properties"
@@ -460,72 +399,7 @@ function PlatformSection() {
         </h2>
       </div>
 
-      <div className="relative left-1/2 mt-12 ml-[-50vw] min-h-[660px] w-screen overflow-hidden bg-[#EEF1F5] lg:min-h-[740px] xl:min-h-[800px]">
-        <div className="absolute inset-x-0 top-[-1px] mx-auto h-[54px] w-[min(560px,calc(100%-48px))]">
-          <svg
-            aria-hidden="true"
-            className="absolute inset-0 h-full w-full"
-            preserveAspectRatio="none"
-            viewBox="0 0 560 54"
-          >
-            <path
-              d="M0 0H560C536 0 522 8 508 25C494 43 474 54 446 54H114C86 54 66 43 52 25C38 8 24 0 0 0Z"
-              fill="rgba(255,255,255,0.95)"
-            />
-          </svg>
-          <div className="relative mx-auto flex max-w-[480px] justify-center overflow-x-auto px-4">
-            <div
-              ref={selectorRef}
-              className="relative grid h-14 min-w-[360px] max-w-[430px] flex-1 grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-center"
-              role="tablist"
-              aria-label="Board preview selector"
-            >
-              <div
-                aria-hidden="true"
-                className="absolute bottom-1 h-0.5 rounded-full bg-zinc-950 transition-[left,width] duration-300 ease-[cubic-bezier(0.2,0.9,0.2,1)] motion-reduce:transition-none"
-                style={{
-                  left: underlineStyle.left,
-                  width: underlineStyle.width,
-                  opacity: underlineStyle.width > 0 ? 1 : 0,
-                }}
-              />
-
-              {productTabs.map((tab, index) => {
-                const isActive = activeTab === index;
-
-                return (
-                  <Fragment key={tab.label}>
-                    <button
-                      onClick={() => setActiveTab(index)}
-                      role="tab"
-                      aria-selected={isActive}
-                      className={`relative z-10 inline-flex h-full items-center justify-center whitespace-nowrap px-9 text-[15px] tracking-[-0.01em] transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
-                        isActive
-                          ? "font-semibold text-zinc-950"
-                          : "font-medium text-[#676B76] hover:text-zinc-950"
-                    }`}
-                  >
-                      <span
-                        ref={(node) => {
-                          selectorLabelRefs.current[index] = node;
-                        }}
-                      >
-                        {tab.label}
-                      </span>
-                    </button>
-                    {index === 0 ? (
-                      <span
-                        aria-hidden="true"
-                        className="h-5 w-px bg-zinc-200"
-                      />
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
+      <div className="relative left-1/2 mt-12 ml-[-50vw] min-h-[660px] w-screen overflow-hidden bg-[#EEF1F5] lg:min-h-[740px] xl:min-h-[800px]" />
 
       <p className="mx-auto mt-8 max-w-[1120px] text-center text-[18px] leading-[1.65] text-[#555966] lg:whitespace-nowrap">
         AvenueBoard brings properties, residents, payments, documents, and
@@ -538,77 +412,59 @@ function PlatformSection() {
 function RewardsSplitModule() {
   const benefits = [
     {
-      icon: Sparkles,
-      title: "Member benefits",
-      description: "Access eligible offers from participating partners.",
+      title: "Exclusive partner offers",
+      description:
+        "Access member-only deals across shopping, dining, travel, and everyday services.",
     },
     {
-      icon: Check,
-      title: "Everyday value",
+      title: "Rewards for paying on time",
       description:
-        "Explore benefits across shopping, dining, travel, and more.",
+        "Eligible rent payments help unlock AvenueBucks and additional member benefits.",
     },
     {
-      icon: Grid2X2,
-      title: "Built into AvenueBoard",
+      title: "Everything in one place",
       description:
-        "Keep rental tools and member benefits connected in one place.",
+        "Access rewards, payment tools, rent statements, and resident benefits directly through AvenueBoard.",
     },
   ];
 
   return (
     <section className="mx-auto mt-20 max-w-[1600px] px-6 sm:px-10 lg:px-16">
-      <div className="grid min-h-[760px] overflow-hidden rounded-[26px] border border-zinc-200/50 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.035)] lg:min-h-[calc(100vh-120px)] lg:grid-cols-2">
+      <div className="grid min-h-[770px] overflow-hidden bg-white lg:min-h-[780px] lg:grid-cols-2">
         <div className="flex items-center bg-[#EEF1F5] px-8 py-12 sm:px-10 lg:px-16 lg:py-16">
           <div className="max-w-[500px]">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-blue-700">
-              Avenue Perks
-            </p>
-            <h2 className="mt-4 text-[34px] font-medium leading-[1.08] tracking-[-0.045em] text-black sm:text-[44px]">
-              More value beyond rent.
+            <h2 className="text-[36px] font-medium leading-[1.04] tracking-[-0.045em] text-black sm:text-[48px]">
+              Make every rent payment more rewarding.
             </h2>
 
-            <p className="mt-5 text-[16px] leading-[1.6] text-[#555966]">
-              Discover member benefits and partner offers designed to make
-              everyday spending more rewarding.
-            </p>
-
-            <div className="mt-8 grid gap-5">
-              {benefits.map(({ icon: Icon, title, description }) => (
-                <div key={title} className="flex gap-3.5">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-950 shadow-sm">
-                    <Icon size={16} strokeWidth={2} />
-                  </div>
-                  <div>
-                    <h3 className="text-[16px] font-semibold tracking-[-0.025em] text-zinc-950">
-                      {title}
-                    </h3>
-                    <p className="mt-1 text-[14px] leading-6 text-[#667085]">
-                      {description}
-                    </p>
-                  </div>
+            <div className="mt-9 grid gap-7">
+              {benefits.map(({ title, description }) => (
+                <div key={title}>
+                  <h3 className="text-[22px] font-semibold leading-[1.15] tracking-[-0.035em] text-zinc-950 sm:text-[24px]">
+                    {title}
+                  </h3>
+                  <p className="mt-2 max-w-[460px] text-[15px] leading-6 text-[#555966]">
+                    {description}
+                  </p>
                 </div>
               ))}
             </div>
 
-            <div className="mt-8">
+            <div className="mt-10">
               <Link
                 href="/avenue-perks"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-[14px] font-semibold text-white shadow-[0_14px_32px_rgba(15,23,42,0.14)] transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
+                className="inline-flex h-14 min-w-[220px] items-center justify-center gap-2 rounded-full bg-[#6B4A3A] px-8 text-[15px] font-semibold text-white shadow-[0_16px_36px_rgba(107,74,58,0.18)] transition hover:bg-[#7A5544] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6B4A3A]/35 active:bg-[#5E4032]"
               >
                 Explore Avenue Perks
                 <ArrowRight size={16} />
               </Link>
-              <p className="mt-4 text-[14px] font-medium leading-6 text-[#6A6E7A]">
-                Available to eligible AvenueBoard members.
-              </p>
             </div>
           </div>
         </div>
 
         <div
           aria-hidden="true"
-          className="min-h-[360px] bg-[#E7F4E8] lg:min-h-[calc(100vh-120px)]"
+          className="min-h-[370px] bg-white lg:min-h-[780px]"
         />
       </div>
     </section>
@@ -637,12 +493,12 @@ function CreditBuildingSection() {
   return (
     <section
       id="credit-building"
-      className="mx-auto mt-20 max-w-[1600px] px-6 sm:px-10 lg:px-16"
+      className="mx-auto mt-10 max-w-[1600px] px-6 sm:px-10 lg:px-16"
     >
-      <div className="grid min-h-[760px] overflow-hidden rounded-[26px] border border-zinc-200/50 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.035)] lg:min-h-[calc(100vh-120px)] lg:grid-cols-2">
+      <div className="grid min-h-[770px] overflow-hidden bg-white lg:min-h-[780px] lg:grid-cols-2">
         <div
           aria-hidden="true"
-          className="min-h-[360px] bg-[#E7F4E8] lg:min-h-[calc(100vh-120px)]"
+          className="min-h-[370px] bg-white lg:min-h-[780px]"
         />
 
         <div className="flex items-center bg-[#EEF1F5] px-8 py-12 sm:px-10 lg:px-16 lg:py-16">
@@ -994,7 +850,7 @@ function NewsletterSection() {
 
           <p className="mt-4 text-[13px] leading-6 text-[#6B6F7B]">
             By signing up, you agree to receive product updates, feature
-            announcements, Avenue Perks updates, and occasional marketing
+            announcements, product updates, and occasional marketing
             messages from AvenueBoard. You can unsubscribe at any time.
           </p>
 
@@ -1080,8 +936,8 @@ export default function LatestLandingPage() {
           <PlatformSection />
         </div>
       </div>
-      <RewardsSplitModule />
-      <CreditBuildingSection />
+      {ENABLE_AVENUE_PERKS ? <RewardsSplitModule /> : null}
+      {ENABLE_CREDIT_BUILDING ? <CreditBuildingSection /> : null}
       <WhyAvenueBoardSection />
       <NewsletterSection />
       <FloatingVideoTrigger

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getOrCreateProfile } from "@/lib/getOrCreateProfile";
+import { getWorkspaceOnboardingStatus } from "@/lib/workspaceOnboardingClient";
 import {
   getLeaseFirstPaymentCycleDate,
   getLeasePaymentAmountForCycle,
@@ -170,19 +171,16 @@ export default function DashboardPage() {
         }
 
         const profile = await getOrCreateProfile();
+        const workspaceStatus = await getWorkspaceOnboardingStatus();
+
+        if (workspaceStatus?.requiresOnboarding) {
+          router.replace("/onboarding/workspace");
+          return;
+        }
+
         setProfileId(profile.id);
         setLandlordName(
           profile.display_name || profile.email?.split("@")[0] || "Landlord"
-        );
-
-        await supabase.from("user_roles").upsert(
-          {
-            profile_id: profile.id,
-            role: "landlord",
-          },
-          {
-            onConflict: "profile_id,role",
-          }
         );
 
         const { data: propertyData, error: propertyError } = await supabase

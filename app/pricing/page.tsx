@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingHeader } from "@/components/marketing/MarketingShell";
 import { PublicHero } from "@/components/marketing/PublicHero";
+import { ENABLE_AVENUE_PERKS, ENABLE_CREDIT_BUILDING } from "@/lib/phaseOneFeatures";
 import { PricingDisclosureTooltip } from "./PricingDisclosureTooltip";
 
 const plans = [
@@ -24,10 +25,10 @@ const plans = [
       "Tenant portal",
       "Multiple payment options",
       "Payment history & rent statements",
-      "Credit reporting",
-      "Avenue Perks rewards",
+      "Rent reminder notifications",
       "AI Assistant",
       "Email support",
+      "Online support requests",
     ],
   },
   {
@@ -48,10 +49,10 @@ const plans = [
       "Tenant portal",
       "Multiple payment options",
       "Payment history & rent statements",
-      "Credit reporting",
-      "Avenue Perks rewards",
+      "Rent reminder notifications",
       "AI Assistant",
       "Email support",
+      "Online support requests",
     ],
   },
   {
@@ -93,9 +94,8 @@ const residentPaymentAccessDisclosure = {
       "Resident dashboard access",
       "Standard ACH payments",
       "AutoPay",
-      "Credit reporting",
       "Rent statements",
-      "AvenueBucks rewards",
+      "Online support requests",
     ],
     note: "Landlords may choose to absorb this fee for their residents.",
   },
@@ -184,8 +184,12 @@ const featureComparison = [
   { id: "ach-payments", feature: "ACH Payments" },
   { id: "debit-and-credit-card-payments", feature: "Debit & Credit Card Payments*" },
   { id: "rent-reminder-notifications", feature: "Rent Reminder Notifications" },
-  { id: "credit-reporting", feature: "Credit Reporting" },
-  { id: "avenue-perks-rewards", feature: "Avenue Perks Rewards" },
+  ...(ENABLE_CREDIT_BUILDING
+    ? [{ id: "credit-reporting", feature: "Credit Reporting" }]
+    : []),
+  ...(ENABLE_AVENUE_PERKS
+    ? [{ id: "avenue-perks-rewards", feature: "Avenue Perks Rewards" }]
+    : []),
 ] as const;
 
 const featureComparisonFootnotes = [

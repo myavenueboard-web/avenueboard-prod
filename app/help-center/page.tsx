@@ -94,7 +94,7 @@ const faqTopics: FaqTopic[] = [
       {
         question: "What can tenants see in their Resident Board?",
         answer:
-          "Tenants can view the rental workspace connected to an accepted invitation. The Resident Board can show rent due, payment progress, lease status, shared notes, property documents, recent activity and property contact information. Some tenant benefits, such as Avenue Perks or credit-building opportunities, may appear as planned or future-facing features unless they are enabled for that account.",
+          "Tenants can view the rental workspace connected to an accepted invitation. The Resident Board can show rent due, payment progress, lease status, shared notes, property documents, recent activity and property contact information.",
       },
       {
         question: "How do I access my Resident Board?",
@@ -405,7 +405,8 @@ function SupportCenterContent() {
           ? getSectionFromValue(window.location.hash.replace("#", ""))
           : "faq";
 
-    setActiveSection(nextSection);
+    const timeoutId = window.setTimeout(() => setActiveSection(nextSection), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [sectionParam, legacyTabParam]);
 
   useEffect(() => {
@@ -1974,14 +1975,6 @@ function caseIssueSummary(ticket: SupportTicket) {
     return searchableText.includes("tenant")
       ? "Resident Board Access Issue"
       : "Account Configuration Help";
-  }
-
-  if (
-    searchableText.includes("credit") ||
-    searchableText.includes("rent reporting") ||
-    searchableText.includes("report rent")
-  ) {
-    return "Credit Reporting Inquiry";
   }
 
   if (

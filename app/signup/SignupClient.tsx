@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
@@ -33,10 +33,12 @@ export default function SignupClient() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [message, setMessage] = useState("");
+  const [existingEmailModalOpen, setExistingEmailModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(
     null
   );
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
 
   const checks = useMemo(() => {
     return {
@@ -48,6 +50,43 @@ export default function SignupClient() {
 
   const inputClass =
     "mt-3 h-[52px] w-full rounded-2xl border border-zinc-200 bg-white px-4 text-[15px] text-zinc-950 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70 sm:h-[56px] sm:px-5";
+
+  function buildAuthHref(path: "/login" | "/forgot-password") {
+    const params = new URLSearchParams();
+
+    if (redirectPath) {
+      params.set("redirect", redirectPath);
+    }
+
+    const targetEmail = email || prefilledEmail;
+
+    if (targetEmail) {
+      params.set("email", targetEmail);
+    }
+
+    const query = params.toString();
+    return query ? `${path}?${query}` : path;
+  }
+
+  function openExistingEmailModal() {
+    setExistingEmailModalOpen(true);
+  }
+
+  function closeExistingEmailModal() {
+    setExistingEmailModalOpen(false);
+    window.requestAnimationFrame(() => {
+      emailInputRef.current?.focus();
+    });
+  }
+
+  function isExistingEmailSignupSignal(errorMessage: string) {
+    const message = errorMessage.toLowerCase();
+    return (
+      message.includes("already registered") ||
+      message.includes("already exists") ||
+      message.includes("user already")
+    );
+  }
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +110,32 @@ export default function SignupClient() {
     }
 
     setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/email-exists", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Email check failed");
+      }
+
+      const result = (await response.json()) as { exists?: boolean };
+
+      if (result.exists) {
+        setLoading(false);
+        openExistingEmailModal();
+        return;
+      }
+    } catch {
+      setLoading(false);
+      setMessage("Unable to verify this email right now. Please try again.");
+      return;
+    }
 
     const emailRedirectTo =
       typeof window !== "undefined"
@@ -96,40 +161,33 @@ export default function SignupClient() {
     setLoading(false);
 
     if (error) {
-      const msg = error.message.toLowerCase();
-
-      if (
-        msg.includes("already registered") ||
-        msg.includes("already exists") ||
-        msg.includes("user already")
-      ) {
-        setMessage(
-          "An account already exists with this email. Please sign in instead."
-        );
+      if (isExistingEmailSignupSignal(error.message)) {
+        openExistingEmailModal();
       } else {
-        setMessage(error.message);
+        setMessage("Unable to create your account right now. Please try again.");
       }
-
       return;
     }
 
     if (data.user?.identities && data.user.identities.length === 0) {
-      setMessage(
-        "An account already exists with this email. Please sign in instead."
-      );
+      openExistingEmailModal();
       return;
     }
 
-    if (redirectPath.includes("/tenant/accept-invite")) {
-      setMessage(
-        "Account created successfully. Please confirm your email, then log in to continue your resident invitation."
-      );
+    if (!data.session) {
+      if (redirectPath.includes("/tenant/accept-invite")) {
+        setMessage(
+          "Please check your email to confirm your account, then log in to continue your resident invitation."
+        );
+      } else {
+        setMessage(
+          "Account created. Please check your email to confirm your account."
+        );
+      }
       return;
     }
 
-    setMessage(
-      "Account created. Please check your email to confirm your account."
-    );
+    router.replace(redirectPath);
   }
 
   async function handleOAuth(provider: "google" | "apple") {
@@ -222,6 +280,7 @@ export default function SignupClient() {
             </label>
 
             <input
+              ref={emailInputRef}
               type="email"
               required
               value={email}
@@ -345,8 +404,131 @@ export default function SignupClient() {
             Sign in
           </button>
         </p>
+
+        <ExistingEmailModal
+          open={existingEmailModalOpen}
+          loginHref={buildAuthHref("/login")}
+          resetHref={buildAuthHref("/forgot-password")}
+          onClose={closeExistingEmailModal}
+        />
       </div>
     </AuthLayout>
+  );
+}
+
+type ExistingEmailModalProps = {
+  open: boolean;
+  loginHref: string;
+  resetHref: string;
+  onClose: () => void;
+};
+
+function ExistingEmailModal({
+  open,
+  loginHref,
+  resetHref,
+  onClose,
+}: ExistingEmailModalProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const signInLinkRef = useRef<HTMLAnchorElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    signInLinkRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusableElements = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/25 px-4 py-8 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="existing-email-title"
+        aria-describedby="existing-email-description"
+        className="relative w-full max-w-[400px] rounded-[24px] border border-zinc-200 bg-white p-6 text-left shadow-[0_24px_80px_rgba(15,23,42,0.18),0_8px_24px_rgba(15,23,42,0.08)] sm:p-7"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-950 focus:outline-none focus:ring-4 focus:ring-slate-200/70"
+        >
+          ×
+        </button>
+
+        <h2
+          id="existing-email-title"
+          className="pr-8 text-[22px] font-semibold tracking-[-0.035em] text-[#0F172A]"
+        >
+          Email already registered
+        </h2>
+        <p
+          id="existing-email-description"
+          className="mt-3 text-[14px] leading-6 text-zinc-600"
+        >
+          An account already exists with this email. Try signing in instead.
+        </p>
+
+        <Link
+          ref={signInLinkRef}
+          href={loginHref}
+          className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-2xl bg-[#0F172A] px-5 text-[14px] font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#172033] hover:shadow-[0_18px_40px_rgba(15,23,42,0.18)] focus:outline-none focus:ring-4 focus:ring-slate-300/80 active:translate-y-0"
+        >
+          Sign In
+        </Link>
+
+        <p className="mt-4 text-center text-[13px] leading-6 text-zinc-500">
+          Forgot your password?{" "}
+          <Link
+            href={resetHref}
+            className="font-semibold text-slate-700 transition hover:text-slate-950 hover:underline hover:underline-offset-4 focus:outline-none focus:ring-4 focus:ring-slate-200/70"
+          >
+            Reset it here.
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }
 

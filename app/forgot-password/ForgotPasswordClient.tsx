@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthLayout from "@/app/components/AuthLayout";
 import { supabase } from "@/lib/supabase";
@@ -13,25 +13,18 @@ export default function ForgotPasswordClient() {
   const redirectPath = searchParams.get("redirect") || "/dashboard";
 
   const [email, setEmail] = useState(prefilledEmail);
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
+  const [message, setMessage] = useState(() => {
     if (
       redirectPath.includes("/tenant/accept-invite") &&
-      typeof window !== "undefined"
+      typeof window !== "undefined" &&
+      !sessionStorage.getItem("avenueboard_tenant_invite_token")
     ) {
-      const inviteToken = sessionStorage.getItem(
-        "avenueboard_tenant_invite_token"
-      );
-
-      if (!inviteToken) {
-        setMessage(
-          "Your invitation session expired. Please reopen your invitation email."
-        );
-      }
+      return "Your invitation session expired. Please reopen your invitation email.";
     }
-  }, [redirectPath]);
+
+    return "";
+  });
+  const [loading, setLoading] = useState(false);
 
   async function handleReset(e: React.FormEvent) {
     e.preventDefault();
